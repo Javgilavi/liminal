@@ -1,8 +1,10 @@
 model:
   provider: qwen
   checkpoint: Qwen/Qwen3-VL-4B-Instruct
+  revision: ebb281ec70b05090aa6165b016eac8ec08e71b17  # VERIFY with the first local evaluation.
   device: cuda:0             # VERIFY against the deployment machine's GPU layout
   dtype: bfloat16
+  quantization: bnb_4bit     # Set to none for an unquantized BF16 baseline.
   max_new_tokens: 150
 
 inspection:

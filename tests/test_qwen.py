@@ -12,7 +12,9 @@ def test_shipped_qwen_config_is_lazy_and_complete():
     assert isinstance(runtime.model, QwenVisionModel)
     assert not runtime.model.loaded
     assert runtime.model.config.checkpoint == "Qwen/Qwen3-VL-4B-Instruct"
+    assert runtime.model.config.revision == "ebb281ec70b05090aa6165b016eac8ec08e71b17"
     assert runtime.model.config.device == "cuda:0"
+    assert runtime.model.config.quantization == "bnb_4bit"
     assert runtime.confirmations == 2
     assert set(runtime.inspection.definitions) == {
         "lid_open",
@@ -67,3 +69,8 @@ def test_qwen_model_loads_once_and_records_each_inference(monkeypatch):
 def test_unknown_vision_provider_is_rejected():
     with pytest.raises(ValueError, match="unsupported vision model provider"):
         build_vision_model({"provider": "missing"})
+
+
+def test_unknown_qwen_quantization_is_rejected():
+    with pytest.raises(ValueError, match="quantization must be none or bnb_4bit"):
+        QwenVisionConfig(quantization="int2")

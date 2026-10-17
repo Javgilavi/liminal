@@ -18,6 +18,7 @@ class QwenVisionConfig:
     checkpoint: str = "Qwen/Qwen3-VL-4B-Instruct"
     device: str = "cuda:2"
     dtype: str = "bfloat16"
+    quantization: str = "none"
     max_new_tokens: int = 150
     revision: str | None = None
     local_files_only: bool = False
@@ -29,6 +30,8 @@ class QwenVisionConfig:
             raise ValueError("Qwen device must be non-empty")
         if not isinstance(self.dtype, str) or self.dtype not in {"auto", "bfloat16", "float16", "float32"}:
             raise ValueError("Qwen dtype must be auto, bfloat16, float16, or float32")
+        if self.quantization not in {"none", "bnb_4bit"}:
+            raise ValueError("Qwen quantization must be none or bnb_4bit")
         if (
             isinstance(self.max_new_tokens, bool)
             or not isinstance(self.max_new_tokens, int)
@@ -142,6 +145,19 @@ class _TransformersQwenEngine:
             "dtype": dtype,
             "local_files_only": config.local_files_only,
         }
+        if config.quantization == "bnb_4bit":
+            try:
+                from transformers import BitsAndBytesConfig
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Qwen bnb_4bit quantization requires bitsandbytes; install the 'vlm-qwen' extra"
+                ) from exc
+            compute_dtype = self.torch.bfloat16 if dtype == "auto" else dtype
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=compute_dtype,
+            )
         if config.revision is not None:
             processor_kwargs["revision"] = config.revision
             model_kwargs["revision"] = config.revision
