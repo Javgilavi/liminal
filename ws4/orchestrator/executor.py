@@ -110,7 +110,8 @@ class Executor:
         monitors: list[Callable[[Any, dict], str | None]] | None = None,
         on_attempt: Callable[[StepRun, bool, str], None] | None = None,
         on_estop: Callable[[str], None] | None = None,
-        before_policy: Callable[[StepRun], str | None] | None = None,
+        before_attempt: Callable[[StepRun], str | None] | None = None,
+        ramp_mode: Callable[[bool], None] | None = None,
     ):
         self.runner = runner
         self.robot = robot
@@ -132,7 +133,8 @@ class Executor:
         self.on_attempt = on_attempt  # every FLUX attempt that started: (run, verified, reason)
         self.on_estop = on_estop
         # e.g. refresh the parked arm's pose for the keep-out; a returned reason blocks the attempt (e-stop latched)
-        self.before_policy = before_policy
+        self.before_attempt = before_attempt
+        self.ramp_mode = ramp_mode  # True while ramping to a start pose (e.g. station-only keep-out), False after
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="verify")
         self._lock = threading.RLock()
         self._commands: list[tuple[str, Any]] = []
@@ -388,10 +390,19 @@ class Executor:
             run.target = None
             self.events.add("info", f"{step.id}: {step.arm} arm holds until {', '.join(step.hold_until)} done")
             return
+        if skill.is_flux and self.before_attempt is not None:
+            block = self.before_attempt(run)
+            if block:
+                run.target, run.phase = None, "blocked"
+                self.events.add("error", f"{step.id}: not started: {block}")
+                self.estop(block)  # the arm holds where it is; Resume retries this attempt
+                return
         home = self.home_target(step.arm) if (self.home_target and skill.is_flux and skill.start_pose == "home") \
             else None
         if home is not None:
             # Every FLUX step starts where its demonstrations started: ramp there through the same guard first.
+            if self.ramp_mode is not None:
+                self.ramp_mode(True)
             self.runner.start(home, "home")
             run.target, run.homing, run.t_home, run.phase = home, True, self.t, "homing"
             self.events.add("info", f"{step.id}: moving the {step.arm} arm to the start pose before attempt "
@@ -406,13 +417,6 @@ class Executor:
         run.t_start, run.chunks, run.verify_at, run.phase = self.t, 0, skill.verify_every_chunks, ""
         target = self.resolve_target(step, skill)
         backend = self.backends.get(target)
-        if skill.is_flux and self.before_policy is not None:
-            block = self.before_policy(run)
-            if block:
-                run.target, run.phase = None, "blocked"
-                self.events.add("error", f"{step.id}: not started: {block}")
-                self.estop(block)  # the arm holds at the start pose; Resume retries this attempt
-                return
         try:
             if hasattr(backend, "begin"):
                 backend.begin(target, step.arm, skill)
@@ -466,6 +470,8 @@ class Executor:
                 if backend.reached("home", report.command[arm_slice(step.arm)], state6):
                     self.runner.stop(run.target)
                     run.homing = False
+                    if self.ramp_mode is not None:
+                        self.ramp_mode(False)
                     self.events.add("info", f"{step.id}: at the start pose")
                     self._start_policy(run)
                 else:
@@ -535,6 +541,8 @@ class Executor:
             self._finish("succeeded", "")
 
     def _release(self, run: StepRun) -> None:
+        if run.homing and self.ramp_mode is not None:
+            self.ramp_mode(False)
         if run.verifying is not None:
             run.verifying.cancel()
             run.verifying = None

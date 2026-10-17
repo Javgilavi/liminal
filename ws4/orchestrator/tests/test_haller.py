@@ -250,21 +250,21 @@ def test_port_users_finds_an_open_file(tmp_path):
     assert port_users(str(tmp_path / "nobody_has_this")) == []
 
 
-def test_other_arm_refreshed_at_home_before_every_flux_attempt(haller, tmp_path):
-    verifier = PassOnAttempt()
-    haller.verifier = verifier
-    calls = []
+def test_other_arm_read_before_every_ramp(haller, tmp_path):
+    """As run_single_arm.run_attempt: read the parked arm first, so the ramp is checked against it too."""
+    haller.verifier = PassOnAttempt()
+    seq = []
 
     def refresh():
-        calls.append(np.round(haller.rig.robot.joints(), 1).tolist())
+        seq.append("read")
         return OtherArmPose("read", "other arm pose for the keep-out: [0, 0, 0, 0, 0, 0]")
 
     haller.rig.refresh_other_arm = refresh
+    original = haller.runner.start
+    haller.runner.start = lambda target, task: seq.append(task) or original(target, task)
     plan = haller.plan("put the pen in the box, take it out").result.plan
     assert haller.execute(plan).status == "succeeded"
-    assert len(calls) == 2
-    for q in calls:  # after the ramp, before FLUX starts
-        assert np.abs(np.array(q) - [0, 0, 0, 0, 0, 100]).max() <= 3.0
+    assert seq == ["read", "home", PUT, "read", "home", TAKE]
     assert sum("other arm pose" in e["msg"] for e in haller.events.recent()) == 2
     attempts = [t for t in load_trial_log().load(tmp_path / "trials.jsonl") if t.task != "pen_chain"]
     assert len(attempts) == 2 and all("other_arm=read" in t.notes for t in attempts)
@@ -288,18 +288,18 @@ def test_unknown_other_arm_pose_blocks_the_attempt_until_resumed(haller):
         time.sleep(0.01)
     assert haller.executor.state == "estopped"
     assert holds and "held by pid [7]" in holds[0]
-    assert PUT not in starts  # FLUX never started on an unknown parked-arm pose
+    assert starts == []  # neither the ramp nor FLUX starts on an unknown parked-arm pose
     haller.release()
     while haller.executor.state != "paused" and time.time() < deadline:
         time.sleep(0.01)
     haller.resume()
     thread.join(timeout=20)
-    assert out["r"].status == "succeeded" and starts.count(PUT) == 1 and not poses
+    assert out["r"].status == "succeeded" and starts == ["home", PUT] and not poses
 
 
 def test_keepout_refusal_during_the_ramp_stops_and_holds(haller):
     haller.verifier = PassOnAttempt()
-    haller.rig.guard.keepout.refuse = lambda target, q: (True, "table")
+    haller.rig.full_keepout.without_envelope = lambda: SimpleNamespace(refuse=lambda target, q: (True, "table"))
     holds = []
     haller.rig.hold = lambda reason="": holds.append(reason)
     plan = haller.plan("put the pen in the box").result.plan
@@ -316,3 +316,66 @@ def test_keepout_refusal_during_the_ramp_stops_and_holds(haller):
     haller.abort()
     thread.join(timeout=10)
     assert out["r"].status == "aborted"
+
+
+FOLDED_REST = [0.0, -96.0, 97.0, 1.0, 0.0, 2.0]
+
+
+def ramp_refusal(keepout, start, goal, step=1.0):
+    """First refused step of a 1 deg/tick joint ramp (move_to's stepping), or None."""
+    cmd, goal = np.array(start, float), np.array(goal, float)
+    limit = np.r_[np.full(5, step), 2 * step]
+    n = 0
+    while not np.allclose(cmd, goal):
+        nxt = cmd + np.clip(goal - cmd, -limit, limit)
+        n += 1
+        if keepout.refuse(nxt, cmd)[0]:
+            return n
+        cmd = nxt
+    return None
+
+
+def test_ramp_from_the_folded_rest_uses_the_station_zones_only(haller):
+    """The demonstrated envelope bounds the policy, not the ramp: unfolding from the folded rest leaves the demonstrated
+    TCP workspace for a moment (so101-zeroshot, 2026-10-17). The policy still runs under every zone."""
+    full = haller.rig.full_keepout
+    if getattr(full, "env_cells", None) is None:
+        pytest.skip("workspace file without a demonstrated envelope")
+    home = [0, 0, 0, 0, 0, 100]
+    assert ramp_refusal(full, FOLDED_REST, home) is not None
+    assert ramp_refusal(full.without_envelope(), FOLDED_REST, home) is None
+    haller.verifier = PassOnAttempt()
+    haller.rig.so101.q = np.array(FOLDED_REST)
+    seen = {}
+    original = haller.runner.start
+
+    def spy(target, task):
+        guard_ko = haller.rig.guard.keepout
+        seen[task] = (guard_ko is full, getattr(guard_ko, "env_cells", None) is None)
+        return original(target, task)
+
+    haller.runner.start = spy
+    plan = haller.plan("put the pen in the box").result.plan
+    assert haller.execute(plan).status == "succeeded"
+    assert seen["home"] == (False, True)  # ramp: station zones only
+    assert seen[PUT] == (True, False)  # policy: the full keep-out with the envelope
+    assert haller.rig.guard.keepout is full
+    assert not any("refused the ramp" in e["msg"] for e in haller.events.recent())
+
+
+def test_observe_mode_skips_the_ramp(tmp_path):
+    """Observe sends nothing, so a ramp could never arrive; run_single_arm skips it there too."""
+    cfg = SessionConfig(env="haller", robot="fake", observe=True, policy="fake", planner="stub", verifier="manual",
+                        realtime=False, task="pen_chain", vocabulary=short_vocab(tmp_path), max_run_s=60,
+                        trial_log=str(tmp_path / "trials.jsonl"), runs_dir=str(tmp_path / "runs"))
+    s = Session(cfg)
+    try:
+        s.verifier = PassOnAttempt()
+        starts = []
+        original = s.runner.start
+        s.runner.start = lambda target, task: starts.append(task) or original(target, task)
+        plan = s.plan("put the pen in the box").result.plan
+        assert s.execute(plan).status == "succeeded"
+        assert starts == [PUT]
+    finally:
+        s.close()

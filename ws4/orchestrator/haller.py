@@ -8,7 +8,8 @@ The orchestrator reuses the single-arm runner's robot side instead of its attemp
   robot-right arm stays parked and holding and is not connected by this process); bus retries and LeRobot's
   ``max_relative_target`` cap on every goal.
 - ``build_guard`` + ``KeepOutGuard``: joint limits from the arm's calibration, a per-tick step limit, and the FK
-  keep-out (table, base, fold, torso, mast, midline) from ``calibration/haller_right_workspace.json``.
+  keep-out from ``calibration/haller_right_workspace.json``: station zones, the parked arm (``other_arm``) and, for the
+  policy only, the demonstrated envelope (``joint_env``, ``tcp_env``); ramps use ``KeepOut.without_envelope``.
 - ``hold_here`` on every stop (freeze at the MEASURED pose), ``warm_up`` (pre-encode prompts on the server), and the
   torque-safe shutdown of its ``main``.
 The per-tick stall and keep-out stops are rebuilt in ``monitors.py`` with the same defaults.
@@ -99,10 +100,18 @@ class HallerRig:
     other_arm_max_age_s: float = 180.0
     clock: Callable[[], float] = time.monotonic
     _pose_t: float | None = None  # when other_q was last read successfully
+    full_keepout: Any = None  # every zone incl. the demonstrated envelope; the guard's keepout outside ramps
 
     @property
     def keepout(self) -> Any:
-        return self.guard.keepout
+        return self.full_keepout if self.full_keepout is not None else self.guard.keepout
+
+    def ramp_keepout(self, on: bool) -> None:
+        """Scripted ramps check the station zones and the parked arm only (``KeepOut.without_envelope``, as
+        run_single_arm does): the envelope bounds what the POLICY may command, and unfolding from the folded rest
+        leaves the demonstrated TCP workspace for a moment (refused at step 20 of 98 with the full keep-out)."""
+        full = self.keepout
+        self.guard.keepout = full.without_envelope() if on and hasattr(full, "without_envelope") else full
 
     def refresh_other_arm(self) -> OtherArmPose:
         """Pose of the parked robot-right arm for the keep-out's other_arm zone, read-only (keepout.read_arm_joints:
@@ -189,4 +198,4 @@ def build(cfg: Any) -> HallerRig:
     guard = sar.KeepOutGuard(guard_cfg, keepout, SLOT, lambda: robot.last_q)
     monitors = [StallMonitor(SLOT, cfg.stall_deg, cfg.stall_ticks), KeepOutMonitor(guard, cfg.keepout_ticks)]
     return HallerRig(sar, so101, robot, guard, monitors, rest, real, cfg.observe, cfg.other_arm_port,
-                     cfg.other_arm_id, cfg.read_other_arm, cfg.other_arm_max_age_s)
+                     cfg.other_arm_id, cfg.read_other_arm, cfg.other_arm_max_age_s, full_keepout=keepout)

@@ -576,11 +576,14 @@ class Session:
             realtime=cfg.realtime, clock="ticks" if self.sim is not None else "wall", max_replans=cfg.max_replans,
             on_replan=self._on_replan, on_frame=lambda obs, report: self._encode_frames(obs),
             max_run_s=cfg.max_run_s,
-            home_target=lambda arm: f"{arm}:prim" if f"{arm}:prim" in self.target_backend else None,
+            # observe sends nothing, so a ramp would never arrive (run_single_arm skips it there too)
+            home_target=lambda arm: f"{arm}:prim" if f"{arm}:prim" in self.target_backend
+            and not (self.rig is not None and self.rig.observe) else None,
             monitors=self.rig.monitors if self.rig is not None else None,
             on_attempt=self._log_attempt,
             on_estop=self.rig.hold if self.rig is not None else None,
-            before_policy=self._before_policy if self.rig is not None else None,
+            before_attempt=self._before_attempt if self.rig is not None else None,
+            ramp_mode=self.rig.ramp_keepout if self.rig is not None else None,
         )
         result = self.executor.run(plan)
         self._encode_frames(self.base_robot.get_observation())
@@ -633,7 +636,7 @@ class Session:
             return "sim:scripted-stand-in"
         return ", ".join(f"{a}={cfg.package_for(a)}" for a in self._arms())
 
-    def _before_policy(self, run: Any) -> str | None:
+    def _before_attempt(self, run: Any) -> str | None:
         pose = self.rig.refresh_other_arm()
         self._other_arm[(run.step.id, run.attempt)] = pose.note
         level = "error" if pose.block else "info" if pose.note in ("read", "fake arm") else "warn"

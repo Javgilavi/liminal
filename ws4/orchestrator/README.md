@@ -14,12 +14,14 @@ FLUX: the per-arm SO-101 package (zero-shot) or tonight's LoRA, served from the 
 The arm side is `ws4/single_arm/run_single_arm.py`, imported read-only: torque-safe connect, camera parity with the
 VR recording (head unrotated, wrist rotated 180, default fourcc), joint and step limits, LeRobot's goal cap, the FK
 keep-out, a 60% torque limit; the orchestrator adds its stall and keep-out stops every tick, and every FLUX step first
-ramps to the demos' start pose `[0, 0, 0, 0, 0, 100]` through the same guard (one keep-out refusal on that ramp stops
-and holds, as `move_to` does). Then it reads the parked arm's pose on `/dev/haller_arm_left` (`keepout.read_arm_joints`)
-so the `other_arm` zone knows where it is. An unknown pose blocks the attempt (fail closed: the midline alone misses some
+ramps to the demos' start pose `[0, 0, 0, 0, 0, 100]` through the same guard, checked against the station zones and the
+parked arm only (`KeepOut.without_envelope`; the demonstrated envelope bounds the policy, and unfolding from the folded
+rest leaves it for a moment). One keep-out refusal on that ramp stops and holds, as `move_to` does; observe mode skips
+the ramp (nothing is sent). Before the ramp it reads the parked arm's pose on `/dev/haller_arm_left`
+(`keepout.read_arm_joints`) so the `other_arm` zone knows where it is. An unknown pose blocks the attempt (fail closed: the midline alone misses some
 reaches toward that arm): if another process holds that port (someone may be driving the arm), or the read fails and
 no pose younger than 180 s was read before, the e-stop latches with the reason, the arm holds at home and FLUX does not
-start; fix it, then **Release** and **Resume**. `--no-other-arm` skips the read for deliberate tests only and is
+start (nor the ramp); fix it, then **Release** and **Resume**. `--no-other-arm` skips the read for deliberate tests only and is
 written into every attempt's notes (`other_arm=...`). Each step ends on a Claude Haiku 5.5 check of the head frame.
 
 ```bash

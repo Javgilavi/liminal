@@ -64,10 +64,14 @@ recording protocol's S1 to S5) until the demo task is final.
   and keep-out stop (45 consecutive refusals; a single refusal while ramping to the start pose, as `move_to` does). The
   inter-arm collision gate is off on this station (one moving arm, the other parked); the keep-out's midline and
   `other_arm` zones guard that side. Every FLUX step first ramps to the home pose at 1 deg per tick through the same
-  guard, because every VR demo starts there; then, before the policy starts, `keepout.read_arm_joints` reads the parked
-  arm's pose for the `other_arm` zone. That check fails closed (agreed with so101-zeroshot): a port held by another
-  process, or a failed read with no pose younger than 180 s from this session, latches the e-stop before FLUX starts;
-  Resume retries. Each attempt's trial_log notes say how the pose was known (`other_arm=read`, `cached N s`,
+  guard, because every VR demo starts there. The ramp is checked against the station zones and the parked arm only
+  (`KeepOut.without_envelope`): the demonstrated joint and TCP envelope (`joint_env`, `tcp_env`) bounds what the policy
+  may command, and the unfolding ramp from the folded rest `[0, -96, 97, 1, 0, 2]` leaves the demonstrated TCP workspace
+  for a moment (refused at step 20 with the full keep-out, 0 refusals without the envelope); the policy runs under all
+  9 zones. Observe mode skips the ramp, since nothing is sent. Before the ramp, `keepout.read_arm_joints` reads the
+  parked arm's pose for the `other_arm` zone. That check fails closed (agreed with so101-zeroshot): a port held by
+  another process, or a failed read with no pose younger than 180 s from this session, latches the e-stop before the
+  ramp or FLUX starts; Resume retries. Each attempt's trial_log notes say how the pose was known (`other_arm=read`, `cached N s`,
   `DISABLED (--no-other-arm)`, `fake arm`). The port check scans `/proc` and sees only the same user's processes. A stop freezes the arm at its MEASURED
   pose (`hold_here`), as the single-arm runner does.
 - **Logging**: one `trial_log.py` line per FLUX attempt (task = the skill, 1/1 or 0/1 with the failure reason and the
@@ -76,9 +80,10 @@ recording protocol's S1 to S5) until the demo task is final.
 - **Verified (no hardware, no pod)**: on run_single_arm's `FakeSO101` with a fake policy, "put the pen in the box,
   take it out, put it back" plans as three chained left-arm steps; the arm is within 3 deg of home each time a FLUX
   policy starts; a failed attempt (timeout) is logged and retried; a monitor stop latches the e-stop and calls the hold;
-  the parked arm's pose is refreshed once per FLUX attempt, at home; an unknown pose (port held, stale cache) blocks the
-  attempt until Resume; a keep-out refusal on the ramp stops before FLUX starts (`tests/test_haller.py`, 13 tests,
-  `read_arm_joints` faked). Live Claude plan for "put the pen in the box, take it out, put it back, and
+  the parked arm's pose is read once per FLUX attempt, before the ramp; an unknown pose (port held, stale cache) blocks
+  the attempt until Resume; a keep-out refusal on the ramp stops before FLUX starts; the ramp from the folded rest
+  passes with the real `haller_right_workspace.json` (station zones) while the policy keeps the envelope; observe mode
+  starts FLUX without a ramp (`tests/test_haller.py`, 15 tests, `read_arm_joints` faked). Live Claude plan for "put the pen in the box, take it out, put it back, and
   repeat the whole cycle twice": 14.2 s, USD 0.030, 8 steps, left arm only, pen states consistent (it inserted a
   take-out between cycles) and a final `home`.
 - **Not verified**: anything on the real arm (VR recording holds it tonight), the policy server on the RTX PRO 6000 pod
