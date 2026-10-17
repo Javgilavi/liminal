@@ -1,0 +1,6 @@
+name: stack_and_hidden_demo
+scenario: configs/replay/workbench.yaml
+notes: >
+  Synthetic frames. Green block into the left bin (supported); a stack of blue on red (no registered skill);
+  an action hidden behind the hand at the right bin; a final blue-block move that is only partly visible.
+fps: 1

@@ -1,0 +1,45 @@
+object_changes:
+  - {object: green block, change: moved from the table into the left bin, frames: [f000, f002]}
+  - {object: blue block, change: 'lifted and placed on top of the red block', frames: [f003, f004]}
+  - {object: right bin, change: 'hand occludes the bin; contents unknown', frames: [f005]}
+  - {object: blue block, change: 'moved towards the white box, partly occluded', frames: [f006, f007]}
+subtasks:
+  - id: d1
+    action: put into
+    skill: pick_place
+    object: green block
+    destination: left bin
+    frames: [f001, f002]
+    confidence: 0.95
+    transcript: Green goes in the left bin
+  - id: d2
+    action: stack on top of
+    skill: null          # no registered stacking skill
+    object: blue block
+    destination: red block
+    frames: [f003, f004]
+    confidence: 0.9
+    transcript: Now I stack the blue block on the red one
+  - id: d3
+    action: put into
+    skill: pick_place
+    object: a block
+    destination: right bin
+    frames: [f005]
+    confidence: 0.3
+    uncertain: true
+    hidden: true
+    transcript: Then something into the right bin
+    note: the hand occludes the right bin, so which block (if any) went in is not visible
+  - id: d4
+    action: put into
+    skill: pick_place
+    object: blue block
+    destination: white box
+    frames: [f006, f007]
+    confidence: 0.55
+    uncertain: true
+    transcript: and the blue block into the box
+    note: final placement is partly occluded by the hand
+constraints:
+  - {kind: order, before: d2, after: d4, note: the blue block was lifted off the stack first, frames: [f004, f006]}

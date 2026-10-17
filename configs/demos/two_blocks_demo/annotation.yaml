@@ -1,0 +1,23 @@
+# Ground truth of what the human did. Read ONLY by the scripted ReplayDemoModel (a stand-in for a vision model).
+object_changes:
+  - {object: red block, change: moved from the table into the white box, frames: [f000, f002]}
+  - {object: blue block, change: moved from the table into the white box, frames: [f002, f004]}
+subtasks:
+  - id: d1
+    action: put into
+    skill: pick_place
+    object: red block
+    destination: white box
+    frames: [f000, f002]
+    confidence: 0.95
+    transcript: I put the red block in the box
+  - id: d2
+    action: put into
+    skill: pick_place
+    object: blue block
+    destination: white box
+    frames: [f002, f004]
+    confidence: 0.95
+    transcript: then I put the blue block in the box
+constraints:
+  - {kind: order, before: d1, after: d2, note: 'narration says "then"', frames: [f002]}

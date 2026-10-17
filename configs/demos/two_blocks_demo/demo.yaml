@@ -1,0 +1,4 @@
+name: two_blocks_demo
+scenario: configs/replay/two_blocks.yaml   # what the human demonstrated against; the current scene may differ
+notes: Synthetic schematic frames (liminal.demo.synth). A person puts the red block, then the blue block, in the box.
+fps: 1
