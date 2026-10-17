@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 Instructions for anyone, human or AI coding agent, changing this repo during the
 hackathon. Read this before your first commit.
@@ -71,12 +71,12 @@ Keep both working: don't hard-code 6-D actions or single-arm skill targets outsi
 | `orchestration/`, `perception/`, `configs/tasks/`, `configs/skills.yaml` | WS3 long-horizon |
 | `sim/`, `configs/embodiment/`, `configs/robot/mujoco_*.yaml` | WS4 sim + XLeRobot |
 | `hardware/`, `safety/`, `ui/`, `configs/robot/so101_*.yaml`, `scripts/record_waypoints.py` | WS5 hardware + UI |
-| `core/`, `app.py`, `AGENT.md`, `CLAUDE.md`, `PLAN.md`, `TASK.md`, `README.md` | shared, so coordinate first |
+| `core/`, `app.py`, `AGENTS.md`, `CLAUDE.md`, `PLAN.md`, `TASK.md`, `README.md` | shared, so coordinate first |
 
 Touching another workstream's path is fine for small fixes. Tell the owner.
 
-`CLAUDE.md` is an exact copy of this file, for Claude Code. Edit `AGENT.md`, then run
-`cp AGENT.md CLAUDE.md`. A test fails if they drift.
+`CLAUDE.md` is an exact copy of this file, for Claude Code. Edit `AGENTS.md`, then run
+`cp AGENTS.md CLAUDE.md`. A test fails if they drift.
 
 ## How to extend
 

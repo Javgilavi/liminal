@@ -10,3 +10,11 @@ sim_assets/
 *.safetensors
 *.ckpt
 .env
+
+# Personal WS3 research and implementation plan
+/ME.md
+/ME_PLAN.md
+
+# Personal agent integrations (skills and project MCP configuration)
+/.agents/
+/.codex/
