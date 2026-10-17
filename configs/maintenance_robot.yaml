@@ -1,0 +1,13 @@
+# Edit serial ports, calibration ids and camera indices for YOUR rig before using --robot.
+# FLUX server contract: five joints in degrees; gripper 0..100. No homing moves are issued.
+arms:
+  left: {port: /dev/ttyACM0, id: left_follower}
+  right: {port: /dev/ttyACM1, id: right_follower}
+cameras:
+  top: {index: 0, width: 640, height: 480}
+  left_wrist: {index: 2, width: 640, height: 360}
+  right_wrist: {index: 4, width: 640, height: 360}
+# Conservative example bounds; replace with the measured safe bounds of your calibrated rig.
+limits:
+  left: {lower: [-100, -100, -100, -100, -100, 0], upper: [100, 100, 100, 100, 100, 100], max_step: 4}
+  right: {lower: [-100, -100, -100, -100, -100, 0], upper: [100, 100, 100, 100, 100, 100], max_step: 4}

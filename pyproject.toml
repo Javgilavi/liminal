@@ -17,13 +17,18 @@ sim = ["mujoco>=3"]
 perception = ["opencv-python", "numpy"]
 llm = ["anthropic", "google-genai"]
 ui = ["fastapi", "uvicorn", "httpx"]
+maintenance = ["fastapi", "uvicorn", "httpx", "anthropic", "pillow", "opencv-python"]
 dev = ["pytest>=8", "ruff"]
 
 [project.scripts]
-liminal = "liminal.ui.cli:main"
+liminal = "liminal.ui.maintenance:main"
+pen-demo = "liminal.ui.maintenance:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+liminal = ["ui/web/*.html", "ui/web/*.css", "ui/web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

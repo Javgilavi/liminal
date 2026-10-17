@@ -1,146 +1,87 @@
-# liminal
+# Replace the faulty pen — easy mode
 
-**Long-horizon, dual-arm collaboration on SO-101 / XLeRobot, using FLUX 3 Action for manipulation.**
+A minimal orchestrator for **two SO-101 arms, five fixed steps and five checkpoint photos**.
+The sequence is written in Python. Claude only checks photos; it never plans or changes robot commands.
 
-One arm changes or holds something in the scene so the other arm can do what it
-otherwise couldn't. FLUX 3 Action handles the *learned manipulation*: bounded,
-text-prompted skills on one arm. Everything above that is this repo: deciding
-*why* a skill is needed, *when* the other arm is ready, *which conditions must stay
-true*, and *whether the goal really happened*.
+[Five-step diagram (PNG)](docs/maintenance.png).
 
-```
-            goal ("put the block in the box")
-                         │
-       ┌─────────────────▼──────────────────┐
-       │ Planner   template | LLM | Gemini ER│  proposes a task tree (YAML)
-       └─────────────────┬──────────────────┘
-       ┌─────────────────▼──────────────────┐   ┌──────────────────────┐
-       │ Behavior tree executor             │◄──┤ World state + memory │◄── perception
-       │ AFTER · WHILE · UNTIL · retry      │   │ predicates, event log│    (cameras, VLM)
-       └───────┬─────────────────┬──────────┘   └──────────────────────┘
-       ┌───────▼─────────────────▼──────────┐
-       │ Safety supervisor                  │  arm ownership, zones, limits, e-stop
-       └───────┬─────────────────┬──────────┘
-        ┌──────▼──────┐   ┌──────▼──────┐
-        │ left arm    │   │ right arm   │   skills → FLUX (single-flight, shared model)
-        │ hold / FLUX │   │ hold / FLUX │          → scripted fallback / mock
-        └─────────────┘   └─────────────┘          → primitives (hold, release, home)
-         SO-101 (LeRobot) · MuJoCo · mock
-```
+| Step | Left arm | Right arm | Camera must confirm |
+|---|---|---|---|
+| 1 | `Open the box lid` | Stay still | Lid fully open and resting |
+| 2 | `Move the cable aside and hold it`, then scripted position freeze | Stay still | Cable held clear; all pens visible and reachable |
+| 3 | Scripted hold, no policy | `Pick up the red pen and put it in the faulty cup` | Cable clear; red pen in faulty cup; original slot empty |
+| 4 | Scripted hold, no policy | `Pick up a pen from the replacement cup and place it in the empty slot` | Cable clear; replacement in that slot; right arm retracted |
+| 5 | `Release the cable`, then `Close the box lid` | Stay still | Lid closed |
 
-Strategy and key decisions: [PLAN.md](PLAN.md). Full design: [docs/architecture.md](docs/architecture.md).
-Who does what, and by when: [TASK.md](TASK.md). Rules for humans and coding agents:
-[AGENT.md](AGENT.md) (`CLAUDE.md` is an identical copy for Claude Code).
+Choose another faulty color with `--color blue`. There are **six policy prompts** in total.
+“Stay still” is a local position hold, not an inference call. The left hold continues through steps 3–4
+and through pauses; no FLUX calls are sent to the left arm during the swap.
 
-## Two ways to drive two arms with FLUX
+## Run the page without connecting motors
 
-| Option | What | Skills target | Policy config |
-|--------|------|---------------|---------------|
-| **A, per-arm** (default) | one embodied FLUX policy per arm (A1: shared model; A2: one instance per arm) | `left`, `right` | `configs/policy/flux3_so101.yaml` |
-| **B, bimanual** | one new model fine-tuned on both arms together (12-D actions) | `both` | `configs/policy/flux3_dual_bimanual.yaml` |
-
-Same executor, safety and task grammar for both. Comparison and decision: [PLAN.md](PLAN.md).
-
-## Workstreams
-
-| # | Workstream | Code | Brief |
-|---|-----------|------|-------|
-| WS1 | Single-arm FLUX baseline + 50–100 demos + task LoRA | `policy/`, `data/`, `scripts/record_demos.sh` | [01](docs/research/01_single_arm_baseline.md) |
-| WS2 | Bimanual: move obstacles away to reach a target | `bimanual/` | [02](docs/research/02_bimanual_obstacle.md) |
-| WS3 | Long-horizon decomposition + orchestration (BT / FSM / LLM / Gemini ER / VLM) | `orchestration/`, `perception/` | [03](docs/research/03_long_horizon_orchestration.md) |
-| WS4 | Simulation + bimanual XLeRobot embodiment adaptation | `sim/`, `configs/embodiment/` | [04](docs/research/04_xlerobot_sim.md) |
-| WS5 | Hardware setup, safety, operator UI / triggering | `hardware/`, `safety/`, `ui/` | [05](docs/research/05_hardware_ui.md) |
-
-## Quick start (no hardware needed)
+The existing `.env` and its Anthropic API key are preserved and remain gitignored.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-pytest                                   # all tests run on mock arms
-
-# Run the cooperative-holding demo on mock arms
-liminal run configs/tasks/lid_hold_insert.yaml
-# Check every task file compiles
-liminal validate configs/tasks/*.yaml
-# Goal -> task tree (template planner; --planner claude|gemini needs `.[llm]` + API key)
-liminal plan "hold the lid and insert the block"
-# Bimanual obstacle planner (WS2)
-python scripts/plan_obstacle.py --strategy hold_away
+cd /home/jgilaviles/erh_hack/liminal
+uv --cache-dir /tmp/liminal-uv-cache pip install --python .venv/bin/python -e '.[maintenance]'
+.venv/bin/python -m liminal --color red
 ```
 
-## On real hardware
+Open **http://127.0.0.1:8780**. This starts **photo review only**: see the five steps and upload an actual
+checkpoint photo for the highlighted step. Claude returns the individual checks and a short reason.
+An unclear or failed check pauses at that step. There is no scripted success or simulated robot.
+Photo uploads are disabled in robot mode so old photographs cannot advance a connected robot.
+
+## Run the actual arms
+
+Prepare the scene as described: lid closed, pens flat in individual slots, cable over the slots,
+replacement and faulty cups outside the box, both arms in home poses. Homing is not automatic.
+
+1. Edit [configs/maintenance_robot.yaml](configs/maintenance_robot.yaml): serial ports, calibration ids,
+   three camera indices and measured safe joint limits.
+2. Use a running FLUX SO-101 HTTP server with `GET /health`, `POST /reset`, and `POST /act`.
+   It must identify real FLUX (`fake=false`), returning five joint positions in **degrees** and gripper 0–100.
+   Only this controller should use that single-session policy server during the job.
+3. Install LeRobot's Feetech hardware support in the same environment and launch:
 
 ```bash
-pip install -e ".[hardware,perception,ui]"
-lerobot-find-port                          # then edit configs/robot/so101_*.yaml
-lerobot-calibrate ...                      # once per arm, same id as in the config
-
-# Without FLUX (scripted waypoints, the hour-6 fallback)
-liminal run configs/tasks/single_pick_place.yaml --robot configs/robot/so101_single.yaml --backend scripted
-
-# With FLUX 3 Action (after WS1 wires FluxPolicyBackend.load/predict)
-python scripts/flux_smoke_test.py
-liminal run configs/tasks/lid_hold_insert.yaml --robot configs/robot/so101_dual.yaml \
-    --backend flux --policy configs/policy/flux3_so101.yaml
-
-# Operator API: POST /run, POST /estop, GET /state
-liminal serve --robot configs/robot/so101_dual.yaml --backend flux --policy configs/policy/flux3_so101.yaml
+.venv/bin/python -m liminal --color red \
+  --robot configs/maintenance_robot.yaml --flux http://127.0.0.1:18100 --seconds 8
 ```
 
-Every run writes a JSONL event log under `runs/` (facts, node start/end, retries,
-WHILE violations). Use it to count success rates over trials.
+Click **Run demo**. Each prompt runs for the bounded duration, then the active arm freezes.
+Step 5 issues the release prompt, then the close prompt, each with the same duration limit. The scene camera takes one checkpoint;
+Claude checks it and advances only if **all** required conditions are visibly true.
+Compare checkpoint 2→3 to identify the emptied slot and 3→4 to verify the same slot was refilled.
+Verified checkpoints advance automatically through the five steps. A failed or unclear check pauses
+the job. After correcting the scene, click **Retry current step** to retry the same fixed prompt.
+There is no automatic retry loop. The other arm always stays in its scripted hold.
 
-## Task files
+**Stop** latches both arms into position hold and rejects late policy/model responses. A stopped job
+cannot resume automatically. Shutting down disconnects the motors; unload the held cable safely first.
 
-Planners (hand-written, LLM, the bimanual obstacle planner) all emit the same
-grammar, and one compiler validates it:
+The six manipulation skills must already work in the selected FLUX policy (normally after collecting
+and fine-tuning on this scene). This orchestrator does not train the policy or guarantee the motions.
+Hardware execution has not been verified on this machine: no arm serial ports or cameras are attached.
 
-```yaml
-tree:
-  sequence:                                  # AFTER
-    - skill: {arm: left, name: open_lid, prompt: "Lift the lid open", success: lid_open}
-    - while:                                 # WHILE: left keeps holding...
-        arm: left
-        maintain: lid_open                   # ...this must stay true, or the body is cancelled
-        until: object_inserted               # UNTIL
-        do:
-          skill: {arm: right, name: pick_place, prompt: "Place the block inside the open box",
-                  success: object_inserted}
-    - parallel:
-        - {skill: {arm: left, name: release}}
-        - {skill: {arm: right, name: home}}
-    - check: object_inserted
-```
+## Only the small active path
 
-Grammar reference: `src/liminal/orchestration/task_spec.py`. Examples: `configs/tasks/`.
+- [maintenance.py](src/liminal/maintenance.py): fixed steps, checkpoint verifier, sequential state.
+- [hardware/maintenance.py](src/liminal/hardware/maintenance.py): FLUX requests and idle/cable holds.
+- [ui/maintenance.py](src/liminal/ui/maintenance.py): page and four operator actions.
+- [maintenance.html](src/liminal/ui/web/maintenance.html): the operator page.
 
-## Repo layout
+The driver reuses the low-level SO-101 adapter and safety supervisor. It does not import the old planner,
+behavior trees, memory retrieval, replay scenes, evaluations or video-to-plan pipeline. `liminal`,
+`pen-demo`, and `python -m liminal` all open this minimal controller. Older code remains for reference;
+it is not part of this execution path. The previous branch and its stashed changes are preserved.
 
-```
-src/liminal/
-  core/           types + interface contracts (Arm, Camera, SkillBackend, PredicateDetector)
-  orchestration/  behavior tree, task-file compiler, executor, planners (template / LLM)
-  perception/     world state + event log, colour-zone detector, VLM verifier
-  safety/         arm ownership, zones, joint limits, e-stop
-  policy/         FLUX 3 Action backend, scripted fallback, mock
-  hardware/       SO-101 via LeRobot (with position hold), cameras, mock arm
-  sim/            MuJoCo arms/cameras, embodiment action-space mapping (XLeRobot)
-  bimanual/       obstacle-clearing role assignment and plan generation
-  data/           demo-collection variation protocol
-  ui/             CLI and HTTP operator API
-configs/          robot, policy, embodiment, skill catalog, task trees
-scripts/          demo recording, LoRA, FLUX smoke test, waypoint recording, obstacle planner
-docs/             architecture and per-workstream research briefs
-```
+## Saved evidence
 
-## Status and caveats
+Each job writes `runs/pen-demo/<timestamp>/state.json`, a readable `log.txt`, and `checkpoint-1.png`
+through `checkpoint-5.png`. Failed/retried photos are also kept as `step-N-attempt-M.png`.
+No database, long-history memory, generated task tree or model-authored prompts.
 
-- The orchestration stack (BT, WHILE/UNTIL, safety, world state, planners, mock and
-  scripted backends) runs and is tested.
-- **FLUX 3 Action loading is a stub.** `FluxPolicyBackend.load/predict` raise
-  `NotImplementedError` until WS1 wires them against the official BFL docs. All FLUX
-  numbers in `configs/policy/flux3_so101.yaml` (chunk 42 / execute 32 / 30 Hz /
-  8-frame history / ~32 GB BF16) come from planning notes and are marked `VERIFY`.
-- LeRobot imports and CLI flags change between releases. They are isolated in
-  `hardware/so101.py` and `scripts/record_demos.sh`.
-- SO-101 holding is **position** holding, not torque control. Keep loads light.
+For data collection: vary lid grip/angle and cable position. Move the faulty color between slots,
+and collect extra removal demonstrations. Vary the replacement cup position and empty slot.
+Record release and close as separate episodes. Do not record the scripted holding interval as a policy skill.

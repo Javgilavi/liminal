@@ -24,12 +24,14 @@ class SO101Arm:
         robot_id: str | None = None,
         hold_rate_hz: float = 30.0,
         max_relative_target: float | None = None,
+        use_degrees: bool | None = None,
     ):
         self.name = name
         self.port = port
         self.robot_id = robot_id or name
         self.hold_rate_hz = hold_rate_hz
         self.max_relative_target = max_relative_target
+        self.use_degrees = use_degrees
         self._robot: Any = None
         self._lock = threading.Lock()
         self._hold_target: JointPositions | None = None
@@ -41,12 +43,11 @@ class SO101Arm:
     def connect(self) -> None:
         try:
             from lerobot.robots.so101_follower import SO101Follower, SO101FollowerConfig
-        except ImportError as e:  # pragma: no cover - depends on local install
-            raise ImportError(
-                "LeRobot with SO-101 support is required: pip install -e '.[hardware]'. "
-                "If the module moved, update the import in liminal/hardware/so101.py."
-            ) from e
-        cfg = SO101FollowerConfig(port=self.port, id=self.robot_id, max_relative_target=self.max_relative_target)
+        except ImportError:
+            from lerobot.robots.so_follower import SO101Follower, SO101FollowerConfig
+        units = {} if self.use_degrees is None else {"use_degrees": self.use_degrees}
+        cfg = SO101FollowerConfig(port=self.port, id=self.robot_id,
+                                  max_relative_target=self.max_relative_target, **units)
         self._robot = SO101Follower(cfg)
         self._robot.connect()
 
@@ -96,6 +97,10 @@ class SO101Arm:
             self._hold_thread.join(timeout=1.0)
         self._hold_thread = None
         self._hold_target = None
+
+    @property
+    def holding(self) -> bool:
+        return self._hold_thread is not None and self._hold_thread.is_alive() and not self._hold_stop.is_set()
 
     def stop(self) -> None:
         self.hold()
