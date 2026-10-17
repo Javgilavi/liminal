@@ -130,11 +130,14 @@ def remap(
     target_fps: int = 30,
     flip_action_gripper: bool = False,
     task_suffix: str = "",
+    negate: tuple[str, ...] = (),
 ) -> dict:
     """Write a new v3.0 dataset at `dst` with the selected arm channels and renamed cameras.
 
     camera_map: new feature key -> source feature key. flip_action_gripper maps the action gripper g -> 100 - g
     (for datasets whose leader gripper is recorded inverted). task_suffix is appended to every task string.
+    negate: arm joints whose state and action become -x, for a model whose joint sign convention differs from the
+    robot's (variant D of ws4/single_arm: shoulder_lift and wrist_roll). The runner has to apply the same map.
     """
     import numpy as np
     import pandas as pd
@@ -155,6 +158,7 @@ def remap(
     new_names = [f"{s}_{j}.pos" if s else f"{j}.pos" for s in sides for j in ARM_JOINTS]
     cam_rename = {v: k for k, v in camera_map.items()}
     grip_dims = [i for i, j in enumerate(joints) if j == "gripper"] if flip_action_gripper else []
+    neg_dims = [i for i, j in enumerate(joints) if j in negate]
 
     # data parquet files
     for f in sorted((src / "data").rglob("*.parquet")):
@@ -164,6 +168,7 @@ def remap(
             arr = np.stack(df[v].to_numpy())[:, idx[v]].astype(np.float32) * scale_arr
             if v == "action" and grip_dims:
                 arr[:, grip_dims] = 100.0 - arr[:, grip_dims]
+            arr[:, neg_dims] *= -1.0
             out[v] = list(arr)
         out = out[[*VECTORS, *[c for c in KEEP_SCALARS if c in out.columns]]]
         target = dst / f.relative_to(src)
@@ -205,11 +210,14 @@ def remap(
                 cols[c] = [[t + task_suffix for t in ts] for ts in ep[c]]
             else:
                 cols[c] = ep[c]
+        mirrors = [(v, neg_dims, 0.0) for v in VECTORS if neg_dims]  # x -> -x; the gripper is never negated
         if grip_dims:
-            stat_cols = {c.split("/")[2]: c for c in cols if c.startswith("stats/action/")}
+            mirrors.append(("action", grip_dims, 100.0))
+        for feat, dims, full in mirrors:
+            stat_cols = {c.split("/")[2]: c for c in cols if c.startswith(f"stats/{feat}/")}
             for row in range(len(ep)):
                 cell = {k: list(np.asarray(cols[c][row], dtype=np.float64)) for k, c in stat_cols.items()}
-                flipped = flip_stats(cell, grip_dims)
+                flipped = flip_stats(cell, dims, full)
                 for k, c in stat_cols.items():
                     cols[c][row] = np.asarray(flipped[k])
         target = dst / f.relative_to(src)
@@ -232,6 +240,8 @@ def remap(
             new_stats[k] = transform_stats(v, idx[k], scales)
             if k == "action" and grip_dims:
                 new_stats[k] = flip_stats(new_stats[k], grip_dims)
+            if neg_dims:
+                new_stats[k] = flip_stats(new_stats[k], neg_dims, 0.0)  # x -> -x
         elif k in cam_rename:
             new_stats[cam_rename[k]] = v
         elif k in KEEP_SCALARS:
@@ -256,6 +266,7 @@ def remap(
         "arm_units": "degrees",
         "gripper_units": "range_0_100",
         "flip_action_gripper": flip_action_gripper,
+        "negated": list(negate),
         "task_suffix": task_suffix,
     }
     (dst / "meta" / "info.json").write_text(json.dumps(new_info, indent=4))
@@ -277,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
                          "per_arm 'so_follower', xle12 'bi_so_follower' (LeRobot main class names, check own data)")
     ap.add_argument("--copy", action="store_true", help="copy video files instead of hard-linking")
     ap.add_argument("--flip-action-gripper", action="store_true", help="action gripper g -> 100 - g")
+    ap.add_argument("--negate", nargs="+", default=[], choices=[j for j in ARM_JOINTS if j != "gripper"],
+                    help="arm joints whose state and action become -x (e.g. variant D: shoulder_lift wrist_roll)")
     ap.add_argument("--task-suffix", default=None,
                     help="appended to task strings; per_arm default ' with the <side> arm', xle12 default none")
     args = ap.parse_args(argv)
@@ -296,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         suffix = f" with the {args.side} arm" if args.task_suffix is None else args.task_suffix
         info = remap(args.src, args.dst, (args.side,), cam_map, src_units, args.robot_type or "so_follower",
                      not args.copy,
-                     flip_action_gripper=args.flip_action_gripper, task_suffix=suffix)
+                     flip_action_gripper=args.flip_action_gripper, task_suffix=suffix, negate=tuple(args.negate))
         # per-arm output uses bare joint names like the FLUX SO-101 contract
         feats = info["features"]
         for v in VECTORS:
@@ -314,7 +327,8 @@ def main(argv: list[str] | None = None) -> int:
             ap.error(f"no source camera for {missing}; pass --cam")
         remap(args.src, args.dst, ("left", "right"), cam_map, src_units, args.robot_type or "bi_so_follower",
               not args.copy,
-              flip_action_gripper=args.flip_action_gripper, task_suffix=args.task_suffix or "")
+              flip_action_gripper=args.flip_action_gripper, task_suffix=args.task_suffix or "",
+              negate=tuple(args.negate))
         target = XLE_12D
     out = describe(load_meta(args.dst))
     print(json.dumps({"written": str(args.dst), "contract": target.name, "camera_map": cam_map,

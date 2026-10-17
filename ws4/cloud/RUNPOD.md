@@ -359,3 +359,84 @@ Then follow `ws4/HANDOFF_GPU.md` steps 3, 4 and 6 with `CUDA_VISIBLE_DEVICES=0`.
 | LoRA memory on the A100 | `nvidia-smi` after 50 microsteps | over 80 GB: move to an RTX PRO 6000 at $2.49/h |
 | LoRA step time | trainer log after 50 microsteps | if 10,000 steps need more than about 10 h, cut the steps, or move to an H100 at $3.99/h (likely 2 to 3x faster) |
 | A40 chunk latency | `python -m flux.measure_latency --checkpoint black-forest-labs/flux-3-action-so101 --runs 10` | above about 1.5 s: use an L40S, or an RTX PRO 6000 for the demo hours |
+
+## Sim-track pod ws4-sim-4500 (orchestrator note, 17 Oct evening)
+
+- Pod `ws4-sim-4500` (fnxekskwlu0095), 1x RTX PRO 4500 32 GB, EU-RO-1, $0.72/h, volume `ws4-inference` at
+  /workspace. Created 16:07 UTC after both earlier 4500 pods failed: 4inbmv6d4xb876 could not restart (host GPUs
+  taken) and voqbbqhku7bz8v never booted (runtime null, zero container and system logs, twice). Both are terminated.
+- Closed-loop sim test (closed-loop-test-flux-dr): `so101` READY 7 min after runpod_serve.sh (first prompt 121 s
+  including compile, others 13 to 15 s). `so101sim` (released weights, sim left-arm quantiles) built offline at
+  /workspace/packages/so101sim_left, READY in 9 min. Server 0.65 s, round trip 0.84 s per chunk (guidance 1.0 +
+  compile, Qwen on CPU). Tunnel on local port 18765 to avoid the single-arm 8765 tunnel.
+- Server stopped 17:14:40 UTC; idle watchdogs (IDLE_MIN 30) armed; pod handed to ws4-ttt's sim LoRA job.
+
+## Capacity notes and pods (orchestrator, 17 Oct ~19:30 CEST)
+
+- so101-flux-serve (k4p4f8hgs0kroz, RTX PRO 6000, EU-CZ-1) idle-stopped at about 17:55 CEST and then could not
+  restart: "not enough free GPUs on the host machine". A stopped pod only restarts on its own host.
+- `so101-diag-4090` (bd63s5j8xtpves): 1x RTX 4090 24 GB, EU-CZ-1, $0.89/h, volume so101-inference, created 17:31 UTC
+  for the data-format diagnostic (A/B/C/D frame variants, flux-action issue #2). Temporary; terminate after.
+- Stock at 17:31 UTC: EU-CZ-1 only 24 GB cards; EU-RO-1 has an A100 80GB PCIe ($1.79/h, LOW), RTX PRO 4500/4000,
+  L4, 4090, B200; RTX PRO 6000 HIGH in EUR-IS-1/2 and the US. Plan: overnight real LoRA on an A100 80 GB in EU-RO-1
+  on the ws4-inference volume (weights + envs already there).
+
+## Pods created 18:21 to 18:25 UTC (orchestrator)
+
+- `so101-serve-4090` (wjaszpojorczgm): RTX 4090 24 GB, EU-CZ-1, $0.89/h, volume so101-inference. Serves the stock
+  `so101` package for the real-arm variant E test (lift/elbow mapping, client-side), so so101-diag-4090 keeps
+  running diagnostics. An A100 80 GB in EU-RO-1 was gone at create time.
+- `real-train-6000` (bqmpv0ulsmb14a): RTX PRO 6000 96 GB, EUR-IS-1, $2.49/h, NEW volume `real-train-is`
+  (hnh342zg4i, 150 GB, EUR-IS-1). Tonight's real-track LoRA (approved by Oscar). Bootstrap + training by ws4-datasets.
+
+## Real-track LoRA pod real-train-6000 (ws4-datasets, 17 Oct evening)
+
+| What | Value |
+|---|---|
+| Pod | `real-train-6000`, id `bqmpv0ulsmb14a`, 1x RTX PRO 6000 96 GB, 32 vCPU, EUR-IS-1, $2.49/h, container disk 40 GB; started 18:24:44 UTC |
+| Volume | `real-train-is`, id `hnh342zg4i`, 150 GB, EUR-IS-1, at `/workspace` |
+| SSH | `ssh root@157.157.221.177 -p 16301 -i ~/.ssh/id_ed25519_osrdvs` (changes on every start) |
+| Watchdog | `ws4/ttt/pod_job_watchdog.sh 30`, armed 18:27:35 UTC: stops the pod after 30 min with GPU use at or under 5% and no `lerobot_train`, `bootstrap.sh` or other listed job running (`bootstrap.sh` added to its list for this fresh volume) |
+| Run script | `ws4/cloud/real_lora.sh package STATS.json \| probe \| train \| merge` |
+| Data | `/workspace/real_lora/pen_in_right_all`: snapshot of `haller_put_the_red_pen_in_its_slot_in_the_cardboard_box` at 18:30 UTC (36 episodes, 22,946 frames, 0.21 h), `convert_bimanual --to per_arm --side right --src-units degrees --task-suffix ""` (robot-left task arm; scene = head, wrist = right_wrist, both 480x640 h264) |
+
+Timeline (UTC):
+- 18:27 ws4/ synced (70 MB), watchdog armed, `bootstrap.sh` started. The weight prefetch (so101, base, droid
+  metadata) had finished by 18:33.
+- 18:31 dataset snapshot uploaded (242 MB).
+- 18:38:34 bootstrap done, rc 0, 11 min: torch 2.10.0+cu128 with sm_120, NATTEN 0.21.6 3D op OK in both envs,
+  `Flux3Policy` imports in the LeRobot env. A fresh EUR-IS-1 volume bootstraps 4x faster than the 45 to 60 min
+  planned.
+- 18:38 provisional base package `/workspace/packages/so101_haller_pen_B_probe` (variant B quantiles from
+  so101-zeroshot's `a0r_B_haller_pen.json`, 20 episodes), only for the step-time probe.
+- 18:38 to 18:52 step-time probes (below).
+- 18:53 provisional run `/workspace/real_lora/lora_pen_prov`: 2,000 microsteps on the provisional split (28 train
+  episodes, eval on held-out 20, 21, 22). Base `/workspace/packages/so101_haller_pen_B_prov` uses variant B
+  quantiles of exactly those 28 training episodes (`a0r_stats.py`, 19,256 frames). It tests eval, checkpoints and
+  merge before the overnight run, and keeps the pod busy until the final split (about 19:30 UTC). A watchdog stop
+  in that gap could end in "not enough free GPUs on the host" at restart.
+- Pipeline test on the provisional run:
+  - 19:06 checkpoint 500 (eval loss 0.285 on the held-out takes), raw and EMA adapters 0.47 GB each.
+  - `real_lora.sh merge` of the EMA adapter: 2.7 min on the CPU, giving a 13.9 GB package
+    (`/workspace/packages/so101_haller_pen_B_prov_lora500`) with the B normalizers.
+  - Serving check (`/workspace/real_lora/serve_test.sh`, port 8770, guidance 1.0, no compile): `flux.remote`
+    loads it and returns finite 42 x 6 chunks for "put the red pen in its slot in the cardboard box", 0.80 s per
+    chunk while sharing the GPU with training. The test server was stopped afterwards.
+- Oscar, 17 Oct evening: the overnight run waits for the final split (enough data first), then 20,000
+  microsteps.
+- Base variant B (quantiles from our demos, no transforms; gripper absolute as recorded), confirmed by
+  so101-zeroshot: B and D tie over seeds 0 and 1 on the offline diagnostic, and B needs no flip in the data or
+  at deployment.
+
+LoRA step time (LeRobot `lerobot_train`, `examples/flux3/lora.json`, text encoder on the GPU, 480x640 h264 data):
+
+| Micro-batch x accumulation, workers | Startup to first step | Steady state | Samples/s | Peak GPU memory |
+|---|---|---|---|---|
+| 2 x 4, 4 spawn workers | model load 1.2 min, first batch 1.8 min | 1.02 s per microstep (data wait 0.004 s) | 1.96 | 34.4 GiB |
+| 8 x 1, 8 spawn workers | 1.0 min + 3.3 min for 8 workers | 4.11 s per microstep | 1.95 | 47.8 GiB |
+
+- A bigger micro-batch gives no speed-up (compute-bound), so the run uses 2 x 4 with 4 workers.
+- Eval pass (`max_eval_samples` 256): 60 to 95 s. A checkpoint is 0.45 GB raw + 0.45 GB EMA + 1.4 GB training
+  state; `real_lora.sh train` keeps the training state only on the newest checkpoint.
+- With eval and a checkpoint every 500 microsteps: about 3,000 microsteps (750 updates) per hour, so 20,000
+  microsteps (5,000 updates, about 1.3 epochs of a 55-episode set) take about 6.7 h, about $17 at $2.49/h.

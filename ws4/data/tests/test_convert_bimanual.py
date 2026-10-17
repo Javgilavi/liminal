@@ -118,6 +118,28 @@ def test_per_arm_flip_gripper_and_task_suffix(bi_dataset, tmp_path):
     assert stats["action"]["max"][5] == pytest.approx(100.0 - arrays["action"][:, 11].min(), rel=1e-5)
 
 
+def test_per_arm_negate_joints(bi_dataset, tmp_path):
+    root, arrays = bi_dataset
+    dst = tmp_path / "right_d"
+    main([str(root), str(dst), "--to", "per_arm", "--side", "right", "--copy", "--src-units", "degrees",
+          "--negate", "shoulder_lift", "wrist_roll"])
+    act, state, _ = _read(dst)
+    for out, src in ((act, arrays["action"]), (state, arrays["state"])):
+        np.testing.assert_allclose(out[:, [1, 4]], -src[:, [7, 10]], rtol=1e-5)
+        np.testing.assert_allclose(out[:, [0, 2, 3, 5]], src[:, [6, 8, 9, 11]], rtol=1e-5)
+    stats = json.loads((dst / "meta/stats.json").read_text())
+    for key, src in (("action", arrays["action"]), ("observation.state", arrays["state"])):
+        assert stats[key]["min"][1] == pytest.approx(-src[:, 7].max(), rel=1e-5)
+        assert stats[key]["q01"][4] == pytest.approx(-np.percentile(src[:, 10], 99), rel=1e-4)
+        assert stats[key]["mean"][1] == pytest.approx(-src[:, 7].mean(), rel=1e-4)
+    ep = pd.read_parquet(dst / "meta/episodes/chunk-000/file-000.parquet")
+    first = state[: int(ep["length"].iloc[0])]
+    for stat, fn in (("max", np.max), ("min", np.min)):
+        assert ep[f"stats/observation.state/{stat}"].iloc[0][1] == pytest.approx(fn(first[:, 1]), rel=1e-5)
+    info = json.loads((dst / "meta/info.json").read_text())
+    assert info["ws4_conversion"]["negated"] == ["shoulder_lift", "wrist_roll"]
+
+
 def test_merge_precheck(bi_dataset, tmp_path):
     from merge_datasets import compatibility
 
