@@ -1,4 +1,6 @@
+from liminal.perception.config import PerceptionRuntime, load_perception_config
 from liminal.perception.inspector import SceneInspector
+from liminal.perception.qwen import QwenInferenceMetrics, QwenLoadMetrics, QwenVisionConfig, QwenVisionModel
 from liminal.perception.replay import (
     InspectionRecording,
     RecordingError,
@@ -14,7 +16,7 @@ from liminal.perception.types import (
     SceneAssessment,
     Verdict,
 )
-from liminal.perception.vlm import FixtureVisionModel, VisionModel
+from liminal.perception.vlm import FixtureVisionModel, VisionModel, build_vision_model, warm_vision_model
 from liminal.perception.world_state import ObservationRecord, WorldState
 
 __all__ = [
@@ -23,7 +25,12 @@ __all__ = [
     "InspectionRecording",
     "InspectionRequest",
     "ObservationRecord",
+    "PerceptionRuntime",
     "PredicateObservation",
+    "QwenInferenceMetrics",
+    "QwenLoadMetrics",
+    "QwenVisionConfig",
+    "QwenVisionModel",
     "RecordingError",
     "ReplayMismatch",
     "ReplayReport",
@@ -32,6 +39,9 @@ __all__ = [
     "Verdict",
     "VisionModel",
     "WorldState",
+    "build_vision_model",
     "evaluate_recording",
+    "load_perception_config",
     "load_recording",
+    "warm_vision_model",
 ]

@@ -68,6 +68,24 @@ liminal plan "hold the lid and insert the block"
 python scripts/plan_obstacle.py --strategy hold_away
 ```
 
+## Qwen scene inspection
+
+The real VLM adapter is optional and loads its checkpoint lazily, once per process.
+Check the device in `configs/perception/qwen3_vl_4b.yaml`, then inspect one synchronized
+set of recorded views before enabling any robot motion:
+
+```bash
+pip install -e ".[vlm-qwen]"
+liminal inspect --perception configs/perception/qwen3_vl_4b.yaml \
+  --image top=path/to/top.jpg \
+  --image left_wrist=path/to/left_wrist.jpg \
+  --image right_wrist=path/to/right_wrist.jpg
+```
+
+The command prints schema-validated predicates plus load, preprocessing,
+time-to-first-token, total-latency, and GPU-memory measurements. Pass the same
+configuration file to `liminal run` using its `--perception` option.
+
 ## On real hardware
 
 The connected bimanual XLeRobot has an isolated setup and a local operator UI:

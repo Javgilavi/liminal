@@ -22,9 +22,22 @@ def _run(args: argparse.Namespace) -> int:
     from liminal.app import build_context
     from liminal.hardware.runtime import connected
     from liminal.orchestration import load_task, run_task
+    from liminal.perception.config import load_perception_config
+    from liminal.perception.vlm import warm_vision_model
 
     log = Path(args.log_dir) / f"{time.strftime('%Y%m%d-%H%M%S')}_{Path(args.task).stem}.jsonl"
-    ctx = build_context(args.robot, backend=args.backend, policy=args.policy, log_path=log)
+    perception = load_perception_config(args.perception) if args.perception else None
+    if perception:
+        warm_vision_model(perception.model)
+    ctx = build_context(
+        args.robot,
+        backend=args.backend,
+        policy=args.policy,
+        log_path=log,
+        vision_model=perception.model if perception else None,
+        inspection=perception.inspection if perception else None,
+        inspection_confirmations=perception.confirmations if perception else 2,
+    )
     task = load_task(args.task, arms=ctx.arm_names)
     with connected(ctx):
         try:
@@ -76,8 +89,83 @@ def _serve(args: argparse.Namespace) -> int:
 
     from liminal.ui.server import create_app
 
-    uvicorn.run(create_app(args.robot, args.backend, args.policy, args.task_dir), host=args.host, port=args.port)
+    uvicorn.run(
+        create_app(args.robot, args.backend, args.policy, args.task_dir, args.perception),
+        host=args.host,
+        port=args.port,
+    )
     return 0
+
+
+def _inspect(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+
+    from PIL import Image
+
+    from liminal.perception.config import load_perception_config
+    from liminal.perception.inspector import SceneInspector
+    from liminal.perception.qwen import QwenVisionModel
+    from liminal.perception.vlm import warm_vision_model
+    from liminal.perception.world_state import WorldState
+
+    runtime = load_perception_config(args.perception)
+    warm_vision_model(runtime.model)
+    image_paths: dict[str, Path] = {}
+    for item in args.image:
+        camera, separator, value = item.partition("=")
+        if not separator or not camera or not value:
+            raise SystemExit(f"invalid --image {item!r}; expected CAMERA=PATH")
+        if camera in image_paths:
+            raise SystemExit(f"duplicate image for camera {camera!r}")
+        path = Path(value)
+        if not path.is_file():
+            raise SystemExit(f"image does not exist: {path}")
+        image_paths[camera] = path
+    expected_cameras = set(runtime.inspection.cameras)
+    if set(image_paths) != expected_cameras:
+        raise SystemExit(
+            f"images must contain exactly the configured cameras {sorted(expected_cameras)}; "
+            f"got {sorted(image_paths)}"
+        )
+
+    class ImageCamera:
+        def __init__(self, name: str, path: Path):
+            self.name, self.path = name, path
+
+        def read(self):
+            with Image.open(self.path) as image:
+                return image.convert("RGB")
+
+    predicates = tuple(args.predicate or runtime.inspection.definitions)
+    request = runtime.inspection.request(predicates, context="Offline setup-photo inspection.")
+    world = WorldState()
+    inspector = SceneInspector(
+        runtime.model,
+        {name: ImageCamera(name, path) for name, path in image_paths.items()},
+        world,
+        confirmations=runtime.confirmations,
+    )
+    assessment = asyncio.run(inspector.inspect_until_known(
+        request,
+        timeout_s=runtime.inspection.timeout_s,
+        retry_delay_s=runtime.inspection.retry_delay_s,
+    ))
+    output: dict[str, object] = {
+        "predicates": {
+            key: {
+                "value": observation.value.value,
+                "evidence": observation.evidence,
+            }
+            for key, observation in assessment.observations.items()
+        },
+        "parse_error": assessment.parse_error,
+        "raw_response": assessment.raw_response,
+    }
+    if isinstance(runtime.model, QwenVisionModel):
+        output["load_metrics"] = asdict(runtime.model.load_metrics) if runtime.model.load_metrics else None
+        output["inference_metrics"] = [asdict(metrics) for metrics in runtime.model.inference_metrics]
+    print(json.dumps(output, indent=2))
+    return 0 if all(observation.known for observation in assessment.observations.values()) else 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--robot", default="configs/robot/mock_dual.yaml")
     r.add_argument("--backend", default="mock", choices=["mock", "scripted", "flux"])
     r.add_argument("--policy", default=None, help="policy config, e.g. configs/policy/flux3_so101.yaml")
+    r.add_argument("--perception", default=None, help="persistent VLM + predicate config")
     r.add_argument("--log-dir", default="runs")
     r.add_argument("--engage", action="store_true", help="explicitly engage real arms at their current pose")
     r.set_defaults(fn=_run)
@@ -109,10 +198,17 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--robot", default="configs/robot/mock_dual.yaml")
     s.add_argument("--backend", default="mock", choices=["mock", "scripted", "flux"])
     s.add_argument("--policy", default=None)
+    s.add_argument("--perception", default=None)
     s.add_argument("--task-dir", default="configs/tasks")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
     s.set_defaults(fn=_serve)
+
+    i = sub.add_parser("inspect", help="run the configured VLM on recorded setup photos")
+    i.add_argument("--perception", required=True, help="persistent VLM + predicate config")
+    i.add_argument("--image", action="append", required=True, help="camera frame as CAMERA=PATH")
+    i.add_argument("--predicate", action="append", help="predicate to inspect; defaults to all definitions")
+    i.set_defaults(fn=_inspect)
 
     args = ap.parse_args(argv)
     return args.fn(args)
