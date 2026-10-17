@@ -1,4 +1,7 @@
 .cache/
-__pycache__/
-*.pyc
+*.mp4
 outputs/
+*.pyc
+__pycache__/
+single_arm/runs/
+ttt/models/*.pt
