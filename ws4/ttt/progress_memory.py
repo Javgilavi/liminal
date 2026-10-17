@@ -1,9 +1,11 @@
-"""Pipeline P2: a TTT episode memory downstream of a frozen FLUX 3 Action, for the orchestrator.
+"""Pipeline P2: an episode memory downstream of a frozen FLUX 3 Action, for the orchestrator.
 
 One feature vector per FLUX re-plan (``flux_hook.FluxFeatureTap``: pooled hidden states of a late joint block)
-goes into a small TTT memory that runs over the whole episode, one inner step per re-plan, and predicts the
-current subtask and a "subtask done" flag. The output is advisory: the orchestrator (WS3) decides, perception
-still checks success, and nothing here reaches the motors.
+goes into a small memory (gated TTT layer, or a GRU) that runs over the whole episode, one step per re-plan, and
+predicts the current subtask and a "subtask done" flag. On the synthetic check below a GRU was as good or better
+than the TTT memory at up to about 190 re-plans (3 seeds), so ``memory="gru"`` is the practical choice for
+demo-length episodes. The output is advisory: the orchestrator (WS3) decides, perception still checks success,
+and nothing here reaches the motors.
 
 ``python ws4/ttt/progress_memory.py`` runs a synthetic check of the failure mode it is for: a task made of
 repeated, identical-looking stages (pick/place object A, then the same motions for object B), where a
@@ -13,6 +15,7 @@ per-re-plan classifier cannot tell which repetition it is in.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -32,8 +35,12 @@ else:
 class EpisodeProgressMemory(nn.Module):
     """``(B, T, feat_dim)`` re-plan features -> subtask logits ``(B, T, n_subtasks)`` and done logits ``(B, T)``.
 
-    ``memory``: ``"ttt"`` (gated TTT layer), ``"gru"`` (same width GRU, the obvious cheap alternative) or
-    ``"none"`` (per-re-plan baseline). Everything else is shared.
+    ``memory``: ``"ttt"`` (gated TTT layer), ``"gru"`` (same width GRU, the obvious cheap alternative),
+    ``"lastk"`` (the last ``k`` re-plans side by side, a fixed window like FLUX's own short history) or ``"none"``
+    (per-re-plan baseline). Everything else is shared. Optional heads: ``n_occurrences`` (how many times the
+    current skill already ran, the part that needs memory when stages repeat) and ``progress_head`` (progress
+    inside the current stage, 0..1). Input features are standardized with ``feat_mean``/``feat_std`` buffers
+    (:meth:`set_normalization`), so a saved state dict is self-contained.
     """
 
     def __init__(
@@ -45,13 +52,19 @@ class EpisodeProgressMemory(nn.Module):
         fast: str = "linear",
         memory: str = "ttt",
         gate_init: float = 1.0,
+        n_occurrences: int = 0,
+        progress_head: bool = False,
+        k: int = 4,
     ):
         super().__init__()
+        self.register_buffer("feat_mean", torch.zeros(feat_dim))
+        self.register_buffer("feat_std", torch.ones(feat_dim))
         self.inp = nn.Sequential(nn.LayerNorm(feat_dim), nn.Linear(feat_dim, dim))
         self.local = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, 2 * dim), nn.GELU(), nn.Linear(2 * dim, dim))
-        if memory not in ("ttt", "gru", "none"):
+        if memory not in ("ttt", "gru", "lastk", "none"):
             raise ValueError(f"unknown memory {memory!r}")
-        self.kind = memory
+        self.kind, self.k = memory, k
+        self.window = nn.Linear(k * dim, dim) if memory == "lastk" else None
         # No pretrained model to protect here, so the gate starts open (1.0) unlike inside FLUX.
         self.memory = (
             GatedTTT(dim, gate_init=gate_init, num_heads=heads, fast=fast, mini_batch=1)
@@ -64,19 +77,38 @@ class EpisodeProgressMemory(nn.Module):
         self.norm = nn.LayerNorm(dim)
         self.subtask = nn.Linear(dim, n_subtasks)
         self.done = nn.Linear(dim, 1)
+        self.occurrence = nn.Linear(dim, n_occurrences) if n_occurrences else None
+        self.stage_progress = nn.Linear(dim, 1) if progress_head else None
+
+    @torch.no_grad()
+    def set_normalization(self, mean: Tensor, std: Tensor) -> None:
+        self.feat_mean.copy_(mean)
+        self.feat_std.copy_(std.clamp_min(1e-4))
 
     def forward(
         self, feats: Tensor, state: State | Tensor | None = None
     ) -> tuple[dict[str, Tensor], State | Tensor | None]:
-        h = self.inp(feats)
+        h = self.inp((feats - self.feat_mean) / self.feat_std)
         h = h + self.local(h)
         if self.kind == "ttt":
             h, state = self.memory(h, state, mini_batch=1)
         elif self.kind == "gru":
             out, state = self.memory(h, state)
             h = h + out
+        elif self.kind == "lastk":
+            b, t, d = h.shape
+            past = h.new_zeros(b, self.k - 1, d) if state is None else state
+            seq = torch.cat([past, h], 1)  # (B, k - 1 + T, D)
+            win = seq.unfold(1, self.k, 1)  # (B, T, D, k): window ending at each step
+            h = h + self.window(win.permute(0, 1, 3, 2).reshape(b, t, self.k * d))
+            state = seq[:, -(self.k - 1) :] if self.k > 1 else seq[:, :0]
         h = self.norm(h + self.post(h))
-        return {"subtask": self.subtask(h), "done": self.done(h).squeeze(-1)}, state
+        out = {"subtask": self.subtask(h), "done": self.done(h).squeeze(-1)}
+        if self.occurrence is not None:
+            out["occurrence"] = self.occurrence(h)
+        if self.stage_progress is not None:
+            out["stage_progress"] = torch.sigmoid(self.stage_progress(h).squeeze(-1))
+        return out, state
 
     @torch.no_grad()
     def step(
@@ -164,21 +196,29 @@ def accuracy(model: EpisodeProgressMemory, data: dict[str, Tensor]) -> float:
 
 
 def main(argv: list[str] | None = None) -> dict[str, float]:
+    from ttt.throttle import throttle
+
+    throttle()  # shares the laptop with 30 Hz robot loops
     parser = argparse.ArgumentParser(description="synthetic check of the P2 episode memory")
     parser.add_argument("--steps", type=int, default=400)
     parser.add_argument("--objects", type=int, default=3)
+    parser.add_argument("--out", type=Path, default=None, help="write the accuracies as JSON")
+    parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
-    torch.manual_seed(0)
-    torch.set_num_threads(min(4, torch.get_num_threads()))
-    train = synthetic_aliased_episodes(512, objects=args.objects, seed=0)
-    test = synthetic_aliased_episodes(256, objects=args.objects, seed=1)
+    train = synthetic_aliased_episodes(512, objects=args.objects, seed=2 * args.seed)
+    test = synthetic_aliased_episodes(256, objects=args.objects, seed=2 * args.seed + 1)
     results = {"chance_upper_bound_without_memory": 1.0 / args.objects}
     for name, kind in (("per_replan_no_memory", "none"), ("gru_memory", "gru"), ("ttt_memory", "ttt")):
-        torch.manual_seed(0)
+        torch.manual_seed(args.seed)
         model = EpisodeProgressMemory(32, 4 * args.objects, memory=kind)
-        fit(model, train["feats"], train["subtask"], train["done"], steps=args.steps)
+        fit(model, train["feats"], train["subtask"], train["done"], steps=args.steps, seed=args.seed)
         results[name] = accuracy(model, test)
         print(f"{name:<22} subtask accuracy {results[name]:.3f}", flush=True)
+    if args.out is not None:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(
+            json.dumps({"objects": args.objects, "steps": args.steps, "seed": args.seed, **results}, indent=2)
+        )
     return results
 
 

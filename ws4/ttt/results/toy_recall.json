@@ -9,16 +9,24 @@
   "args": {
     "quick": "False",
     "pretrain_steps": "300",
-    "steps": "500",
+    "steps": "800",
     "train_gap": "16",
-    "segment": "12",
-    "eval_gaps": "[16, 64, 256, 1024]",
+    "segment": "24",
+    "gate_lr_mult": "10.0",
+    "eval_gaps": "[0, 16, 64, 256, 1024]",
+    "kinds": "['ttt_linear', 'ttt_mlp']",
+    "inits": "['base', 'scratch']",
+    "skip_frame_stack": "False",
     "seed": "0",
     "out": "/home/oscar-devos/liminal/ws4/ttt/results/toy_recall.json"
   },
   "models": {
     "base_no_memory": {
       "eval": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.0774739608168602
+        },
         "16": {
           "reactive_acc": 1.0,
           "recall_acc": 0.0618489570915699
@@ -32,108 +40,194 @@
           "recall_acc": 0.0677083358168602
         },
         "1024": {
-          "reactive_acc": 1.0,
+          "reactive_acc": 0.9999961853027344,
           "recall_acc": 0.0546875
         }
       }
     },
     "frame_stack_8": {
       "eval": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.2395833283662796
+        },
         "16": {
+          "reactive_acc": 0.99951171875,
+          "recall_acc": 0.0657552108168602
+        },
+        "64": {
           "reactive_acc": 0.999755859375,
           "recall_acc": 0.0651041641831398
         },
-        "64": {
-          "reactive_acc": 0.99993896484375,
-          "recall_acc": 0.08203125
-        },
         "256": {
-          "reactive_acc": 0.9998016357421875,
-          "recall_acc": 0.0716145858168602
+          "reactive_acc": 0.9998779296875,
+          "recall_acc": 0.046875
         },
         "1024": {
-          "reactive_acc": 0.9998664855957031,
-          "recall_acc": 0.0657552108168602
+          "reactive_acc": 0.9999122619628906,
+          "recall_acc": 0.0559895820915699
         }
       }
     },
     "base+ttt_linear": {
       "eval": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.2552083432674408
+        },
         "16": {
           "reactive_acc": 1.0,
-          "recall_acc": 0.0709635391831398
+          "recall_acc": 0.27734375
         },
         "64": {
           "reactive_acc": 1.0,
-          "recall_acc": 0.060546875
+          "recall_acc": 0.2845052182674408
         },
         "256": {
-          "reactive_acc": 1.0,
-          "recall_acc": 0.060546875
+          "reactive_acc": 0.9998931884765625,
+          "recall_acc": 0.27734375
         },
         "1024": {
-          "reactive_acc": 1.0,
-          "recall_acc": 0.060546875
+          "reactive_acc": 0.9997940063476562,
+          "recall_acc": 0.2473958283662796
         }
       },
       "init_vs_base": {
-        "max_abs_logit_diff": 0.008373141288757324,
-        "max_abs_base_logit": 9.213250160217285,
-        "same_argmax_frac": 0.9997829794883728
+        "max_abs_logit_diff": 0.008704274892807007,
+        "max_abs_base_logit": 9.794354438781738,
+        "same_argmax_frac": 1.0
       },
       "eval_at_init": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.0774739608168602
+        },
         "16": {
           "reactive_acc": 1.0,
           "recall_acc": 0.0618489570915699
         }
       },
-      "final_train_loss": 1.579815397515631,
-      "gate_tanh_alpha_mean_abs": 0.014894507825374603,
+      "train_steps": 800,
+      "final_train_loss": 0.7837189123034477,
+      "gate_tanh_alpha_mean_abs": 0.8989993333816528,
       "inner_lr_by_phase": {
-        "demo": 0.5139572620391846,
-        "work": 0.6224254965782166,
-        "query": 0.43274280428886414
+        "demo": 0.2532907724380493,
+        "work": 0.34782326221466064,
+        "query": 0.4741208255290985
+      }
+    },
+    "scratch+ttt_linear": {
+      "eval": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.9928385615348816
+        },
+        "16": {
+          "reactive_acc": 0.999755859375,
+          "recall_acc": 0.99609375
+        },
+        "64": {
+          "reactive_acc": 1.0,
+          "recall_acc": 0.9837239384651184
+        },
+        "256": {
+          "reactive_acc": 0.99993896484375,
+          "recall_acc": 0.8665364384651184
+        },
+        "1024": {
+          "reactive_acc": 0.9999046325683594,
+          "recall_acc": 0.2428385466337204
+        }
+      },
+      "train_steps": 1100,
+      "final_train_loss": 0.01117606035550125,
+      "gate_tanh_alpha_mean_abs": 0.8506237864494324,
+      "inner_lr_by_phase": {
+        "demo": 0.1392296999692917,
+        "work": 0.25813019275665283,
+        "query": 0.288004994392395
       }
     },
     "base+ttt_mlp": {
       "eval": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.2799479067325592
+        },
         "16": {
           "reactive_acc": 1.0,
-          "recall_acc": 0.0709635391831398
+          "recall_acc": 0.2923177182674408
         },
         "64": {
           "reactive_acc": 1.0,
-          "recall_acc": 0.060546875
+          "recall_acc": 0.26171875
         },
         "256": {
-          "reactive_acc": 1.0,
-          "recall_acc": 0.060546875
+          "reactive_acc": 0.9999847412109375,
+          "recall_acc": 0.2584635317325592
         },
         "1024": {
-          "reactive_acc": 1.0,
-          "recall_acc": 0.060546875
+          "reactive_acc": 0.9980812072753906,
+          "recall_acc": 0.220703125
         }
       },
       "init_vs_base": {
-        "max_abs_logit_diff": 0.009260892868041992,
-        "max_abs_base_logit": 9.213250160217285,
-        "same_argmax_frac": 0.9997829794883728
+        "max_abs_logit_diff": 0.0098915696144104,
+        "max_abs_base_logit": 9.794354438781738,
+        "same_argmax_frac": 1.0
       },
       "eval_at_init": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.0774739608168602
+        },
         "16": {
           "reactive_acc": 1.0,
           "recall_acc": 0.0618489570915699
         }
       },
-      "final_train_loss": 1.5801419741554128,
-      "gate_tanh_alpha_mean_abs": 0.005083576776087284,
+      "train_steps": 800,
+      "final_train_loss": 0.7622764468193054,
+      "gate_tanh_alpha_mean_abs": 0.9036063551902771,
       "inner_lr_by_phase": {
-        "demo": 0.052107855677604675,
-        "work": 0.0663369819521904,
-        "query": 0.03888176754117012
+        "demo": 0.045282602310180664,
+        "work": 0.06075585260987282,
+        "query": 0.05853069946169853
+      }
+    },
+    "scratch+ttt_mlp": {
+      "eval": {
+        "0": {
+          "reactive_acc": NaN,
+          "recall_acc": 0.28515625
+        },
+        "16": {
+          "reactive_acc": 1.0,
+          "recall_acc": 0.27734375
+        },
+        "64": {
+          "reactive_acc": 1.0,
+          "recall_acc": 0.2623697817325592
+        },
+        "256": {
+          "reactive_acc": 0.99969482421875,
+          "recall_acc": 0.2819010317325592
+        },
+        "1024": {
+          "reactive_acc": 0.89630126953125,
+          "recall_acc": 0.2584635317325592
+        }
+      },
+      "train_steps": 1100,
+      "final_train_loss": 0.803532037883997,
+      "gate_tanh_alpha_mean_abs": 0.8881598114967346,
+      "inner_lr_by_phase": {
+        "demo": 0.03479449823498726,
+        "work": 0.009228307753801346,
+        "query": 0.011217351071536541
       }
     }
   },
-  "seconds": 151.60255241394043,
+  "seconds": 456.137615442276,
   "chance_recall": 0.0625
 }

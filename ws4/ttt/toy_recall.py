@@ -246,6 +246,9 @@ def init_deviation(wrapped: ToyPolicy, base: ToyPolicy, task: RecallTask, seed: 
 
 
 def main(argv: list[str] | None = None) -> dict:
+    from ttt.throttle import throttle
+
+    throttle()  # shares the laptop with 30 Hz robot loops
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--quick", action="store_true", help="tiny smoke run (seconds)")
     parser.add_argument("--pretrain-steps", type=int, default=300)
@@ -263,7 +266,6 @@ def main(argv: list[str] | None = None) -> dict:
     if args.quick:
         args.pretrain_steps, args.steps, args.eval_gaps = 5, 5, [0, 32]
     torch.manual_seed(args.seed)
-    torch.set_num_threads(min(8, torch.get_num_threads()))
     task = RecallTask()
     results: dict = {"task": asdict(task), "args": {k: str(v) for k, v in vars(args).items()}, "models": {}}
     t0 = time.time()
