@@ -17,17 +17,20 @@ degrees-to-radians convention, the codec round trip, every metric in the tables 
 
 **Not verified.**
 - The EE50 conventions that the release does not contain. These are the coordinate frame of the relative pose,
-  translation units, which of the 16 auxiliary dims holds the gripper, how the z-scores are stored, the name of the
-  EE50 head inside the gated base checkpoint, and the state input of EE50 embodiments. All are marked UNVERIFIED.
+  translation units, which of the 16 auxiliary dims holds the gripper, how the z-scores are stored, and what the
+  50-D state input of EE50 embodiments contains. All are marked UNVERIFIED. BFL has not answered the public request
+  for this specification (flux-action issue #5, section 1).
+- The EE50 head names and widths, by contrast, are now verified. ws4-flux-dual read the base checkpoint's
+  safetensors header; see `ws4/flux/checkpoint_facts.md`.
 - The fin-ray TCP and the arm mount poses. Both come from CAD via `ws4/sim/station_geometry.yaml` and are not yet
   measured on the robot.
 - The unit (degrees or M100) of each public dataset. It is guessed from value ranges.
 - Nothing has run on hardware.
 
 **Next 3 steps.**
-1. ws4-flux-dual: read the safetensors header of `flux-3-action-base` (needs an HF token with the gate accepted) to
-   get the EE50 head name and widths. Without that, the "pretrained EE50 head" advantage cannot be used in
-   `flux-action` at all (see section 1).
+1. Model side (ws4-flux-dual): the head names are now known. If EE50 is tried, the open question is the content
+   of the 50-D state input to `action_prediction_ee50_cond`: an absolute pose, or the anchor (identity) pose. Add
+   that question to flux-action issue #5.
 2. On the robot, measure the TCP (wrist-roll axis to fingertip pads) and the two arm base poses, then update
    `station_geometry.yaml`. Jog each joint once to confirm signs.
 3. Whichever action head is chosen, put `AnalyticIK` plus `MjCollision` (0.05 ms per frame) in the runtime safety
@@ -52,8 +55,10 @@ not force the 12-D joint head.
 the EE50 path are on the model side, not in kinematics:
 - The release has no EE50 code.
 - `flux-action` normalizes with per-channel q01/q99, not per-offset z-scores.
-- Reusing the pretrained EE50 head needs its exact tensor name (gated).
-- The state and conditioning convention for EE50 embodiments is unknown.
+- The pretrained EE50 head is reachable: `action_modality="action_prediction_ee50"`, `action_dim=50`,
+  `condition_on_past_actions=false` (verified header). But the meaning of its 50-D state input and of every
+  frame/unit convention is unknown, so the "pretrained prior" may not transfer.
+- The joint-head path starts from fresh heads either way: the base ships no 14-D (or other joint) head.
 
 BFL's own DROID comparison favored new joint heads at large batch (40.13% vs 37.88%) and EE50 only for very small
 data or step budgets (bfl.ai model page). The model-side choice belongs to ws4-flux-dual.
@@ -81,12 +86,37 @@ black-forest-labs/flux-action@830f1ce178d7aea52f18fde31d8e8e36ce6bae21.
 | Translation units | not documented | | UNVERIFIED. Codec uses metres. Per-embodiment z-scores absorb any scale |
 | Normalization | z-score per embodiment, per dim, indexed by signed offset from the anchor | model page | doc verified. `EE50Stats` implements mean/std of shape (offsets, 50). Std floor is UNVERIFIED |
 | Released code | **no EE50 implementation**: no rotation code, no anchor composition, no z-scores | grep over flux-action@830f1ce. Normalization is q01/q99 range scaling per channel (`src/flux_action/config.py:69-76`, `src/flux_action/data/lerobot/index.py:610-646`). Actions are `absolute` or `joint_delta` integrated onto the state (`config.py:62-68`, `policy.py:458-465`) | verified (code) |
-| Reusing the EE50 head | a fine-tune keeps only the heads named after `action_modality`. Other `emb_in.action_prediction*` / `final_layer.action_prediction*` heads are dropped as "another embodiment's head" | `src/flux_action/models/wiring.py:118-143` (line 132) | verified (code). The EE50 head's name in the base checkpoint is UNVERIFIED (gated repo; the model card says 457 tensors with "ee50/gaming action heads") |
+| Reusing the EE50 head | Heads `action_prediction_ee50` and `action_prediction_ee50_cond` in `flux-3-action-base@99bc185`. Shapes: `emb_in.action_prediction_ee50.weight` [3072, 50], `emb_in.action_prediction_ee50_cond.weight` [3072, 50], `final_layer.action_prediction_ee50.linear.weight` [50, 3072], `final_layer.action_prediction_ee50_cond.linear.weight` [50, 3072], each final layer with `adaLN_modulation.1.weight` [6144, 3072]. The conditioning width equals the action width (50), so EE50 midtraining conditioned on the state only, without past commands. A fine-tune keeps only heads named after `action_modality`; other `action_prediction*` heads are dropped. `action_modality="action_prediction_ee50"`, `action_dim=50`, `condition_on_past_actions=false` loads the pretrained heads | safetensors header read by ws4-flux-dual (`ws4/flux/checkpoint_facts.md`); `src/flux_action/models/wiring.py:118-143` (line 132); flux-action reserves only the bare `action_prediction` name (`config.py:177-183`) | verified (header + code). The content of the 50-D state input is UNVERIFIED |
 | Mixed widths | narrower actions can share one head via zero padding plus `action_mask` | `docs/embodiments.md:23` | verified (doc). For two SO-101 arms, 20 of 50 dims are active |
-| 14-D joint datasets | some midtraining robot data used 7 + 7 joints (6 joints + gripper per arm) | model page | doc verified. Whether the base ships a 14-D head is UNVERIFIED (the card lists only ee50/gaming) |
+| 14-D joint datasets | some midtraining robot data used 7 + 7 joints (6 joints + gripper per arm), but **the base ships no 14-D joint head** (no joint head of any width). Its only action heads are `action_prediction_ee50` (50) and `action_prediction_gaming` (64), plus the shared `action_prediction` trunk branch | model page; header read by ws4-flux-dual (`ws4/flux/checkpoint_facts.md`). The header metadata says the joint14 heads were removed from the release; the trunk is the step-724k EMA | verified (header). A 12-D bimanual joint head is a fresh head either way |
+
+**What Hugging Face and the code hosts say about adapting EE50** (checked 2026-10-17 at the user's request):
+- No model or dataset on the Hub uses or documents EE50. Searching "ee50" finds only unrelated repos.
+- The official FLUX 3 Action model cards (base, so101, droid) never mention EE50 adaptation. The base card only
+  says it ships "ee50/gaming action heads" and that new embodiments need their own heads.
+- The base repo's discussions are three maintenance pull requests: model card, license, and a 333-byte manifest
+  `config.json`.
+- The LeRobot FLUX 3 integration (huggingface/lerobot@146d847, 16 Oct; `src/lerobot/policies/flux3`) has no EE50
+  code. Its "anchor" is the joint-delta integration anchor.
+- The LeRobot guide (`docs/source/flux3.mdx:244-249`) sends new embodiments to flux-action. It warns that equal
+  dimensions do not make another robot's heads reusable.
+- The only community fine-tune of the base (`Jinyan0924/flux3-agibot-looped`) is video-only.
+- The one place EE50 adaptation is discussed is **black-forest-labs/flux-action issue #5** (opened 2026-10-15,
+  still open, no reply from BFL). A team adapting a Unitree G1 with Dex3 hands asks exactly our open questions:
+  - the end-effector frame and units
+  - whether the relative translation is `p_t - p_a` or `R_a^T (p_t - p_a)`
+  - the 6D serialization
+  - the z-score preprocessing code
+  - a runnable EE50 fine-tuning configuration
+- That team reports finding **`action_prediction_ee50` and `action_prediction_ee50_cond`** weights in the base
+  checkpoint. ws4-flux-dual confirmed this from the header (table row "Reusing the EE50 head").
+- Bottom line: nobody has published an EE50 adaptation, and BFL has not specified the convention. Anyone
+  adapting EE50 today, us included, has to choose the frame, units and gripper slot, and live with the risk that
+  the pretrained head expects something else.
 
 **Consequence for a fine-tune that reuses the EE50 head in `flux-action`.** All of the following are needed:
-- `action_modality` set to the EE50 head's exact name, and `action_dim = 50`.
+- `action_modality="action_prediction_ee50"`, `action_dim=50` and `condition_on_past_actions=false`, plus a 50-D
+  state token in the same layout (its content is UNVERIFIED).
 - Data pre-normalized per offset by our own code, with `action_normalization: null` (identity).
 - An `action_mask` over the 20 active dims.
 - Custom inference post-processing: per-offset denormalize, then SE(3) composition onto the anchor, then IK.
@@ -112,9 +142,11 @@ None of this exists in the release. `ws4/kinematics/ee50.py` provides the data s
 - **TCP.**
   - LeRobot's default target frame is the stock `gripper_frame_link`, whose z is the approach axis, 7.9 mm off
     the roll axis.
-  - For the fin-ray fingers, `Station.load()` takes `tcp.pos_in_gripper = (0, 0, -0.140)` from
-    `station_geometry.yaml` (ws4-sim; finger length 123.4 mm from the XLeRobot finger CAD). That point is on the
-    roll axis, 41.9 mm further out than the stock flange.
+  - For Oscar's gripper, `Station.load()` takes `tcp.pos_in_gripper = (-0.0019, 0, -0.0908)` from
+    `station_geometry.yaml` v1.2. ws4-sim identified the gripper from Oscar's photo as XLeRobot's
+    `SO101_soft_fin.stl` with 67 mm TPU fins. The TCP is midway between the fin contact edges, 15 mm above the
+    tips. It sits 1.9 mm off the roll axis and 7.3 mm short of the stock flange point along the approach.
+    Every number in this report uses this TCP (`results.json` records it as `tcp_in_flange`).
   - It is marked `verified: false` and needs a measurement.
 - **Station frame and mounts.** These come from `ws4/sim/station_geometry.yaml` (ws4-sim schema v1):
   - origin on the table under the torso centre, x forward, y left
@@ -168,15 +200,16 @@ It agrees with the analytic solver on the orientation it reaches (median differe
 start: from zero it misses (> 1 mm) on 18.5% of random reachable targets, the analytic solver on 0.5%, all of
 them within 2 cm of the pan axis, with the TCP over the base.
 
-**Timing.** Single core, real trajectory, numpy, no compilation.
+**Timing.** CPU time per solve, single thread, real trajectory, numpy, no compilation. Measured while another
+workstream's job kept the laptop at load average 6 to 10; wall time was the same.
 
 | Solver | median | p99 | both arms p99 |
 |---|---|---|---|
-| AnalyticIK | 0.81 ms | 4.3 ms | 8.5 ms (26% of a 33 ms tick) |
-| DLSIK (warm) | 0.98 ms | 1.4 ms | 2.7 ms |
+| AnalyticIK | 0.80 ms | 3.9 ms | 7.7 ms (23% of a 33 ms tick) |
+| DLSIK (warm) | 0.96 ms | 1.4 ms | 2.7 ms |
 
-The analytic tail comes from parked frames, where a joint rests on its stop and the 1-D scan runs (median 2.7 ms,
-p99 6.9 ms). Active frames: median 0.75 ms, p99 1.4 ms.
+The analytic tail comes from parked frames, where a joint rests on its stop and the 1-D scan runs (median 2.2 ms,
+p99 3.6 ms). Active frames: median 0.71 ms, p99 0.86 ms.
 
 ## 4. Validation: thresholds and results
 
@@ -197,15 +230,15 @@ almost all shoulder_lift resting at -101° to -108° against a -100° URDF limit
 | Metric | Threshold | AnalyticIK | DLSIK | |
 |---|---|---|---|---|
 | codec round trip (float32) | < 1e-6 m | 1.6e-8 m | | ✅ |
-| position error, median | < 0.1 mm | 3.7e-8 mm | 1e-9 mm | ✅ |
-| position error, p99 / max | < 1 mm | 1.2e-7 / 9.9e-5 mm | 4e-8 / 2.7e-6 mm | ✅ |
-| orientation error, p99 / max | | 0.0003° / 0.011° | 0.0000° / 0.0006° | |
+| position error, median | < 0.1 mm | 3.7e-8 mm | 1.6e-9 mm | ✅ |
+| position error, p99 / max | < 1 mm | 1.2e-7 / 9.9e-5 mm | 6e-8 / 1.2e-6 mm | ✅ |
+| orientation error, p99 / max | | 0.0003° / 0.011° | 0.000003° / 0.00009° | |
 | success (pos < 5 mm and rot < 1°) | > 99.5% | 100% | 100% | ✅ |
 | spurious jumps (> 0.3 rad per frame) | < 0.1% | 0 | 0 | ✅ |
-| solve time p99, one core | < 5 ms per arm | 4.3 ms | 1.4 ms | ✅ |
+| solve time p99 (CPU, one thread) | < 5 ms per arm | 3.9 ms | 1.4 ms | ✅ |
 
-4.6% of frames come back on an equivalent configuration that differs by > 0.01 rad but has the same pose. These
-are parked frames where a clipped joint sits on its stop. Plot: `ws4/kinematics/plots/a_roundtrip.png`.
+4.6% of frames (DLS: 2.4%) come back on an equivalent configuration that differs by > 0.01 rad but has the same
+pose. These are parked frames where a clipped joint sits on its stop. Plot: `ws4/kinematics/plots/a_roundtrip.png`.
 
 ### (b) Human handheld and synthetic 6-DoF motion, re-anchored on robot poses
 
@@ -257,7 +290,7 @@ resting). Failure rates exclude parked frames; full rates are in `results.json`.
 | 2 mm, 2° | 3.2 mm, 3.1° | 3.2 mm, 2.1° | 0.69 | 0 | 0 | ✅ |
 | 5 mm, 5° | 8.0 mm, 7.8° | 8.0 mm, 5.3° | 0.68 | 0.04% | 0 | ✅ |
 | 10 mm, 10° | 16.1 mm, 15.5° | 16.0 mm, 10.5° | 0.68 | 0.19% | 0 | ✅ |
-| 5 mm, 20° | 8.0 mm, 31.1° | 8.0 mm, 19.7° | 0.63 | 0.50% | 0 | ❌ (jumps at the 0.5% limit) |
+| 5 mm, 20° | 8.0 mm, 31.1° | 8.0 mm, 19.7° | 0.63 | 0.52% | 0 | ❌ (jumps just over the 0.5% limit) |
 | 20 mm, 20° | 32.1 mm, 31.1° | 32.0 mm, 21.5° | 0.69 | 0.84% | 1.4% | ❌ |
 
 Reading:
@@ -276,7 +309,7 @@ A per-step joint-velocity limiter is still required for the rare flips (it belon
 
 Plot: `plots/c_noise_tolerance.png`.
 
-### (d) Collisions (MuJoCo mesh contacts on `ws4/sim/scenes/obstacle_target.xml`, penetration > 2 mm)
+### (d) Collisions (MuJoCo mesh contacts on `ws4/sim/xlerobot_station.xml`, penetration > 2 mm)
 
 The model (read-only) is generated by ws4-sim from `station_geometry.yaml`. Contacts use the convex hulls of the
 SO-101 collision meshes, the fin-ray fingers, the torso and the table, at 0.05 ms per frame.
@@ -305,7 +338,8 @@ in the shared central region, where the bimanual task happens.
 2. Convert LeRobot units to radians, choosing degrees or M100 **per dataset**.
 3. Clip to the joint limits. Real arms rest a few degrees past the URDF's ±100° shoulder_lift.
 4. Run FK **with the TCP of the gripper that recorded the data**: the stock flange for public SO-101 data, the
-   fin-ray TCP for ours. Translations differ by the 42 mm lever arm; rotations are the same.
+   soft-fin TCP for ours. The two TCPs are about 9 mm apart (6 mm sideways, 7 mm along the approach), which
+   shifts translations by up to that lever arm; rotations are the same.
 5. Take the poses in each arm's own base frame. With `rel_frame="anchor"`, mount errors do not matter at all.
 6. Build EE50 windows at the policy's offsets.
 7. Fit per-offset z-scores on our embodiment's data. At offset +32 (1.07 s) the translation std is 5 to 11 cm on
@@ -322,6 +356,31 @@ other-robot data, where metric meaning has to agree.
 4. Joint-limit and velocity clamp, then the collision check, then conversion to LeRobot degrees.
 
 Cost: under 1 ms median per arm per step.
+
+**Joint zeros of public data** (asked by ws4-datasets). LeRobot DEGREES puts 0 at the midpoint of *that robot's*
+calibrated range. The new-calibration URDF puts 0 at the middle of the modelled range. LeRobot's own FK feeds
+degrees straight into that URDF, so by design no offset is needed.
+
+Three caveats:
+1. Per-robot asymmetry. The two zeros agree only when the calibrated range is symmetric about the modelled middle,
+   so a few degrees of per-robot error is possible. Wrist roll is the odd one: its URDF limits are centred on
+   +2.8°, and its calibration spans the full turn.
+2. Older recordings use a different convention. flux-action issue #2 (open) shows that the released SO-101
+   checkpoint's statistics come from an SO-100 dataset with shoulder-lift around +85° to +184°. That reporter
+   measured an approximate, rig-specific adapter to current LeRobot: signs flipped on shoulder_lift and
+   wrist_roll, offsets of about 8, 90, 84, -4 and 0 degrees.
+3. How to tell. A dataset whose joints are not roughly centred on 0, or which leaves the URDF ranges by more than
+   a few degrees, is on an older convention and needs an adapter before FK.
+
+The local `zonglin11/xlerobot_clean_table` (50 episodes, degrees) passes these checks on our station:
+- every frame on our elbow branch
+- only resting shoulder_lift beyond -100°
+- exact IK round trip
+- no MuJoCo contacts (one right-arm self contact at 2.6 mm in 0.8% of frames)
+
+Its grasps happen with the TCP about 9 to 14 cm above our table plane. Its work surface sits near arm-base height,
+while ours is 8.5 cm below the bases. Joint-space demos from it will not land on our table; relative EE50
+motions are unaffected by that offset.
 
 **Do not mix arm conventions blindly.** Replaying the XLeRobot VR dataset on our station collides in 21% of frames:
 public XLeRobot recordings differ in mounting and, possibly, right-arm signs. Check a few frames visually in sim

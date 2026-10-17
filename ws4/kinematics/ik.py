@@ -189,7 +189,7 @@ class AnalyticIK:
         self.polish = polish
         self.frobenius_iters = frobenius_iters
         self.fixed_point_iters = fixed_point_iters
-        self._scan = np.deg2rad(np.arange(-180.0, 180.0, 0.25))  # wrist-pitch offsets for the 1-D search
+        self._scan = np.deg2rad(np.arange(-180.0, 180.0, 1.0))  # coarse wrist-pitch grid; bisection refines it
         self.max_jump = max_jump  # rad per call; larger joint changes are penalised like 10 cm of position error
         # Only the elbow branch the recorded SO-101/XLeRobot data uses (e < 0 in >99% of frames, see the
         # report). Allowing both lets noisy targets drift onto the other branch and later force a flip.

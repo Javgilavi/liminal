@@ -94,9 +94,10 @@ def open_to_lerobot_gripper(g: np.ndarray) -> np.ndarray:
     return np.clip(np.asarray(g, dtype=float), 0.0, 1.0) * 100.0
 
 
-# Fin-ray TCP from ws4/sim/station_geometry.yaml (tcp.pos_in_gripper, verified: false): on the wrist-roll
-# axis, 0.140 m out along the approach, midway between the fingertip pads of the 123.4 mm TPU fingers.
-FINRAY_TCP_IN_GRIPPER = (0.0, 0.0, -0.140)
+# Fin-ray TCP from ws4/sim/station_geometry.yaml v1.2 (tcp.pos_in_gripper, verified: false): XLeRobot
+# SO101_soft_fin.stl gripper with 67 mm TPU fins, midway between the fin contact edges, 15 mm above the tips.
+# Station.load() reads the live value; this constant only documents it.
+FINRAY_TCP_IN_GRIPPER = (-0.0019, 0.0, -0.0908)
 
 
 @dataclass(frozen=True)

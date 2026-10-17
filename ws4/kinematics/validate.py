@@ -63,11 +63,13 @@ def _station() -> Station:
 
 
 def track(solver, T_seq: np.ndarray, q0: np.ndarray | None) -> dict[str, np.ndarray]:
-    q, out = q0, {k: [] for k in ("q", "pos", "rot", "app", "proj", "clamped", "reachable", "degenerate", "t")}
+    keys = ("q", "pos", "rot", "app", "proj", "clamped", "reachable", "degenerate", "t", "cpu")
+    q, out = q0, {k: [] for k in keys}
     for T in T_seq:
-        t0 = time.perf_counter()
+        t0, c0 = time.perf_counter(), time.thread_time()
         r = solver.solve(T, q)
         out["t"].append(time.perf_counter() - t0)
+        out["cpu"].append(time.thread_time() - c0)  # CPU time: robust to other jobs sharing the machine
         q = r.q
         for k, v in (("q", r.q), ("pos", r.pos_err), ("rot", r.rot_err), ("app", r.approach_err),
                      ("proj", r.proj_rot_err), ("clamped", r.clamped), ("reachable", r.reachable),
@@ -450,7 +452,7 @@ def section_d(max_frames: int) -> dict:
         from kinematics.mj_collision import MjCollision
 
         mj = MjCollision()
-        backend = "mujoco ws4/sim/scenes/obstacle_target.xml (penetration > 2 mm)"
+        backend = "mujoco ws4/sim/xlerobot_station.xml (penetration > 2 mm)"
     except Exception as exc:  # no mujoco or no sim model: capsules
         mj = None
         backend = f"capsules ({exc})"
@@ -492,9 +494,11 @@ def bench(n: int = 1000) -> dict:
     out = {}
     for name, solver in (("analytic", AnalyticIK(st.arm)), ("dls", DLSIK(st.arm))):
         tr = track(solver, T, None)
-        t = tr["t"][1:] * 1e3
-        out[name] = {"median_ms": float(np.median(t)), "p99_ms": float(np.percentile(t, 99)),
-                     "max_ms": float(t.max()), "both_arms_p99_ms": float(2 * np.percentile(t, 99)), "_raw_ms": t}
+        t, c = tr["t"][1:] * 1e3, tr["cpu"][1:] * 1e3
+        out[name] = {"cpu_median_ms": float(np.median(c)), "cpu_p99_ms": float(np.percentile(c, 99)),
+                     "cpu_max_ms": float(c.max()), "both_arms_cpu_p99_ms": float(2 * np.percentile(c, 99)),
+                     "wall_median_ms": float(np.median(t)), "wall_p99_ms": float(np.percentile(t, 99)),
+                     "load_avg_1min": float(os.getloadavg()[0]), "_raw_ms": c}
     return out
 
 
@@ -524,7 +528,7 @@ def plots(res: dict, raw: dict) -> list[str]:
         ax[1].hist(t, bins=np.logspace(-1, 2, 60), histtype="step", label=name)
     ax[1].set_xscale("log")
     ax[1].axvline(THRESHOLDS["realtime_ms_per_arm"], ls="--", c="gray")
-    ax[1].set_xlabel("solve time per arm (ms, one process, real trajectory)")
+    ax[1].set_xlabel("CPU time per solve, one arm (ms, real trajectory)")
     ax[1].legend()
     fig.tight_layout()
     f = PLOTS / "a_roundtrip.png"
@@ -629,7 +633,7 @@ def verdict(res: dict) -> dict:
         "onmanifold_p99_pos": a["pos_mm"]["p99"] < THRESHOLDS["onmanifold_p99_pos_mm"],
         "onmanifold_success": a["success_rate"] > THRESHOLDS["onmanifold_success_rate"],
         "onmanifold_jumps": a["jump_rate"] < THRESHOLDS["onmanifold_jump_rate"],
-        "realtime": res["bench"]["analytic"]["p99_ms"] < THRESHOLDS["realtime_ms_per_arm"],
+        "realtime": res["bench"]["analytic"]["cpu_p99_ms"] < THRESHOLDS["realtime_ms_per_arm"],
     }
     c = res.get("c_policy_noise", {})
     for k, v in c.items():

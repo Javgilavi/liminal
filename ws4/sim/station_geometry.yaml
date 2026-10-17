@@ -1,6 +1,7 @@
 # station_geometry.yaml: single source of truth for Oscar's XLeRobot station geometry (WS4 sim).
 #
-# Consumers: ws4/sim/build_model.py (generates the MJCF from this file), ws4/kinematics (IK),
+# Consumers: ws4/sim/build_model.py (generates the MJCF from this file), ws4/kinematics (IK and MuJoCo collision
+# checks; it groups bodies by the left_/right_ prefixes plus torso, head_pitch, table, so keep MJCF names stable),
 # anyone who needs camera extrinsics or arm base poses. Keep the key names stable; append to
 # `changelog` when a value or key changes.
 #

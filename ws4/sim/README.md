@@ -79,6 +79,8 @@ Headless rendering uses `MUJOCO_GL=egl` (the env sets it if unset). On a machine
   TCP site `<side>_ee` at (-0.0019, 0, -0.0908) in that frame: between the two fin edges, 15 mm above the tips.
 - Joints/actuators: `<side>_{shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper}`.
   Cameras: `head`, `left_wrist`, `right_wrist` (plus `photo_view`, `overview`, `top_down` in scenes).
+- Names are a contract: ws4/kinematics groups collision bodies by the `left_`/`right_` prefixes plus `torso`,
+  `head_pitch` and `table`, and reads the TCP and mounts from the yaml. Rename nothing without a changelog line.
 
 ## Python API
 
