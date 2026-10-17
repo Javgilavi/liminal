@@ -70,6 +70,9 @@ completed task steps recorded, plus where it failed and whether a human had to i
   then `measure_latency --text-encoder-on-cpu` and `cloud/runpod_serve.sh` with the 20-minute idle self-stop.
   Details, SSH and gotchas (`source /etc/rp_environment`, env changes restart the container and change the SSH
   port): [cloud/RUNPOD.md](cloud/RUNPOD.md). LoRA adapters come from the training box via a private HF repo.
+- **Update 16:15: the event budget (about USD 100) now covers any provider, not only AWS.** A second RunPod
+  pod (RTX PRO 6000 96 GB preferred) is being started for serving, so the single-arm zero-shot runs and later both
+  XLeRobot arms do not wait on the 4500 pod. Keep every invoice for reimbursement.
 - **AWS: EUR 133 from the event, reimbursed against an invoice** (the team sets up the account and pays first;
   owner still being decided, RunPod stays the serving path meanwhile). Notes for whoever takes it:
   - New AWS accounts often start with a GPU vCPU quota of 0 ("Running On-Demand G and VT instances"); request
