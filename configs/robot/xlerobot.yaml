@@ -1,0 +1,36 @@
+# Board serials observed 2026-10-17; sides inherited from the Haller profile.
+# VERIFY physical left/right (facing the robot) before first movement.
+# USB serial identifies the board; re-check physical sides after rewiring.
+name: xlerobot
+arms:
+  left:
+    type: so101
+    port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79018460-if00
+    id: xlerobot_left_5B79018460
+    max_relative_target: 2
+    max_speed: 20
+    temperature_limit: 55
+  right:
+    type: so101
+    port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
+    id: xlerobot_right_5B14030445
+    max_relative_target: 2
+    max_speed: 20
+    temperature_limit: 55
+arm_groups:
+  both: [left, right]
+# Software limits intersect the calibration read from each arm. Wrist roll is
+# deliberately restricted: stored ranges span ~360 degrees and are unreliable
+# near their extremes. VERIFY physical endpoints before expanding this window.
+limits:
+  left:  {lower: [-130, -120, -120, -120, -90, 0], upper: [130, 120, 120, 120, 90, 100], max_step: 2}
+  right: {lower: [-130, -120, -120, -120, -90, 0], upper: [130, 120, 120, 120, 90, 100], max_step: 2}
+cameras:
+  # D455 RGB interface, not its depth/infrared video nodes. Port-specific:
+  # update after moving the camera to a different USB connector.
+  top:
+    type: opencv
+    index: /dev/v4l/by-path/pci-0000:06:00.3-usb-0:2:1.3-video-index0
+    width: 640
+    height: 480
+# No home pose or guessed base geometry: measure before autonomous bimanual work.

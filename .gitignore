@@ -1,6 +1,9 @@
 __pycache__/
 *.egg-info/
 .venv/
+.venv-robot/
+build/
+dist/
 .pytest_cache/
 .ruff_cache/
 runs/

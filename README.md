@@ -70,22 +70,18 @@ python scripts/plan_obstacle.py --strategy hold_away
 
 ## On real hardware
 
+The connected bimanual XLeRobot has an isolated setup and a local operator UI:
+
 ```bash
-pip install -e ".[hardware,perception,ui]"
-lerobot-find-port                          # then edit configs/robot/so101_*.yaml
-lerobot-calibrate ...                      # once per arm, same id as in the config
-
-# Without FLUX (scripted waypoints, the hour-6 fallback)
-liminal run configs/tasks/single_pick_place.yaml --robot configs/robot/so101_single.yaml --backend scripted
-
-# With FLUX 3 Action (after WS1 wires FluxPolicyBackend.load/predict)
-python scripts/flux_smoke_test.py
-liminal run configs/tasks/lid_hold_insert.yaml --robot configs/robot/so101_dual.yaml \
-    --backend flux --policy configs/policy/flux3_so101.yaml
-
-# Operator API: POST /run, POST /estop, GET /state
-liminal serve --robot configs/robot/so101_dual.yaml --backend flux --policy configs/policy/flux3_so101.yaml
+./scripts/setup_robot.sh
+./scripts/control_robot.sh           # http://127.0.0.1:8080; starts with torque OFF
 ```
+
+Stop other robot controllers first. Support the arm before clicking **Engage**.
+Setup, device mapping, calibration, limits, E-stop behavior and the API are in
+[Robot control](docs/robot-control.md). This controller does not require Haller,
+ROS, Node.js, a GPU, or FLUX weights. Scripted and FLUX task backends still use the
+same safety supervisor; see the guide before running tasks on hardware.
 
 Every run writes a JSONL event log under `runs/` (facts, node start/end, retries,
 WHILE violations). Use it to count success rates over trials.

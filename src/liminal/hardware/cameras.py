@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 
@@ -11,6 +12,7 @@ class OpenCVCamera:
         self.index = index
         self.width, self.height, self.fps = width, height, fps
         self._cap: Any = None
+        self._lock = threading.Lock()
 
     def connect(self) -> None:
         import cv2
@@ -25,14 +27,16 @@ class OpenCVCamera:
     def read(self) -> Any:
         import cv2
 
-        ok, frame = self._cap.read()
+        with self._lock:
+            ok, frame = self._cap.read()
         if not ok:
             raise RuntimeError(f"camera {self.name} returned no frame")
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
     def disconnect(self) -> None:
         if self._cap is not None:
-            self._cap.release()
+            with self._lock:
+                self._cap.release()
 
 
 class MockCamera:

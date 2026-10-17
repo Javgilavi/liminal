@@ -20,22 +20,23 @@ import yaml
 
 def _run(args: argparse.Namespace) -> int:
     from liminal.app import build_context
+    from liminal.hardware.runtime import connected
     from liminal.orchestration import load_task, run_task
 
     log = Path(args.log_dir) / f"{time.strftime('%Y%m%d-%H%M%S')}_{Path(args.task).stem}.jsonl"
     ctx = build_context(args.robot, backend=args.backend, policy=args.policy, log_path=log)
     task = load_task(args.task, arms=ctx.arm_names)
-    for a in ctx.arms.values():
-        a.connect()
-    try:
-        report = asyncio.run(run_task(task, ctx))
-    except KeyboardInterrupt:
-        ctx.safety.estop()
-        print("e-stop: interrupted", file=sys.stderr)
-        return 130
-    finally:
-        for a in ctx.arms.values():
-            a.disconnect()
+    with connected(ctx):
+        try:
+            if args.engage:
+                for name, arm in ctx.arms.items():
+                    if hasattr(arm, "set_torque"):
+                        ctx.safety.set_torque(name, True)
+            report = asyncio.run(run_task(task, ctx))
+        except KeyboardInterrupt:
+            ctx.safety.estop()
+            print("e-stop: interrupted", file=sys.stderr)
+            return 130
     print(json.dumps(report.__dict__, default=str, indent=2))
     print(f"event log: {log}")
     return 0 if report.goal_verified else 1
@@ -89,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--backend", default="mock", choices=["mock", "scripted", "flux"])
     r.add_argument("--policy", default=None, help="policy config, e.g. configs/policy/flux3_so101.yaml")
     r.add_argument("--log-dir", default="runs")
+    r.add_argument("--engage", action="store_true", help="explicitly engage real arms at their current pose")
     r.set_defaults(fn=_run)
 
     v = sub.add_parser("validate", help="compile task files without running them")
