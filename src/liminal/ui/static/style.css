@@ -13,4 +13,8 @@ th {text-align: left; font-weight: 500} td, th {padding: 7px 2px; border-bottom:
 td.value {font-variant-numeric: tabular-nums} td button {padding: 3px 14px; margin: 0 3px}
 #error {color: #ff9f9f; min-height: 1.5em; white-space: pre-wrap}
 img {width: 100%; border-radius: 7px} pre {white-space: pre-wrap}
+figure {margin: 0; min-width: 0; min-height: 200px}
+figcaption {display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap}
+figcaption span {font-size: 13px; color: #aebaca}
+figcaption [data-state="live"] {color: #92dbb0} figcaption [data-state="error"] {color: #ff9f9f}
 button:focus-visible, select:focus-visible {outline: 3px solid #a3c8ff; outline-offset: 2px}

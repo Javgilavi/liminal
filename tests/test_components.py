@@ -83,7 +83,7 @@ def test_demo_plan_covers_variations():
     assert {p.object_zone for p in plans} == {"A", "B", "C"}
 
 
-def test_claude_md_is_a_copy_of_agent_md():
+def test_claude_md_is_a_copy_of_agents_md():
     from pathlib import Path
 
-    assert Path("CLAUDE.md").read_text() == Path("AGENT.md").read_text(), "run: cp AGENT.md CLAUDE.md"
+    assert Path("CLAUDE.md").read_text() == Path("AGENTS.md").read_text(), "run: cp AGENTS.md CLAUDE.md"

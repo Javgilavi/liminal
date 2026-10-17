@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -25,6 +26,26 @@ def test_ui_and_telemetry(client):
     assert len(state["joints"]) == 6
     assert state["sample_age_s"] < 0.5
     assert client.get("/tasks").json()["tasks"]
+
+
+def test_wrist_feed_labels_jpeg_and_capture_failure(client, monkeypatch):
+    camera = SimpleNamespace(label="Wrist A (arm unverified)", read=MagicMock(return_value="rgb"))
+    client.app.state.context.cameras["wrist_a"] = camera
+    cv = SimpleNamespace(COLOR_RGB2BGR=4, cvtColor=MagicMock(return_value="bgr"),
+                         imencode=MagicMock(return_value=(True, SimpleNamespace(tobytes=lambda: b"jpeg"))))
+    monkeypatch.setitem(sys.modules, "cv2", cv)
+    monkeypatch.setitem(sys.modules, "numpy", SimpleNamespace(asarray=lambda frame, **kw: frame, uint8=int))
+    state = client.get("/state").json()
+    assert "wrist_a" in state["cameras"]
+    assert state["camera_labels"]["wrist_a"] == camera.label
+    response = client.get("/cameras/wrist_a.jpg")
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.content == b"jpeg"
+    cv.cvtColor.assert_called_once_with("rgb", cv.COLOR_RGB2BGR)
+    camera.read.side_effect = RuntimeError("USB disconnected")
+    assert client.get("/cameras/wrist_a.jpg").status_code == 503
+    assert client.get("/cameras/missing.jpg").status_code == 404
 
 
 def test_manual_command_uses_supervisor_and_estop_requires_reset(client):

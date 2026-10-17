@@ -216,6 +216,7 @@ def create_app(robot: str, backend: str = "mock", policy: str | None = None, tas
             "events": ctx.world.events[-50:],
             "arms": state["arms"], "joints": SO101_JOINTS,
             "cameras": list(ctx.cameras),
+            "camera_labels": {name: getattr(camera, "label", name) for name, camera in ctx.cameras.items()},
             "sample_age_s": time.monotonic() - state["sampled_at"],
         }
 

@@ -55,7 +55,9 @@ def build_arms(robot_cfg: dict[str, Any]) -> tuple[dict[str, Arm], dict[str, Any
         elif kind == "opencv":
             from liminal.hardware.cameras import OpenCVCamera
 
-            cameras[name] = OpenCVCamera(name, c["index"], c.get("width", 640), c.get("height", 480))
+            cameras[name] = OpenCVCamera(name, c["index"], c.get("width", 640), c.get("height", 480),
+                                         fps=c.get("fps", 30), rotation=c.get("rotation", 0),
+                                         label=c.get("label"), fourcc=c.get("fourcc"))
         elif kind == "mujoco":
             from liminal.sim.mujoco_arm import MujocoCamera
 

@@ -43,9 +43,13 @@ current pose**, then jog a single joint. **Free-drive** releases that arm.
 Use `/dev/serial/by-id` paths, not enumeration-dependent `/dev/ttyACM*` names.
 After rewiring, verify the physical sides with torque off. Board identity alone
 does not prove which arm is connected. The D455 RGB camera uses a USB-port path;
-update it after changing USB sockets. Wrist camera sides are unverified on this
-host and are intentionally omitted. Add verified cameras under `cameras` using
-`type: opencv` and `index: /dev/v4l/by-path/...`.
+update it after changing USB sockets. Both wrist feeds are configured as **Wrist A**
+(USB port `0:1.2`) and **Wrist B** (`0:1.3`), rotated 180° at capture so the UI and
+policy receive the same orientation. Their physical arm assignments remain
+unverified; identify them before assigning a policy's wrist input. The UI labels
+each feed, refreshes up to five times per second, and hides failed feeds while
+retrying. Camera configuration changes take effect on the next controller start;
+do not restart a controller while an arm is holding an unsupported load.
 
 On connect, the adapter reads calibration from servo EEPROM and saves it under
 `~/.cache/huggingface/lerobot/calibration/robots/so_follower/<id>.json`. An existing
@@ -75,8 +79,9 @@ arm supported. Do not copy another arm's calibration to clear an error.
   both arms, and keep loads light. These limits do not certify autonomous safety.
 
 Existing task execution remains available with `--backend scripted` or `flux`.
-Record and validate waypoints and a home pose before real autonomous tasks. FLUX
-loading remains the existing stub. CLI task execution on real arms additionally
+Record and validate waypoints and a home pose before real autonomous tasks. The
+FLUX skill loader remains a stub; the separate [live inference bridge](live-inference.md)
+uses the running Haller UI and remote checkpoint. CLI task execution on real arms additionally
 requires the explicit `liminal run ... --engage` flag; connect alone never arms them.
 
 ## Small API

@@ -3,6 +3,41 @@ let latest = null;
 let busy = false;
 let lastFrameAt = 0;
 const cards = new Map();
+const cameraCards = new Map();
+
+function updateCameras(names, labels = {}) {
+  for (const [name, camera] of cameraCards) {
+    if (!names.includes(name)) {
+      camera.active = false; clearTimeout(camera.timer); camera.node.remove(); cameraCards.delete(name);
+    }
+  }
+  for (const name of names) {
+    if (cameraCards.has(name)) continue;
+    const node = document.createElement("figure");
+    const caption = document.createElement("figcaption");
+    const title = document.createElement("strong"); title.textContent = labels[name] || name;
+    const status = document.createElement("span"); status.textContent = "Connecting…";
+    const img = document.createElement("img"); img.alt = title.textContent; img.hidden = true;
+    caption.append(title, status); node.append(caption, img); $("#cameras").append(node);
+    const camera = {node, active: true, timer: null}; cameraCards.set(name, camera);
+    function refresh() {
+      if (!camera.active) return;
+      if (document.hidden) { camera.timer = setTimeout(refresh, 500); return; }
+      img.src = `/cameras/${encodeURIComponent(name)}.jpg?t=${Date.now()}`;
+    }
+    img.onload = () => {
+      if (!camera.active) return;
+      img.hidden = false; status.textContent = "Live"; status.dataset.state = "live";
+      camera.timer = setTimeout(refresh, 200);
+    };
+    img.onerror = () => {
+      if (!camera.active) return;
+      img.hidden = true; status.textContent = "Feed unavailable · retrying"; status.dataset.state = "error";
+      camera.timer = setTimeout(refresh, 2000);
+    };
+    refresh();
+  }
+}
 
 async function command(path, body = {}) {
   const response = await fetch(path, {
@@ -80,12 +115,7 @@ async function poll() {
     }
     $("#run").disabled = stale || latest.estopped || latest.running;
     $("#report").textContent = JSON.stringify(latest.last_report, null, 2);
-    for (const name of latest.cameras) {
-      if (!$(`[data-camera="${CSS.escape(name)}"]`)) {
-        const img = document.createElement("img"); img.alt = name; img.dataset.camera = name;
-        $("#cameras").append(img);
-      }
-    }
+    updateCameras(latest.cameras, latest.camera_labels);
   } catch (error) {
     $("#link").textContent = "Disconnected · controls disabled";
     for (const card of cards.values()) card.querySelectorAll("button").forEach(b => { b.disabled = true; });
@@ -93,11 +123,6 @@ async function poll() {
   }
   setTimeout(poll, 200);
 }
-setInterval(() => {
-  document.querySelectorAll("[data-camera]").forEach(img => {
-    img.src = `/cameras/${encodeURIComponent(img.dataset.camera)}.jpg?t=${Date.now()}`;
-  });
-}, 1000);
 fetch("/tasks").then(r => r.json()).then(data => {
   for (const task of data.tasks) { const option = document.createElement("option"); option.textContent = task; $("#task").append(option); }
 }).catch(e => { $("#error").textContent = e.message; });
