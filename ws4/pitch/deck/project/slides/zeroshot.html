@@ -1,0 +1,14 @@
+<section id="zeroshot" data-transition="fade" style="background:#fbf8f4;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<p style="font-size:24px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5b3fe0">The problem</p>
+<div style="display:flex;flex-direction:row;align-items:center;gap:64px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:240px;font-weight:700;line-height:1;letter-spacing:-8px;color:#5b3fe0;white-space:nowrap">0/16</p>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px">
+<p style="font-size:44px;font-weight:700;line-height:1.2;color:#1c1830">graded zero-shot attempts succeeded with the released FLUX 3 Action checkpoint</p>
+<p style="font-size:32px;line-height:1.35;color:#625d78">Two arms, three tasks. Not slowly: the shoulder ran to its limit whatever the prompt said.</p>
+</div>
+</div>
+<img src="/_blob/7e2470a771aff813257d1218899b7d65" alt="Four frames from the scene camera of a zero-shot attempt on the red SO-101: the two paper cups stay untouched while the arm moves at the bottom edge" style="width:1664px;height:312px;object-fit:cover;border-radius:16px">
+<p style="font-size:24px;line-height:1.35;color:#625d78">Red SO-101, “stack the cups”, released package (A0), frames at 2, 5, 9 and 11 s: the gripper never reaches the cups. 16 logged attempts, 2 of them with the servos underpowered.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#625d78">Source: ws4/eval/trials.jsonl via trial_log.py summary · video ws4/single_arm/runs/20261017_171141/attempt01</p>
+<aside>P1 PROBLEM (15 to 35 s). "Zero-shot, the released checkpoint failed every one of our 16 graded attempts. Not slowly: the shoulder ran straight to its limit, whatever the prompt said." Breakdown (trials.jsonl): red SO-101 stack_cups A0 0/3 and A0-5V 0/2 (12 V servos on a 5 V brick, not a FLUX result); Haller put_pen_in_slot A0-E 0/3; Haller grasp_cup A0-E 0/3, A0r-B 0/3, A0r-D 0/2. If asked: the brief grades zero-shot, so every attempt is logged with video and per-tick trace.</aside>
+</section>
