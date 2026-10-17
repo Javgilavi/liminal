@@ -3,6 +3,34 @@
 Sat 17 Oct 12:45 CEST. Built from all six agent reports; every suite was re-run by the orchestrator.
 Submission: **Sun 18 Oct 14:00 CEST**. A snapshot of `ws4/` is on branch `ws4-handoff` of Javgilavi/liminal.
 
+## Status and next moves (Sat 17 Oct, 16:45 CEST; about 21 h to submission)
+
+**Where we stand.** Lots of infrastructure works and is tested (FLUX serving on two pods, dual-arm runner with
+safety, Claude orchestrator + HMI, imagined-video extraction, TTT proven at 7B scale, station sim, IK, dataset
+tools, trial logger). What is missing is the part judged hardest: **FLUX doing a task on real hardware, with
+zero-shot and post-training numbers.** Nothing graded has been logged yet, no demos are recorded, no LoRA is
+trained, and the demo task is not fixed.
+
+**Recommendation: make the red single SO-101 the primary FLUX demo.** It is wired, calibrated and has a fast
+dedicated server (0.48 s per chunk). Build the long chain on it (stack several cups, orchestrated by Claude with
+the imagined-vs-actual view). The bimanual XLeRobot becomes the stretch / research showcase (sim, VR, TTT, EE50
+analysis), unless its real bring-up catches up by about 22:00.
+
+| # | When | What | Who |
+|---|---|---|---|
+| 1 | now to 18:00 | Fix the scene camera (fixed, high, whole arm and cups in view), then the graded zero-shot runs on "stack the cups": 3 layouts, at least 5 attempts per prompt, all in `trial_log.py` | so101-zeroshot + Oscar |
+| 2 | now to 18:00 | Imagination on the single-arm server: return imagined frames per chunk and save imagined-vs-actual clips during attempts (first demo-video material) | ws4-imagine (needs a go) |
+| 3 | 18:00 to 19:30 | Record 50 demos + 10 held-out for the cup task (leader arm if available, otherwise VR with vr-teleop-kit's single SO-101 path), 30 fps, AV1 or transcoded | Oscar + a recording agent |
+| 4 | from about 19:30, overnight | Per-arm LoRA on those demos: on the teammate's 3x RTX PRO 6000 box if it is up, otherwise on the single-arm RTX PRO 6000 pod (96 GB: serving and LoRA may fit side by side, measure first) | teammate / ws4-datasets |
+| 5 | by 18:00 | Fix the demo task: adopt cup stacking (longer chain: 3 to 4 cups, maybe unstack) unless the teammate's task is ready and reachable by the single arm | team |
+| 6 | evening | Orchestrator on the real single arm: `skills.yaml` with the real prompts, Claude plans the chain, Haiku verifies each step, attempts logged | ws4-orchestrator |
+| 7 | 19:00 checkpoint | XLeRobot go/no-go: Haller calibration files (EEPROM harvest), restart the 4500 pod, per-arm zero-shot on one simple skill. No-go means sim + research only | Oscar |
+| 8 | Sun 07:00 to 11:00 | Post-training eval with the same protocol, pick the checkpoint, full-chain demo runs, demo video | team |
+| 9 | Sun 11:00 to 13:30 | Slides, README, results tables (`trial_log.py summary --markdown`), merge to the submission branch, push | team |
+
+**Open questions for Oscar:** is there a leader arm for the red SO-101? Is the teammate's training box running
+(LoRA P on public data, per HANDOFF_GPU.md)? Which task does the team commit to?
+
 ## Decisions
 
 | Track | Verdict | Why (details in the linked report) |
