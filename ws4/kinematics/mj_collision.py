@@ -1,0 +1,89 @@
+"""Mesh collision checks on the ws4-sim MuJoCo station model (read-only use of ws4/sim).
+
+Loads ``ws4/sim/scenes/obstacle_target.xml`` (which includes ``ws4/sim/model/station_robot.xml``, generated
+from ``station_geometry.yaml``), sets the 10 arm joints and both grippers, runs ``mj_kinematics`` +
+``mj_collision`` and classifies penetrating contacts. MuJoCo already skips parent/child body pairs. Props
+(cubes, target, obstacle) are ignored. ``mujoco`` is imported lazily so the package imports without it.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+
+SCENE = Path(__file__).resolve().parents[1] / "sim" / "scenes" / "obstacle_target.xml"
+ARM_JOINTS = ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll")
+GRIPPER_OPEN_RAD = 1.74533  # station_geometry.yaml gripper.open_rad (closed = 0 rad)
+
+
+def _group(body: str) -> str | None:
+    if body.startswith("left_"):
+        return "left"
+    if body.startswith("right_"):
+        return "right"
+    if body in ("torso", "head_pitch"):
+        return "torso"
+    if body == "table":
+        return "table"
+    return None
+
+
+class MjCollision:
+    def __init__(self, scene: Path | None = None):
+        import mujoco
+
+        self.mj = mujoco
+        self.m = mujoco.MjModel.from_xml_path(str(scene or SCENE))
+        self.d = mujoco.MjData(self.m)
+        jid = lambda n: self.m.jnt_qposadr[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, n)]  # noqa: E731
+        self.adr = {s: np.array([jid(f"{s}_{j}") for j in ARM_JOINTS]) for s in ("left", "right")}
+        self.grip = {s: jid(f"{s}_gripper") for s in ("left", "right")}
+        self.geom_group = [_group(self.m.body(self.m.geom_bodyid[g]).name) for g in range(self.m.ngeom)]
+        self.geom_body = [self.m.body(self.m.geom_bodyid[g]).name for g in range(self.m.ngeom)]
+        self.qpos0 = self.d.qpos.copy()
+
+    def contacts(self, q: dict[str, np.ndarray], grip: dict[str, float] | None = None,
+                 depth: float = 0.002) -> dict[str, float]:
+        """Deepest penetration (metres, positive) per pair class for one frame; absent classes are 0."""
+        d = self.d
+        d.qpos[:] = self.qpos0
+        for s, qs in q.items():
+            d.qpos[self.adr[s]] = qs
+            d.qpos[self.grip[s]] = GRIPPER_OPEN_RAD * float((grip or {}).get(s, 0.5))
+        self.mj.mj_kinematics(self.m, d)
+        self.mj.mj_collision(self.m, d)
+        out: dict[str, float] = {}
+        for i in range(d.ncon):
+            c = d.contact[i]
+            if c.dist > -depth:
+                continue
+            g1, g2 = self.geom_group[c.geom1], self.geom_group[c.geom2]
+            if g1 is None or g2 is None:
+                continue
+            pair = tuple(sorted((g1, g2)))
+            if pair == ("left", "right"):
+                key = "inter_arm"
+            elif pair[0] == pair[1] and pair[0] in ("left", "right"):
+                key = f"{pair[0]}_self"
+            elif "table" in pair:
+                key = f"{pair[0] if pair[1] == 'table' else pair[1]}_table"
+            elif "torso" in pair:
+                key = f"{pair[0] if pair[1] == 'torso' else pair[1]}_torso"
+            else:
+                continue
+            out[key] = max(out.get(key, 0.0), -float(c.dist))
+        return out
+
+    def check(self, q: dict[str, np.ndarray], grip: dict[str, np.ndarray] | None = None,
+              depth: float = 0.002) -> dict[str, np.ndarray]:
+        """Per-frame penetration depth arrays (T,) for each pair class (0 where there is no contact)."""
+        T = len(next(iter(q.values())))
+        keys = ["inter_arm"] + [f"{s}_{k}" for s in q for k in ("self", "table", "torso")]
+        out = {k: np.zeros(T) for k in keys}
+        for t in range(T):
+            res = self.contacts({s: v[t] for s, v in q.items()},
+                                {s: g[t] for s, g in grip.items()} if grip else None, depth)
+            for k, v in res.items():
+                out.setdefault(k, np.zeros(T))[t] = v
+        return out
