@@ -1,0 +1,43 @@
+# Demo A - cooperative holding (WHILE + UNTIL).
+# Left opens the lid and HOLDS it; right inserts the object; left releases only after
+# insertion is verified. If the lid drops mid-insert, the insert is cancelled and the
+# whole open/hold/insert block is retried.
+name: lid_hold_insert
+description: Hold a hinged lid open while the other arm inserts an object.
+goal: object_inserted
+initial_state: {lid_open: false, object_inserted: false}
+tree:
+  sequence:
+    - retry:
+        attempts: 2
+        recovery:
+          parallel:
+            - {skill: {arm: left, name: home}}
+            - {skill: {arm: right, name: home}}
+        do:
+          sequence:
+            - skill:
+                arm: left
+                name: open_lid
+                target: lid
+                prompt: Grasp the edge of the lid and lift it open
+                success: lid_open
+                timeout_s: 20
+                zones: [box]
+            - while:
+                arm: left
+                maintain: lid_open
+                until: object_inserted
+                do:
+                  skill:
+                    arm: right
+                    name: pick_place
+                    target: block
+                    prompt: Place the block inside the open box
+                    success: object_inserted
+                    timeout_s: 30
+                    zones: [box]
+    - parallel:
+        - {skill: {arm: left, name: release}}
+        - {skill: {arm: right, name: home}}
+    - check: object_inserted

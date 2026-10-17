@@ -1,0 +1,19 @@
+# WS5: two SO-101 followers facing a shared workspace.
+name: so101_dual
+arms:
+  left:  {type: so101, port: /dev/ttyACM0, id: left_follower,  max_relative_target: 10}
+  right: {type: so101, port: /dev/ttyACM1, id: right_follower, max_relative_target: 10}
+cameras:
+  top:         {type: opencv, index: 0}
+  left_wrist:  {type: opencv, index: 2}
+  right_wrist: {type: opencv, index: 4}
+limits:
+  left:  {lower: [-100, -100, -100, -100, -100, 0], upper: [100, 100, 100, 100, 100, 100], max_step: 8}
+  right: {lower: [-100, -100, -100, -100, -100, 0], upper: [100, 100, 100, 100, 100, 100], max_step: 8}
+home:
+  left:  [0, -90, 90, 60, 0, 10]
+  right: [0, -90, 90, 60, 0, 10]
+# Base positions in the shared table frame (metres) - used by the bimanual planner.
+bases:
+  left:  {xy: [-0.20, 0.0], reach_m: 0.30}
+  right: {xy: [ 0.20, 0.0], reach_m: 0.30}

@@ -1,0 +1,8 @@
+# Scripted fallback (hour-6 escape hatch): skill -> list of joint keyframes.
+# Record real ones with scripts/record_waypoints.py. These are placeholders.
+pick_place:
+  - [0, -60, 60, 60, 0, 40]
+  - [0, -30, 40, 70, 0, 40]
+  - [0, -30, 40, 70, 0, 5]
+  - [30, -60, 60, 60, 0, 5]
+  - [30, -60, 60, 60, 0, 40]

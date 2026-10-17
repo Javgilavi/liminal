@@ -1,0 +1,20 @@
+# Skill catalog handed to LLM/VLM planners. Keep in sync with what actually works.
+arms: [left, right]
+skills:
+  hold: "primitive - freeze the arm in its current pose (local controller, no VLA)"
+  release: "primitive - open gripper and stop holding"
+  home: "primitive - move to the safe rest pose"
+  open_gripper: "primitive"
+  close_gripper: "primitive"
+  pick_place: "VLA - pick an object and place it somewhere; describe both in the prompt"
+  open_lid: "VLA - grasp a hinged lid and lift it open"
+  lift_aside: "VLA - lift an obstacle (lid, flap) up and out of the way, then hold"
+  push_aside: "VLA - push an object sideways out of a corridor, no grasp"
+  pick_aside: "VLA - pick an obstacle and drop it in the free zone"
+predicates:
+  - lid_open
+  - object_inserted
+  - obstacle_cleared
+  - block_in_bowl
+  - left_holding
+  - right_holding

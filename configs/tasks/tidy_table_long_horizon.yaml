@@ -1,0 +1,31 @@
+# WS3 stretch: chain both demos into one long-horizon run with explicit subgoal
+# markers in memory, so a restart/replan can see what is already done.
+name: tidy_table_long_horizon
+description: Clear the obstacle, put the block in the box held open by the other arm.
+goal: object_inserted
+initial_state: {obstacle_cleared: false, lid_open: false, object_inserted: false}
+tree:
+  sequence:
+    - fallback:
+        - check: obstacle_cleared
+        - retry:
+            attempts: 2
+            do:
+              skill: {arm: right, name: push_aside, target: cup, prompt: Push the cup away from the box, success: obstacle_cleared}
+    - set: {key: subgoal_1_done}
+    - skill: {arm: right, name: home}
+    - skill: {arm: left, name: open_lid, target: lid, prompt: Grasp the edge of the lid and lift it open, success: lid_open, zones: [box]}
+    - while:
+        arm: left
+        maintain: lid_open
+        until: object_inserted
+        do:
+          retry:
+            attempts: 2
+            do:
+              skill: {arm: right, name: pick_place, target: block, prompt: Place the block inside the open box, success: object_inserted, timeout_s: 30, zones: [box]}
+    - set: {key: subgoal_2_done}
+    - parallel:
+        - {skill: {arm: left, name: release}}
+        - {skill: {arm: right, name: home}}
+    - check: object_inserted

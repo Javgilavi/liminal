@@ -1,0 +1,13 @@
+# WS1: out-of-the-box FLUX 3 Action on one SO-101.
+# Find ports with `lerobot-find-port`; calibrate with `lerobot-calibrate` using the same id.
+name: so101_single
+arms:
+  right: {type: so101, port: /dev/ttyACM0, id: right_follower, max_relative_target: 10}
+cameras:
+  top:         {type: opencv, index: 0}   # scene camera - keep pose fixed between data collection and eval
+  right_wrist: {type: opencv, index: 2}
+# Fill after calibration: LeRobot units (degrees or normalized range, depending on version).
+limits:
+  right: {lower: [-100, -100, -100, -100, -100, 0], upper: [100, 100, 100, 100, 100, 100], max_step: 8}
+home:
+  right: [0, -90, 90, 60, 0, 10]   # TODO(WS5): measure a real, safe rest pose

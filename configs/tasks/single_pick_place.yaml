@@ -1,0 +1,20 @@
+# WS1 baseline: one arm, one FLUX skill, verified by perception.
+name: single_pick_place
+description: Out-of-the-box FLUX 3 Action on one SO-101 (also the LoRA eval task).
+goal: block_in_bowl
+initial_state: {block_in_bowl: false}
+tree:
+  sequence:
+    - retry:
+        attempts: 3
+        do:
+          skill:
+            arm: right
+            name: pick_place
+            target: red_block
+            prompt: Pick up the red block and place it in the bowl
+            success: block_in_bowl
+            timeout_s: 30
+        recovery: {skill: {arm: right, name: home}}
+    - skill: {arm: right, name: home}
+    - check: block_in_bowl

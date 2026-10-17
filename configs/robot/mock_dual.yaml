@@ -1,0 +1,13 @@
+# Two in-memory arms: develop and test orchestration with zero hardware.
+name: mock_dual
+arms:
+  left:  {type: mock}
+  right: {type: mock}
+cameras:
+  top:         {type: mock}
+  left_wrist:  {type: mock}
+  right_wrist: {type: mock}
+home:
+  left:  [0, 0, 0, 0, 0, 0]
+  right: [0, 0, 0, 0, 0, 0]
+primitives: {move_steps: 3, rate_hz: 200}

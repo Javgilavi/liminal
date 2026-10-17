@@ -1,0 +1,32 @@
+# Demo B - long-horizon dependency (AFTER). Target is blocked; one arm clears the
+# obstacle, the other picks the target. Generated variants come from
+# liminal.bimanual.plan_clear_and_act (WS2); this is the hand-written reference.
+name: clear_obstacle_pick
+description: Push the obstacle aside with one arm, then pick the target with the other.
+goal: block_in_bowl
+initial_state: {obstacle_cleared: false, block_in_bowl: false}
+tree:
+  sequence:
+    - retry:
+        attempts: 2
+        do:
+          skill:
+            arm: left
+            name: push_aside
+            target: cup
+            prompt: Push the cup to the left side of the table
+            success: obstacle_cleared
+            timeout_s: 20
+    - skill: {arm: left, name: home}
+    - retry:
+        attempts: 2
+        do:
+          skill:
+            arm: right
+            name: pick_place
+            target: red_block
+            prompt: Pick up the red block and place it in the bowl
+            success: block_in_bowl
+            timeout_s: 30
+    - skill: {arm: right, name: home}
+    - check: block_in_bowl

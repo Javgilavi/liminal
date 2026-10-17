@@ -1,0 +1,7 @@
+name: mock_single
+arms:
+  right: {type: mock}
+cameras:
+  top:         {type: mock}
+  right_wrist: {type: mock}
+primitives: {move_steps: 3, rate_hz: 200}

@@ -1,0 +1,11 @@
+# WS4: dual-arm MuJoCo scene with actuators named left_* / right_*.
+name: mujoco_dual
+mujoco:
+  xml: sim_assets/dual_so101/scene.xml   # TODO(WS4): point at the adopted scene
+arms:
+  left:  {type: mujoco, actuator_prefix: "left_"}
+  right: {type: mujoco, actuator_prefix: "right_"}
+cameras:
+  top:         {type: mujoco, mj_camera: top}
+  left_wrist:  {type: mujoco, mj_camera: left_wrist}
+  right_wrist: {type: mujoco, mj_camera: right_wrist}

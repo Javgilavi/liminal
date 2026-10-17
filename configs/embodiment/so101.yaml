@@ -1,0 +1,6 @@
+name: so101
+mode: per_arm
+groups:
+  - name: arm
+    joints: [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper]
+cameras: {scene: top, wrist: wrist}
