@@ -79,13 +79,20 @@ completed task steps recorded, plus where it failed and whether a human had to i
     45 GPU-hours, so the best use is the Sunday demo-window server or one extra training run.
   - Set an AWS Budgets alert at EUR 133 and keep the invoice for reimbursement.
 - **Risks, orchestrator note.**
-  - **Measured on the pod (first run, 10 chunks, Qwen on CPU, default guidance 3):** median **1.46 s per chunk**,
-    peak VRAM **23.6 GiB** of 31.9. One outlier pushed p90 to 17.3 s, most likely a first-time prompt encode on
-    the CPU text encoder.
-  - In the synchronous loop the arm stands still for the whole inference after each 1.07 s chunk, so at 1.46 s
-    it moves about 42% of the time. Levers, being measured: guidance 1.0 on both streams (one DiT pass per
-    step instead of two), `compile_model=true`, pre-encoding every skill prompt at server start (kills the
-    outlier), and an RTX PRO 6000 pod in EU-RO-1 for the Sunday demo window (same volume, about $2.49/h).
+  - **Measured on the pod (RTX PRO 4500, Qwen on CPU, prompts pre-encoded, 10 chunks each):**
+
+    | Setting | Median per chunk | p90 | Peak VRAM | Arm moving |
+    |---|---|---|---|---|
+    | default guidance 3 | 1.46 s | 1.47 s | 23.6 GiB | 42% |
+    | guidance 3 + `compile_model` | 1.22 s | 1.23 s | 23.6 GiB | 47% |
+    | **guidance 1.0 + compile** | **0.63 s** | 0.64 s | 23.6 GiB | **63%** |
+
+    Model load is 6.4 min (plus about 2 min with compile) per server start. Without the prompt warm-up, the first
+    use of a new prompt took 17 s.
+  - **Open question: does guidance 1.0 hurt action quality?** The package default is guidance 3 on both streams.
+    Run the zero-shot attempts at both settings and log them as separate variants before standardising on 1.0.
+  - An RTX PRO 6000 pod for the Sunday demo window would roughly halve these times again (estimate) and fits two
+    model instances for truly parallel arms.
   - Qwen must stay on the CPU here (23.6 + 8.3 GiB does not fit). About 8 GiB is left for imagination decoding.
 
 ### Training box GPUs (3x RTX PRO 6000, 96 GB)
