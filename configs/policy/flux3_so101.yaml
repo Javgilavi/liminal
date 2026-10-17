@@ -5,8 +5,9 @@ device: cuda
 dtype: bfloat16          # VERIFY ~32 GB VRAM reported for BF16 inference
 action_dim: 6            # one arm per skill
 chunk_size: 42           # VERIFY
-execute_steps: 32        # VERIFY default executed per chunk
+execute_steps: 12        # short stop-inspect-continue window; tune from measured control/inference latency
 control_hz: 30.0         # VERIFY
+inference_timeout_s: 30.0 # quarantine this model instance if a worker exceeds the deadline
 obs_history: 8           # VERIFY
 camera_roles: [scene, wrist]
 camera_map:

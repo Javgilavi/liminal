@@ -11,6 +11,10 @@ skills:
   lift_aside: "VLA - lift an obstacle (lid, flap) up and out of the way, then hold"
   push_aside: "VLA - push an object sideways out of a corridor, no grasp"
   pick_aside: "VLA - pick an obstacle and drop it in the free zone"
+  clear_cable_to_hold: "VLA - helper arm grasps the cable and moves it clear; the tree takes over position hold"
+  remove_to_red_cup: "VLA - main arm removes the faulty component and places it inside the red cup"
+  green_cup_to_slot: "VLA - main arm takes the green replacement from its cup and seats it in the box slot"
+  restore_cable: "VLA - helper arm returns the cable to its resting route and releases it"
   open_lid_and_insert: "bimanual VLA (option B only, arm: both) - left opens and holds the lid, right inserts"
 predicates:
   - lid_open
@@ -19,3 +23,10 @@ predicates:
   - block_in_bowl
   - left_holding
   - right_holding
+  - access_clear
+  - access_blocked
+  - cable_secured_clear
+  - faulty_component_in_red_cup
+  - replacement_in_slot
+  - cable_restored
+  - main_arm_home

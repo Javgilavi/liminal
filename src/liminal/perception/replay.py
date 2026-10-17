@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import statistics
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,6 +44,52 @@ class ReplayMismatch:
     expected: Verdict
     actual: Verdict
     evidence: str = ""
+    repeat: int = 1
+
+
+@dataclass(frozen=True)
+class ReplayObservation:
+    expected: Verdict
+    actual: Verdict
+    evidence: str = ""
+
+    @property
+    def correct(self) -> bool:
+        return self.actual is self.expected
+
+    @property
+    def false_positive_transition(self) -> bool:
+        return self.actual is Verdict.TRUE and self.expected is not Verdict.TRUE
+
+
+@dataclass(frozen=True)
+class ReplayCall:
+    frame: str
+    repeat: int
+    images: dict[str, str]
+    latency_s: float
+    observations: dict[str, ReplayObservation]
+    raw_response: str | None = None
+    parse_error: str | None = None
+
+
+@dataclass
+class PredicateReplayMetrics:
+    observations: int = 0
+    correct: int = 0
+    incorrect: int = 0
+    unknown: int = 0
+    false_positive_transitions: int = 0
+    repeat_groups: int = 0
+    consistent_groups: int = 0
+
+    @property
+    def accuracy(self) -> float:
+        return self.correct / self.observations if self.observations else 0.0
+
+    @property
+    def agreement_rate(self) -> float:
+        return self.consistent_groups / self.repeat_groups if self.repeat_groups else 0.0
 
 
 @dataclass
@@ -49,9 +97,16 @@ class ReplayReport:
     recording: str
     frames: int
     observations: int
+    repeats: int = 1
     correct: int = 0
+    incorrect: int = 0
     unknown: int = 0
+    false_positive_transitions: int = 0
+    repeat_groups: int = 0
+    consistent_groups: int = 0
     mismatches: list[ReplayMismatch] = field(default_factory=list)
+    calls: list[ReplayCall] = field(default_factory=list)
+    per_predicate: dict[str, PredicateReplayMetrics] = field(default_factory=dict)
 
     @property
     def accuracy(self) -> float:
@@ -59,7 +114,77 @@ class ReplayReport:
 
     @property
     def passed(self) -> bool:
-        return self.correct == self.observations
+        return self.incorrect == 0 and self.false_positive_transitions == 0
+
+    @property
+    def agreement_rate(self) -> float:
+        return self.consistent_groups / self.repeat_groups if self.repeat_groups else 0.0
+
+    @property
+    def latency_summary(self) -> dict[str, float | int | None]:
+        latencies = [call.latency_s for call in self.calls]
+        if not latencies:
+            return {"calls": 0, "min_s": None, "median_s": None, "mean_s": None, "max_s": None}
+        return {
+            "calls": len(latencies),
+            "min_s": min(latencies),
+            "median_s": statistics.median(latencies),
+            "mean_s": statistics.fmean(latencies),
+            "max_s": max(latencies),
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a stable, JSON-serializable report with inspectable failures."""
+
+        return {
+            "recording": self.recording,
+            "summary": {
+                "passed": self.passed,
+                "frames": self.frames,
+                "repeats": self.repeats,
+                "observations": self.observations,
+                "correct": self.correct,
+                "incorrect": self.incorrect,
+                "unknown": self.unknown,
+                "false_positive_transitions": self.false_positive_transitions,
+                "accuracy": self.accuracy,
+                "agreement_rate": self.agreement_rate,
+            },
+            "latency": self.latency_summary,
+            "per_predicate": {
+                predicate: {
+                    "observations": metrics.observations,
+                    "correct": metrics.correct,
+                    "incorrect": metrics.incorrect,
+                    "unknown": metrics.unknown,
+                    "false_positive_transitions": metrics.false_positive_transitions,
+                    "accuracy": metrics.accuracy,
+                    "agreement_rate": metrics.agreement_rate,
+                }
+                for predicate, metrics in self.per_predicate.items()
+            },
+            "calls": [
+                {
+                    "frame": call.frame,
+                    "repeat": call.repeat,
+                    "images": call.images,
+                    "latency_s": call.latency_s,
+                    "parse_error": call.parse_error,
+                    "raw_response": call.raw_response,
+                    "predicates": {
+                        predicate: {
+                            "expected": observation.expected.value,
+                            "actual": observation.actual.value,
+                            "correct": observation.correct,
+                            "false_positive_transition": observation.false_positive_transition,
+                            "evidence": observation.evidence,
+                        }
+                        for predicate, observation in call.observations.items()
+                    },
+                }
+                for call in self.calls
+            ],
+        }
 
 
 def load_recording(path: str | Path) -> InspectionRecording:
@@ -123,8 +248,12 @@ async def evaluate_recording(
     model: VisionModel,
     *,
     image_loader: ImageLoader | None = None,
+    repeats: int = 1,
 ) -> ReplayReport:
-    """Run the production prompt/parser on saved frames and score its verdicts."""
+    """Run the production prompt/parser repeatedly on saved frames and score it."""
+
+    if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1:
+        raise ValueError("recording evaluation repeats must be a positive integer")
 
     cursor = _FrameCursor(recording.frames, image_loader or load_rgb_image)
     cameras = {name: _RecordedCamera(name, cursor) for name in recording.request.cameras}
@@ -132,23 +261,69 @@ async def evaluate_recording(
     report = ReplayReport(
         recording=recording.name,
         frames=len(recording.frames),
-        observations=len(recording.frames) * len(recording.request.predicates),
+        repeats=repeats,
+        observations=len(recording.frames) * len(recording.request.predicates) * repeats,
+        per_predicate={predicate: PredicateReplayMetrics() for predicate in recording.request.predicates},
     )
     for index, frame in enumerate(recording.frames):
         cursor.index = index
-        inspector.reset()
-        assessment = await inspector.inspect(recording.request)
         frame_name = frame.name or str(index)
-        for predicate, expected in frame.expected.items():
-            observation = assessment.observation(predicate)
-            if observation.value is Verdict.UNKNOWN:
-                report.unknown += 1
-            if observation.value is expected:
-                report.correct += 1
-            else:
-                report.mismatches.append(
-                    ReplayMismatch(frame_name, predicate, expected, observation.value, observation.evidence)
+        repeated_values: dict[str, list[Verdict]] = {
+            predicate: [] for predicate in recording.request.predicates
+        }
+        for repeat_index in range(1, repeats + 1):
+            inspector.reset()
+            started_at = time.perf_counter()
+            assessment = await inspector.inspect(recording.request)
+            latency_s = time.perf_counter() - started_at
+            call_observations: dict[str, ReplayObservation] = {}
+            for predicate, expected in frame.expected.items():
+                actual = assessment.observation(predicate)
+                observation = ReplayObservation(expected, actual.value, actual.evidence)
+                call_observations[predicate] = observation
+                repeated_values[predicate].append(actual.value)
+                metrics = report.per_predicate[predicate]
+                metrics.observations += 1
+                if actual.value is Verdict.UNKNOWN:
+                    report.unknown += 1
+                    metrics.unknown += 1
+                if observation.correct:
+                    report.correct += 1
+                    metrics.correct += 1
+                else:
+                    report.incorrect += 1
+                    metrics.incorrect += 1
+                    report.mismatches.append(
+                        ReplayMismatch(
+                            frame_name,
+                            predicate,
+                            expected,
+                            actual.value,
+                            actual.evidence,
+                            repeat_index,
+                        )
+                    )
+                if observation.false_positive_transition:
+                    report.false_positive_transitions += 1
+                    metrics.false_positive_transitions += 1
+            report.calls.append(
+                ReplayCall(
+                    frame=frame_name,
+                    repeat=repeat_index,
+                    images={camera: str(path) for camera, path in frame.images.items()},
+                    latency_s=latency_s,
+                    observations=call_observations,
+                    raw_response=assessment.raw_response,
+                    parse_error=assessment.parse_error,
                 )
+            )
+        for predicate, values in repeated_values.items():
+            metrics = report.per_predicate[predicate]
+            report.repeat_groups += 1
+            metrics.repeat_groups += 1
+            if len(set(values)) == 1:
+                report.consistent_groups += 1
+                metrics.consistent_groups += 1
     return report
 
 

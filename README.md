@@ -93,6 +93,20 @@ The command prints schema-validated predicates plus load, preprocessing,
 time-to-first-token, total-latency, and GPU-memory measurements. Pass the same
 configuration file to `liminal run` using its `--perception` option.
 
+Before robot deployment, label synchronized camera views using the manifest format
+in `data/perception_eval/labels.example.yaml`, then run repeated offline evaluation:
+
+```bash
+uv run liminal evaluate-perception data/perception_eval/labels.yaml \
+  --perception configs/perception/qwen3_vl_4b.yaml \
+  --repeats 3
+```
+
+The JSON report retains raw model responses and parsed evidence, and summarizes
+accuracy, unknowns, false-positive transitions, repeat agreement, latency, and
+Qwen preprocessing/token-generation/GPU metrics per call. Treat any false-positive
+transition as a deployment blocker even if aggregate accuracy looks acceptable.
+
 ## On real hardware
 
 The connected bimanual XLeRobot has an isolated setup and a local operator UI:
@@ -160,7 +174,7 @@ docs/             architecture and per-workstream research briefs
   scripted backends) runs and is tested.
 - **FLUX 3 Action loading is a stub.** `FluxPolicyBackend.load/predict` raise
   `NotImplementedError` until WS1 wires them against the official BFL docs. All FLUX
-  numbers in `configs/policy/flux3_so101.yaml` (chunk 42 / execute 32 / 30 Hz /
+  numbers in `configs/policy/flux3_so101.yaml` (chunk 42 / execute 12 / 30 Hz /
   8-frame history / ~32 GB BF16) come from planning notes and are marked `VERIFY`.
 - LeRobot imports and CLI flags change between releases. They are isolated in
   `hardware/so101.py` and `scripts/record_demos.sh`.

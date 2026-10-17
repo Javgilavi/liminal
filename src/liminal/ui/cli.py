@@ -168,6 +168,57 @@ def _inspect(args: argparse.Namespace) -> int:
     return 0 if all(observation.known for observation in assessment.observations.values()) else 1
 
 
+def _evaluate_perception(args: argparse.Namespace) -> int:
+    from dataclasses import asdict, replace
+
+    from liminal.perception.config import load_perception_config
+    from liminal.perception.qwen import QwenVisionModel
+    from liminal.perception.replay import evaluate_recording, load_recording
+    from liminal.perception.vlm import warm_vision_model
+
+    recording = load_recording(args.labels)
+    runtime = load_perception_config(args.perception)
+    missing_predicates = set(recording.request.predicates) - set(runtime.inspection.definitions)
+    if missing_predicates:
+        raise SystemExit(
+            f"evaluation predicates are absent from the perception config: {sorted(missing_predicates)}"
+        )
+    configured_cameras = set(runtime.inspection.cameras)
+    if set(recording.request.cameras) != configured_cameras:
+        raise SystemExit(
+            f"evaluation cameras must exactly match the perception config: {sorted(configured_cameras)}"
+        )
+    # Labels own expected verdicts and image paths. Prompt semantics stay owned by
+    # the deployed perception profile so evaluation cannot silently test a drifted
+    # predicate definition or timeout.
+    request = runtime.inspection.request(
+        recording.request.predicates,
+        context=recording.request.context,
+    )
+    recording = replace(recording, request=request)
+
+    warm_vision_model(runtime.model)
+    report = asyncio.run(evaluate_recording(recording, runtime.model, repeats=args.repeats))
+    output: dict[str, object] = report.to_dict()
+    if isinstance(runtime.model, QwenVisionModel):
+        output["model_metrics"] = {
+            "config": asdict(runtime.model.config),
+            "load": asdict(runtime.model.load_metrics) if runtime.model.load_metrics else None,
+            "inferences": [asdict(metrics) for metrics in runtime.model.inference_metrics],
+        }
+
+    output_path = Path(args.output) if args.output else (
+        Path("runs") / f"{time.strftime('%Y%m%d-%H%M%S')}_{Path(args.labels).stem}_perception_eval.json"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(output, indent=2) + "\n")
+    summary = output["summary"]
+    assert isinstance(summary, dict)
+    print(json.dumps(summary, indent=2))
+    print(f"evaluation report: {output_path}")
+    return 0 if report.passed else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="liminal")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -209,6 +260,13 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("--image", action="append", required=True, help="camera frame as CAMERA=PATH")
     i.add_argument("--predicate", action="append", help="predicate to inspect; defaults to all definitions")
     i.set_defaults(fn=_inspect)
+
+    e = sub.add_parser("evaluate-perception", help="score the configured VLM on labeled recorded views")
+    e.add_argument("labels", help="evaluation YAML manifest")
+    e.add_argument("--perception", required=True, help="persistent VLM + predicate config")
+    e.add_argument("--repeats", type=int, default=3, help="independent calls per labeled frame (default: 3)")
+    e.add_argument("--output", help="JSON report path; defaults to a timestamped file under runs/")
+    e.set_defaults(fn=_evaluate_perception)
 
     args = ap.parse_args(argv)
     return args.fn(args)

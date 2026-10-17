@@ -24,15 +24,25 @@ configs/policy/*.yaml (all marked VERIFY until checked).
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from numbers import Real
 from typing import TYPE_CHECKING, Any
 
 from liminal.core.types import Observation, Skill, SkillResult, Status
 
 if TYPE_CHECKING:
     from liminal.orchestration.context import ExecutionContext
+
+
+class _InvalidActionChunk(ValueError):
+    pass
+
+
+class _InferenceTimeout(TimeoutError):
+    pass
 
 
 @dataclass
@@ -42,8 +52,9 @@ class FluxConfig:
     dtype: str = "bfloat16"
     action_dim: int = 6  # 6 = per-arm (option A), 12 = bimanual (option B)
     chunk_size: int = 42  # actions predicted per inference
-    execute_steps: int = 32  # actions executed per chunk before re-planning
+    execute_steps: int = 12  # short stop-inspect-continue window
     control_hz: float = 30.0
+    inference_timeout_s: float = 30.0
     obs_history: int = 8
     camera_roles: tuple[str, ...] = ("scene", "wrist")
     # skill target -> {role -> camera name}, e.g. {"right": {"scene": "top", "wrist": "right_wrist"}}
@@ -51,6 +62,25 @@ class FluxConfig:
     camera_map: dict[str, dict[str, str]] = field(default_factory=dict)
     lora_adapter: str | None = None  # applied to every arm
     arm_adapters: dict[str, str] = field(default_factory=dict)  # option A1: arm -> LoRA, overrides lora_adapter
+
+    def __post_init__(self) -> None:
+        integer_fields = {
+            "action_dim": self.action_dim,
+            "chunk_size": self.chunk_size,
+            "execute_steps": self.execute_steps,
+            "obs_history": self.obs_history,
+        }
+        for name, value in integer_fields.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
+        if self.execute_steps > self.chunk_size:
+            raise ValueError("execute_steps cannot exceed chunk_size")
+        for name, value in {
+            "control_hz": self.control_hz,
+            "inference_timeout_s": self.inference_timeout_s,
+        }.items():
+            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be a positive finite number")
 
 
 class FluxPolicyBackend:
@@ -60,6 +90,9 @@ class FluxPolicyBackend:
         self._processor: Any = None
         self._infer_lock = asyncio.Lock()
         self._history: dict[str, deque[Observation]] = {}
+        # A timed-out/cancelled worker thread cannot be killed safely. Quarantine this
+        # model instance so a retry can never overlap that orphaned inference.
+        self._unhealthy_reason: str | None = None
         self.latencies_s: list[float] = []
 
     # -- model -------------------------------------------------------------------------
@@ -105,6 +138,65 @@ class FluxPolicyBackend:
     def _stop(self, target: str, ctx: ExecutionContext) -> None:
         for arm in ctx.members(target):
             ctx.arms[arm].stop()
+
+    def _validate_chunk(self, chunk: Any) -> list[list[float]]:
+        """Validate a complete model response before issuing its first command."""
+
+        try:
+            actions = list(chunk)
+        except TypeError as exc:
+            raise _InvalidActionChunk("FLUX output must be an iterable action chunk") from exc
+        if len(actions) != self.cfg.chunk_size:
+            raise _InvalidActionChunk(
+                f"FLUX returned {len(actions)} actions; expected exactly {self.cfg.chunk_size}"
+            )
+
+        validated: list[list[float]] = []
+        for action_index, action in enumerate(actions):
+            try:
+                values = list(action)
+            except TypeError as exc:
+                raise _InvalidActionChunk(f"FLUX action {action_index} is not iterable") from exc
+            if len(values) != self.cfg.action_dim:
+                raise _InvalidActionChunk(
+                    f"FLUX action {action_index} has {len(values)} values; "
+                    f"expected {self.cfg.action_dim}"
+                )
+            if any(isinstance(value, bool) or not isinstance(value, Real) for value in values):
+                raise _InvalidActionChunk(f"FLUX action {action_index} contains a non-numeric value")
+            numeric = [float(value) for value in values]
+            if not all(math.isfinite(value) for value in numeric):
+                raise _InvalidActionChunk(f"FLUX action {action_index} contains a non-finite value")
+            validated.append(numeric)
+        return validated
+
+    async def _predict_chunk(
+        self,
+        history: list[Observation],
+        instruction: str,
+        target: str,
+    ) -> list[list[float]]:
+        async with self._infer_lock:
+            started_at = time.monotonic()
+            try:
+                chunk = await asyncio.wait_for(
+                    asyncio.to_thread(self.predict, history, instruction, target),
+                    timeout=self.cfg.inference_timeout_s,
+                )
+            except TimeoutError as exc:
+                self._unhealthy_reason = (
+                    f"inference exceeded {self.cfg.inference_timeout_s:g}s; "
+                    "restart the backend before retrying"
+                )
+                raise _InferenceTimeout from exc
+            except asyncio.CancelledError:
+                self._unhealthy_reason = (
+                    "execution was cancelled during inference; restart the backend before retrying"
+                )
+                raise
+            else:
+                self.latencies_s.append(time.monotonic() - started_at)
+        return self._validate_chunk(chunk)
 
     async def _inspect_progress(
         self,
@@ -190,8 +282,46 @@ class FluxPolicyBackend:
         self._history.pop(target, None)
 
     async def execute(self, skill: Skill, ctx: ExecutionContext) -> SkillResult:
+        """Execute a bounded skill and freeze its arm on every exit path."""
+
+        started_at = time.monotonic()
+        try:
+            return await self._execute(skill, ctx, started_at)
+        except asyncio.CancelledError:
+            ctx.world.log("flux_cancelled", skill=skill.label)
+            raise
+        except _InferenceTimeout:
+            return SkillResult(
+                Status.TIMEOUT,
+                skill,
+                self._unhealthy_reason or "FLUX inference timed out",
+                time.monotonic() - started_at,
+            )
+        except _InvalidActionChunk as exc:
+            return SkillResult(
+                Status.FAILURE,
+                skill,
+                f"invalid FLUX output: {exc}",
+                time.monotonic() - started_at,
+            )
+        finally:
+            self._stop(skill.arm, ctx)
+
+    async def _execute(
+        self,
+        skill: Skill,
+        ctx: ExecutionContext,
+        started_at: float,
+    ) -> SkillResult:
         if not skill.prompt:
             return SkillResult(Status.FAILURE, skill, "policy skills need a text prompt")
+        if self._unhealthy_reason is not None:
+            return SkillResult(
+                Status.FAILURE,
+                skill,
+                f"FLUX backend is quarantined: {self._unhealthy_reason}",
+                time.monotonic() - started_at,
+            )
         dof = sum(ctx.arms[a].num_joints for a in ctx.members(skill.arm))
         if dof != self.cfg.action_dim:
             return SkillResult(Status.FAILURE, skill,
@@ -199,23 +329,19 @@ class FluxPolicyBackend:
                                "actions (6 = one arm, option A; 12 = arm group, option B)")
         if self._model is None:
             self.load()
-        t0 = time.monotonic()
         history = self._history.setdefault(skill.arm, deque(maxlen=self.cfg.obs_history))
         period = 1.0 / self.cfg.control_hz
         success_version = ctx.world.observation_version(skill.success) if skill.success else 0
 
         # Inspect before the first motion. This catches an already-completed skill and
         # refuses to enter a WHILE body when its physical invariant is not observable.
-        result = await self._inspect_progress(skill, ctx, t0)
+        result = await self._inspect_progress(skill, ctx, started_at)
         if result is not None:
             return result
 
         while True:
             history.append(self._observe(skill.arm, ctx))
-            async with self._infer_lock:
-                t_inf = time.monotonic()
-                chunk = await asyncio.to_thread(self.predict, list(history), skill.prompt, skill.arm)
-                self.latencies_s.append(time.monotonic() - t_inf)
+            chunk = await self._predict_chunk(list(history), skill.prompt, skill.arm)
             for action in chunk[: self.cfg.execute_steps]:
                 self._send(skill.arm, action, ctx)
                 await asyncio.sleep(period)
@@ -229,7 +355,7 @@ class FluxPolicyBackend:
                         Status.FAILURE,
                         skill,
                         f"active invariant violated: {', '.join(violated)}",
-                        time.monotonic() - t0,
+                        time.monotonic() - started_at,
                     )
                 observed_success = (
                     ctx.world.holds(skill.success, after_version=success_version)
@@ -237,12 +363,12 @@ class FluxPolicyBackend:
                 ) if skill.success else False
                 if observed_success:
                     self._stop(skill.arm, ctx)
-                    return SkillResult(Status.SUCCESS, skill, duration_s=time.monotonic() - t0)
+                    return SkillResult(Status.SUCCESS, skill, duration_s=time.monotonic() - started_at)
 
-            result = await self._inspect_progress(skill, ctx, t0)
+            result = await self._inspect_progress(skill, ctx, started_at)
             if result is not None:
                 return result
             if not skill.success:
                 # No predicate to wait for: one chunk is the whole skill.
-                return SkillResult(Status.SUCCESS, skill, duration_s=time.monotonic() - t0)
+                return SkillResult(Status.SUCCESS, skill, duration_s=time.monotonic() - started_at)
             # Otherwise keep re-planning; SkillNode's timeout bounds this loop.
