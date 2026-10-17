@@ -3,6 +3,22 @@
 Sat 17 Oct 12:45 CEST. Built from all six agent reports; every suite was re-run by the orchestrator.
 Submission: **Sun 18 Oct 14:00 CEST**. A snapshot of `ws4/` is on branch `ws4-handoff` of Javgilavi/liminal.
 
+## Pivot (Sat 17 Oct, 18:20 CEST): two tracks
+
+The red SO-101's elbow motor is broken, so it is retired. FLUX zero-shot has not had a fair test yet: the red arm
+was underpowered (12 V servos on 5 V) and the released package normalizes with legacy-degree quantiles (A0 drives
+joints to their limits regardless of prompt). BFL's own SO-101 examples are all task LoRAs, and the brief grades
+zero-shot vs post-training, so **collecting our own demos and fine-tuning is the main path**.
+
+| Track | Owner | Goal |
+|---|---|---|
+| **Real** | so101-zeroshot (pivoted) + Oscar | Green Haller, one arm, one skill: "put the block in the cup". Fresh LeRobot calibration (degrees), D455 head cam as scene + the task arm's wrist cam, safety guards (step, joint, keep-out, stall, torque cap). **Mirror teleop**: the other Haller arm, torque off and moved by hand, is the leader (joint space, no VR/IK). 50 demos + 10 held-out over 3 layouts, h264 at 30 fps. Graded zero-shot A0r (released weights, our quantiles), then a LoRA from the A0r package on the 6000 pod overnight. Sunday: post-training eval, then Claude chains the skill ("put all the blocks in the cups") with the imagined-vs-actual view. |
+| **Sim** | ws4-ttt (+ closed-loop child) | Same skill and contract in the MuJoCo Haller station: scripted demos, A0 vs A0r-sim vs LoRA-sim closed-loop success, TTT stage tracking on the rollouts. GPU: the 4500 pod only. Slide material: "pipeline validated in sim". |
+
+Dropped for this weekend: VR bimanual (ws4-vr2 parked as teleop backup), EE50, bimanual coordination, the red arm.
+GPU split: so101-flux-serve (RTX PRO 6000, EU-CZ-1) = real track serving + LoRA; ws4-flux-inference-2 (4500,
+EU-RO-1) = sim track. The old 4500 pod 4inbmv6d4xb876 is stopped and could not restart (host full).
+
 ## Status and next moves (Sat 17 Oct, 16:45 CEST; about 21 h to submission)
 
 **Where we stand.** Lots of infrastructure works and is tested (FLUX serving on two pods, dual-arm runner with

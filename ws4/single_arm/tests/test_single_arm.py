@@ -120,3 +120,18 @@ def test_direct_bus_path_caps_goals_like_lerobot_and_survives_a_bus_error():
     except ConnectionError:
         raised = True
     assert raised  # the runner itself propagates; run_attempt turns it into a freeze (end_reason "stop (error ...)")
+
+
+def test_a_blocked_joint_freezes_the_attempt(tmp_path, monkeypatch):
+    real_send = rsa.FakeSO101.send_action
+
+    def blocked_elbow(self, action):  # the elbow never moves, like a joint pressed against the table
+        action = dict(action)
+        action["elbow_flex.pos"] = float(self.q[2])
+        return real_send(self, action)
+
+    monkeypatch.setattr(rsa.FakeSO101, "send_action", blocked_elbow)
+    (meta,) = _run(tmp_path, monkeypatch, "--fake-velocity", "0", "0", "-1", "0", "0", "0", "--fake-gripper", "-1",
+                   "--seconds", "3")  # fmt: skip
+    assert meta["end_reason"].startswith("stop (stall: elbow_flex")
+    assert meta["ticks"] < 30

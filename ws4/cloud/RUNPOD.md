@@ -102,12 +102,34 @@ own volume, so the 4500 pod above stays free for the XLeRobot work.
 |---|---|
 | Network volume | `so101-inference`, id `u1ffu7k5f9`, 100 GB, EU-CZ-1 (about $0.23 per day until deleted) |
 | Pod | `so101-flux-serve`, id `k4p4f8hgs0kroz`; 1x RTX PRO 6000 96 GB, EU-CZ-1, $2.49/h |
-| SSH | `ssh root@213.192.6.98 -p 40093 -i ~/.ssh/id_ed25519_osrdvs` (since 14:07 UTC; the port changes on every container restart) |
-| Tunnel for the robot | `ssh -N -L 8765:127.0.0.1:8765 root@213.192.6.98 -p 40093`, then `RemoteBackend("http://127.0.0.1:8765", "so101", token=...)` |
-| Token | `/workspace/flux_token` on the pod (root only); read it over SSH into an env var, never into argv |
-| Serving | package `so101` = `black-forest-labs/flux-3-action-so101`, `guidance_scale=1.0`, `guidance_scale_action=1.0`, `compile_model=true`, text encoder on the GPU |
-| Prompts | 9 pre-encoded from `/workspace/prompts.txt`: "stack the cups", "put the left cup into the right cup", "stack the white paper cups", then S1 to S6 |
-| Watchdog | `idle_stop.sh 20`, armed 14:15:50 UTC |
+| SSH | `ssh root@213.192.6.98 -p 40082 -i ~/.ssh/id_ed25519_osrdvs` (since the 14:38 UTC start; it was 40093 before). The port changes on every start: read it from the MCP `get-pod` |
+| Tunnel for the robot | `ssh -N -L 8765:127.0.0.1:8765 -L 8766:127.0.0.1:8766 root@213.192.6.98 -p 40082`, then `RemoteBackend("http://127.0.0.1:8765", "so101", token=...)` or `RemoteBackend("http://127.0.0.1:8766", "so101r", token=...)` |
+| Token | `/workspace/flux_token` on the pod (root only), shared by both servers; read it over SSH into an env var, never into argv |
+| Server 1, port 8765 | package `so101` = `black-forest-labs/flux-3-action-so101`, `guidance_scale=1.0`, `guidance_scale_action=1.0`, `compile_model=true`, text encoder on the GPU (started by `runpod_serve.sh`) |
+| Server 2, port 8766 | package `so101r` = `/workspace/packages/so101r_red_follower` (from 15:27 UTC), same overrides. Released SO-101 weights at revision `0713a7af6768562e618e81d534372c6795d41b2e` with history quantiles from the red_follower hand-guided demos (`ws4/single_arm/handguided/stats_red_follower.json`, state and action keys) |
+| Prompts | so101: 9 pre-encoded from `/workspace/prompts.txt`: "stack the cups", "put the left cup into the right cup", "stack the white paper cups", then S1 to S6. so101r: the first two, from `/workspace/prompts_so101r.txt` |
+| Watchdog | `IDLE_MIN=45` for the robot attempt sessions (20 min was too short for the robot-side setup) |
+| Restart | MCP `pod-action start`, then, with the new port: `ssh -n root@213.192.6.98 -p <port> 'IDLE_MIN=45 EXTRA_ARGS="--override guidance_scale=1.0 --override guidance_scale_action=1.0 --override compile_model=true" nohup bash /workspace/liminal/ws4/cloud/runpod_serve.sh > /workspace/logs/serve.out 2>&1 < /dev/null &'`. Then start server 2 by hand (below) |
+
+Server 2 by hand, on the pod: `source /etc/rp_environment; source $WS4_ROOT/lerobot/.venv/bin/activate; cd $LIMINAL/ws4; export PYTHONPATH=$PWD`, then
+
+```bash
+nohup python -m flux.remote --host 127.0.0.1 --port 8766 --token-file /workspace/flux_token --package so101r=/workspace/packages/so101r_red_follower --override guidance_scale=1.0 --override guidance_scale_action=1.0 --override compile_model=true >> /workspace/logs/flux_remote_so101r.log 2>&1 < /dev/null &
+```
+```bash
+python cloud/warm_prompts.py --url http://127.0.0.1:8766 --prompts-file /workspace/prompts_so101r.txt --token-file /workspace/flux_token
+```
+
+- so101r runs as a second server because `flux.remote` loads its packages only at start. Restarting server 1
+  with both packages would have cut so101 off for 3 to 4 min during the A0 attempts. The cost is a second Qwen
+  copy: GPU memory went from 27 GB to 54 GB of 96 GB.
+- The package was built offline on the pod (`HF_HUB_OFFLINE=1`) with
+  `flux.package_tools.renormalize_package("black-forest-labs/flux-3-action-so101", "/workspace/packages/so101r_red_follower", stats)`.
+  The weights are a symlink into the HF cache, and `normalization_source.json` records the snapshot path.
+  Read back from the three saved history-normalizer files, the quantiles match the input exactly.
+- so101r from the laptop ("stack the cups", 5 timed runs): 0.503 s median round trip (max 0.580 s), server
+  0.340 s. Its server was serving by 15:27:34, at most about 3 min after the 15:24 build; the first prompt took
+  12.6 s, including compile.
 
 Measured on the pod (UTC):
 - Bootstrap on the fresh volume, weights included, finished at 14:15.
@@ -123,6 +145,24 @@ Measured on the pod (UTC):
   4500 pod at default guidance.
 - Guidance 1.0 still needs the motion-quality check on the robot against guidance 3 (`flux/GPU_RUNBOOK.md`
   §2). To serve guidance 3 instead, restart the server without the two guidance overrides.
+- A prompt outside `/workspace/prompts.txt` costs little here: with Qwen on the GPU, a first-time prompt took
+  0.36 to 0.48 s for the whole call, compared with about 0.33 s for a cached one.
+
+Run log (UTC; the pod costs $2.49/h while running, and the volume bills about $0.23/day all the time):
+
+| Run | Started | Server READY | Stopped | GPU time | Cost |
+|---|---|---|---|---|---|
+| 1 (create, bootstrap, serve, latency test) | 14:07:28 | 14:18:19 | 14:35:51 by `idle_stop.sh` (20 min idle) | 28.4 min | about $1.18 |
+| 2 (restart for so101-zeroshot, Oscar approved in chat) | 14:38:27 | 14:44:18 | running, `IDLE_MIN=45` | | |
+
+- The 20 min watchdog stopped the pod as designed: `pod "k4p4f8hgs0kroz" stopped` (with a harmless
+  "config file not found" warning from runpodctl).
+- Run 2 timing: the server started at 14:41:10 and was READY 3.1 min later; the first prompt took 34.1 s,
+  including compile.
+- Run 2 end to end from the laptop ("stack the cups", 5 timed runs): 0.555 s median round trip (max 0.595 s),
+  server 0.340 s.
+- Between a start and `runpod_serve.sh` the pod has no watchdog, so run the server right after the start.
+  For run 2 the gap was 2.7 min (about $0.11) while waiting for Oscar's OK.
 
 ## Costs and receipts (event budget about USD 100, any provider; keep every invoice)
 
@@ -133,8 +173,11 @@ Measured on the pod (UTC):
 | Pod `so101-flux-serve` (created as `ws4-flux-serve-6000`) | `k4p4f8hgs0kroz` | EU-CZ-1, RTX PRO 6000 96 GB | $2.49/h | 2026-10-17 14:07 | single-arm SO-101 serving (zero-shot "stack the cups", teammate single-arm runs) |
 | Volume `so101-inference` (created as `ws4-serve-cz`) | `u1ffu7k5f9` | EU-CZ-1, 100 GB | about $0.23/day | 2026-10-17 14:07 | weights + envs for the single-arm pod |
 
-- Spend reported by RunPod's billing API at 14:10 UTC (it lags about 1 h): $1.47.
-- Both pods run `idle_stop.sh` (20 min of idle GPU, then stop). A stopped pod bills only its volume.
+- Spend reported by RunPod's billing API at 14:10 UTC (it lags about 1 h): $1.47. At 14:47 UTC: $1.89 for
+  2026-10-17 (pods $1.86, volumes $0.03), still without most of the single-arm pod's first run.
+- Both pods run `idle_stop.sh`, which stops the pod after a stretch of idle GPU: 20 min by default, 45 min on
+  the single-arm pod for robot sessions. A stopped pod bills only its volume. Per-run costs for the single-arm
+  pod are in its run log above.
 - **Receipts:** RunPod bills prepaid credits, so the invoices are the credit purchases. Download them from the
   console, Billing → Recent transactions → Receipt / Invoice (Oscar's account; the agent does not download or
   pay anything). Usage per day per resource is in Billing → Billing explorer, or the MCP `list-billing`.

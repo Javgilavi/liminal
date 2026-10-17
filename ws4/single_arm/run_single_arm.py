@@ -59,11 +59,13 @@ from flux.contract import (  # noqa: E402
 from flux.dual_arm_runner import ArmCalibration, DualArmRunner, per_arm_target  # noqa: E402
 from flux.history import HistoryBuffer  # noqa: E402
 from flux.safety import DEFAULT_MAX_STEP, SafetyConfig, SafetyGuard, limits_from_lerobot_calibration  # noqa: E402
+from keepout import ZONES, KeepOut  # noqa: E402
 
 CHECKPOINT = "black-forest-labs/flux-3-action-so101@0713a7a"  # weights identical to c9e13b2 (flux/checkpoint_facts.md)
 STOP_FILE = HERE / "STOP"
 KEY_FILE = HERE / "KEY"  # one character, read once: lets a headless operator answer the same prompts as the keyboard
 RUNS = HERE / "runs"
+REST_FILE = HERE / "calibration" / "red_follower_rest.json"  # folded pose Oscar set at the first A0 session
 PHANTOM_STATE = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 50.0])  # the unused slot; constant, never sent
 # Steps of "stack the cups" for the trial log: grasp one cup, lift it clear, release it inside the other.
 STEPS = ("grasp a cup", "lift it clear of the table", "release it inside the other cup")
@@ -113,6 +115,28 @@ class SingleArmRobot:
         wrist = np.asarray(raw["wrist"])
         scene = np.asarray(raw["scene"]) if "scene" in raw else np.zeros_like(wrist)  # --scene-cam blank
         return {OBS_STATE: state, IMG_HEAD: scene, WRIST_KEY[self.slot]: wrist}
+
+    def min_voltage(self) -> float | None:
+        """Lowest servo supply voltage (V), sampled about once a second to see whether the brick sags."""
+        if not self.direct:
+            return None
+        try:
+            return min(self.robot.bus.sync_read("Present_Voltage", normalize=False, num_retry=1).values()) / 10
+        except Exception:  # never let a diagnostic read end an attempt
+            return None
+
+    def health(self) -> dict[str, list[int]] | None:
+        """Per-joint load (0.1 % of max torque, sign = direction), status error bits and temperature (C)."""
+        if not self.direct:
+            return None
+        out = {}
+        try:
+            for reg, key in (("Present_Load", "load"), ("Status", "status"), ("Present_Temperature", "temp_c")):
+                values = self.robot.bus.sync_read(reg, normalize=False, num_retry=1)
+                out[key] = [int(values[j]) for j in ARM_JOINTS]
+        except Exception:
+            return None
+        return out
 
     def send_action(self, action: np.ndarray) -> None:
         arm = np.asarray(action, dtype=np.float64)[arm_slice(self.slot)]
@@ -210,6 +234,11 @@ def connect_so101(args: argparse.Namespace) -> Any:
             bus.write("Max_Torque_Limit", motor, 500)
             bus.write("Protection_Current", motor, 250)
             bus.write("Overload_Torque", motor, 25)
+    for motor in bus.motors:
+        if motor != "gripper":
+            # RAM register (resets at power-off): caps the force of a collision with the table or a cup. The shoulder
+            # needed 6 to 9 % to lift the arm slowly at 12 V (measured 2026-10-17), so 60 % leaves ample margin.
+            bus.write("Torque_Limit", motor, int(args.torque_limit * 10), num_retry=3)
     if not args.observe:
         # On this arm a Goal_Position write already switches torque on (observed 2026-10-17), so the goal is set
         # to the measured position first: the arm then holds exactly where it rests.
@@ -228,6 +257,35 @@ def disconnect_so101(robot: Any) -> None:
         camera.disconnect()
     robot.bus.disable_torque(num_retry=5)
     robot.bus.disconnect(disable_torque=False)
+
+
+class KeepOutGuard(SafetyGuard):
+    """``SafetyGuard`` plus the FK keep-out (``keepout.py``): a target that goes deeper into the table, base or
+    fold-back zone than the measured pose is replaced by the measured pose (arm joints; the gripper keeps its
+    command). It is reported as a clamp, so the runner records what was really commanded in the model's history."""
+
+    def __init__(self, config: SafetyConfig, keepout: KeepOut, slot: str, measured):
+        super().__init__(config)
+        self.keepout, self.slot, self.measured = keepout, slot, measured
+        self.counts = dict.fromkeys(ZONES, 0)
+        self.last_zone = ""
+
+    def filter(self, command: np.ndarray, previous: np.ndarray):
+        out, report = super().filter(command, previous)
+        self.last_zone = ""
+        q = self.measured()
+        if q is None:
+            return out, report
+        s = arm_slice(self.slot)
+        refuse, zone = self.keepout.refuse(out[s], q)
+        if refuse:
+            out = out.copy()
+            out[s.start : s.start + ARM_DIM - 1] = q[: ARM_DIM - 1]
+            report.clamped = np.asarray(report.clamped).copy()
+            report.clamped[s.start : s.start + ARM_DIM - 1] = True
+            self.counts[zone] += 1
+            self.last_zone = zone
+        return out, report
 
 
 # ---------------------------------------------------------------------- operator keys
@@ -320,6 +378,7 @@ class Recorder:
                 command=np.array([r["command"] for r in self.rows]),
                 guard=np.array([r["guard"] for r in self.rows]),
                 status=np.array([r["status"] for r in self.rows]),
+                keepout=np.array([r.get("keepout", "") for r in self.rows]),
             )
         (self.out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))
 
@@ -328,7 +387,8 @@ class Recorder:
 def read_token(args: argparse.Namespace) -> str | None:
     """Token from a command's stdout (e.g. ``ssh pod cat /workspace/flux_token``), never printed or put in argv."""
     if args.token_cmd:
-        out = subprocess.run(shlex.split(os.path.expanduser(args.token_cmd)), capture_output=True, text=True)
+        cmd = shlex.split(os.path.expanduser(args.token_cmd))
+        out = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
         if out.returncode != 0 or not out.stdout.strip():
             raise SystemExit(f"--token-cmd failed (exit {out.returncode}): {out.stderr.strip()[:200]}")
         return out.stdout.strip()
@@ -370,17 +430,33 @@ def move_to(robot: SingleArmRobot, goal: np.ndarray, guard_cfg: SafetyConfig, de
     """Slow joint-space move to ``goal`` (robot units) through the same limits; False if a stop key interrupts."""
     lo, hi = guard_cfg.lower[arm_slice(robot.slot)], guard_cfg.upper[arm_slice(robot.slot)]
     goal = np.clip(goal, lo, hi)
-    cmd = robot.last_sent if robot.last_sent is not None else robot.joints()
+    # Start from the measured pose: after a stall the last command can be far from the arm (seen 2026-10-17).
+    cmd = robot.joints()
     step = np.full(ARM_DIM, deg_per_tick)
     step[-1] = 2 * deg_per_tick
+    deadline = None
     while True:
         if keys.poll() in STOP_KEYS:
             return False
         cmd = cmd + np.clip(goal - cmd, -step, step)
         robot.send_joints(cmd, measure=True)
         if np.allclose(cmd, goal):
-            return True
+            deadline = deadline or time.monotonic() + 5.0  # let the servos settle on the final goal
+            err = np.abs(robot.joints() - goal)[: ARM_DIM - 1]
+            if err.max() < 4.0:
+                return True
+            if time.monotonic() > deadline:
+                print(f"rest not reached, error per joint {np.round(err, 1)}", flush=True)
+                return False
         time.sleep(1 / 30)
+
+
+def hold_here(robot: SingleArmRobot) -> None:
+    """Freeze at the MEASURED pose: a blocked joint stops pushing toward a goal it cannot reach."""
+    try:
+        robot.send_joints(robot.joints(), measure=True)
+    except Exception as exc:  # the bus may be the reason we stopped
+        print(f"could not set the hold pose: {exc}", flush=True)
 
 
 def run_attempt(
@@ -398,6 +474,10 @@ def run_attempt(
     server_latencies: list[float] = []
     n_chunks0 = runner._targets[target].n_chunks  # noqa: SLF001
     guard_ticks, capped0 = 0, robot.capped
+    keep_run, keep0 = 0, dict(getattr(runner.guard, "counts", {}))
+    stall = np.zeros(ARM_DIM - 1, dtype=int)
+    volts: list[float] = []
+    healths: list[dict | None] = []
     print(f"attempt running: {task!r} for up to {args.seconds:.0f} s. space/q/Enter = STOP, s = success, f = fail",
           flush=True)  # fmt: skip
     while time.monotonic() - t0 < args.seconds:
@@ -405,15 +485,17 @@ def run_attempt(
         if key in STOP_KEYS:
             runner.guard.estop()
             end_reason = f"stop ({key!r})"
+            hold_here(robot)
             break
         if key in ("s", "f"):
             end_reason = {"s": "operator: success", "f": "operator: fail"}[key]
             break
         try:
             report = runner.step()
-        except Exception as exc:  # bus or server failure after retries: freeze on the last command, do not crash
+        except Exception as exc:  # bus or server failure after retries: freeze, do not crash
             runner.guard.estop()
             end_reason = f"stop (error {type(exc).__name__}: {str(exc)[:120]})"
+            hold_here(robot)
             break
         ts = runner._targets[target]  # noqa: SLF001
         if report.status.get(target) == "replanned" and ts.last_response is not None:
@@ -421,10 +503,31 @@ def run_attempt(
             server_latencies.append(ts.last_response.info.get("server_latency_s") or float("nan"))
         guard_ticks += report.guard_intervened
         q = np.array([float(robot.last_raw[f"{j}.pos"]) for j in ARM_JOINTS])
+        zone = getattr(runner.guard, "last_zone", "")
+        keep_run = keep_run + 1 if zone else 0
+        if keep_run >= args.keepout_ticks:
+            runner.guard.estop()
+            end_reason = f"stop (keep-out: {zone} refused for {keep_run} ticks)"
+            hold_here(robot)
+            break
+        # Stall check on the arm joints (not the gripper, which legitimately squeezes a cup): a joint that lags its
+        # command by more than --stall-deg for --stall-ticks is blocked (table, cup, its own base). The elbow was
+        # damaged on 2026-10-17 after attempts where the wrist folded into the robot's base.
+        lag = np.abs(report.command[arm_slice(target)] - q)[: ARM_DIM - 1]
+        stall = np.where(lag > args.stall_deg, stall + 1, 0)
+        if (stall >= args.stall_ticks).any():
+            j = int(np.argmax(stall))
+            runner.guard.estop()
+            end_reason = f"stop (stall: {ARM_JOINTS[j]} lagged {lag[j]:.0f} deg for {stall[j]} ticks)"
+            hold_here(robot)
+            break
         rec.rows.append({"t": time.monotonic() - t0, "state": q, "command": report.command[arm_slice(target)],
-                         "guard": report.guard_intervened, "status": report.status.get(target, "")})  # fmt: skip
+                         "guard": report.guard_intervened, "status": report.status.get(target, ""),
+                         "keepout": zone})  # fmt: skip
         rec.frame(robot.last_raw, f"{task} | {report.status.get(target, '')} | t={time.monotonic() - t0:4.1f}s")
         if report.tick % 30 == 0:
+            volts.append(robot.min_voltage())
+            healths.append(robot.health())
             print(f"t={time.monotonic() - t0:5.1f}s {report.status} q={np.round(q, 1)} guard={guard_ticks}",
                   flush=True)  # fmt: skip
         next_tick += period
@@ -441,6 +544,9 @@ def run_attempt(
         "chunks": runner._targets[target].n_chunks - n_chunks0,  # noqa: SLF001
         "chunk_round_trip_s": chunk_latencies, "server_latency_s": server_latencies, "guard_ticks": guard_ticks,
         "lerobot_capped_ticks": robot.capped - capped0, "ticks": len(rec.rows),
+        "min_supply_v_per_s": volts, "min_supply_v": min((v for v in volts if v), default=None),
+        "health_per_s": healths,
+        "keepout_refusals": {z: n - keep0.get(z, 0) for z, n in getattr(runner.guard, "counts", {}).items()},
         "args": {k: v for k, v in vars(args).items() if k != "token_cmd"},
         "checkpoint": CHECKPOINT if args.backend == "remote" else f"{args.backend} backend",
     }  # fmt: skip
@@ -466,11 +572,12 @@ def finish_attempt(args: argparse.Namespace, robot: SingleArmRobot, keys: Keys, 
 def ask_result(keys: Keys, meta: dict[str, Any]) -> dict[str, Any] | None:
     if not sys.stdin.isatty():
         return None
-    key = keys.wait("0123n", f"steps done 0..{len(STEPS)} ({'; '.join(STEPS)}), n = do not log this attempt")
+    key = keys.wait("0123n", f"steps done 0..{len(STEPS)} ({'; '.join(STEPS)}). Every real attempt counts, even "
+                    "when you stopped it; n = do not log (false start only)")
     if key not in "0123":
         return None
     steps = int(key)
-    key = keys.wait("0123", "human interventions during the attempt (0..3)")
+    key = keys.wait("0123", "human interventions during the attempt (0..3; your stop key counts as 1)")
     interventions = int(key) if key in "0123" else 0
     return {"steps_done": steps, "interventions": interventions}
 
@@ -485,8 +592,11 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
         steps_total=len(STEPS), steps_done=result["steps_done"],
         success=result["steps_done"] == len(STEPS) and result["interventions"] == 0,
         interventions=result["interventions"], layout=args.layout, failure=failure,
-        notes=f"prompt={task!r}; guidance=server default ({args.guidance_note}); end={meta['end_reason']}; "
-        f"chunks={meta['chunks']}; guard_ticks={meta['guard_ticks']}",
+        notes=f"prompt={task!r}; guidance {args.guidance_note}; safety: {args.max_step} deg/tick guard, LeRobot cap "
+        f"{args.max_relative_target} deg, torque limit {args.torque_limit:.0f}%; "
+        f"min supply {meta.get('min_supply_v')} V; keep-out refusals {meta.get('keepout_refusals')}; "
+        f"end={meta['end_reason']}; chunks={meta['chunks']}; "
+        f"guard_ticks={meta['guard_ticks']}",
         video=str((out / "video.mp4").relative_to(WS4.parent)) if (out / "video.mp4").exists() else "",
         operator=args.operator,
     )  # fmt: skip
@@ -535,9 +645,15 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--attempts", type=int, default=1)
     p.add_argument("--max-step", type=float, default=2.0, help="guard: deg per tick on joints (60 deg/s at 30 Hz)")
     p.add_argument("--max-gripper-step", type=float, default=5.0, help="guard: percent per tick on the gripper")
-    p.add_argument("--max-relative-target", type=float, default=10.0, help="LeRobot cap vs measured pos, deg")
+    p.add_argument("--max-relative-target", type=float, default=20.0,
+                   help="LeRobot cap vs measured pos, deg; 5 starved the shoulder of torque at P=16")  # fmt: skip
     p.add_argument("--limit-margin", type=float, default=5.0, help="deg inside the calibrated range")
     p.add_argument("--return-speed", type=float, default=1.0, help="deg per tick when returning to rest")
+    p.add_argument("--torque-limit", type=float, default=60.0, help="percent of max servo torque, arm joints")
+    p.add_argument("--stall-deg", type=float, default=8.0, help="arm joint lag behind command = stall, deg")
+    p.add_argument("--keepout-ticks", type=int, default=45, help="consecutive keep-out refusals that end an attempt")
+    p.add_argument("--no-keepout", action="store_true", help="disable the FK keep-out (fake-arm tests only)")
+    p.add_argument("--stall-ticks", type=int, default=15, help="consecutive stalled ticks before freezing (15 = 0.5 s)")
     p.add_argument("--offset", type=float, nargs=ARM_DIM, default=None, help="model = robot + offset (A0m tests)")
     p.add_argument("--variant", default="A0")
     p.add_argument("--layout", default="")
@@ -546,8 +662,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--no-log", action="store_true", help="never write to ws4/eval/trials.jsonl")
     p.add_argument("--no-video", action="store_true")
     p.add_argument("--yes", action="store_true", help="start attempts without waiting for Enter")
+    p.add_argument("--home", action="store_true", help="only move slowly to the saved rest pose, then torque off")
     args = p.parse_args(argv)
     tasks = args.task or ["stack the cups"]
+    import logging
+
+    logging.getLogger().setLevel(logging.ERROR)  # LeRobot logs every capped goal at WARNING, 30 times a second
     if args.scene_cam == "blank" and args.backend == "remote" and not args.no_log:
         raise SystemExit("a blank scene camera is out of distribution: such attempts must not be logged (--no-log)")
 
@@ -569,7 +689,25 @@ def main(argv: list[str] | None = None) -> None:
     calibration = ArmCalibration(offset=np.array(args.offset)) if args.offset else ArmCalibration()
     target = per_arm_target(args.slot, "policy", scene=CameraView(IMG_HEAD), calibration=calibration)
     backend = build_backend(args)
-    runner = DualArmRunner(robot, [target], {"policy": backend}, SafetyGuard(guard_cfg), async_inference=True)
+    if args.no_keepout and args.robot == "so101" and not args.observe:
+        raise SystemExit("the FK keep-out stays on for the real arm")
+    keepout = KeepOut.load()
+    if args.robot == "so101" and not keepout.calibrated:
+        print("NOTE: table height not calibrated (keepout.py --touch); using the UNVERIFIED default", flush=True)
+    guard = SafetyGuard(guard_cfg) if args.no_keepout else KeepOutGuard(
+        guard_cfg, keepout, args.slot, lambda: robot.last_q)
+    runner = DualArmRunner(robot, [target], {"policy": backend}, guard, async_inference=True)
+    if args.home:
+        home = np.array(json.loads(REST_FILE.read_text())["rest"])
+        print(f"moving slowly from {np.round(rest, 1)} to the saved rest {np.round(home, 1)}", flush=True)
+        guard_cfg = build_guard(args, args.slot, calib_path, home)
+        with Keys() as keys:
+            ok = move_to(robot, home, guard_cfg, args.return_speed, keys)
+        print("at rest" if ok else "NOT at rest", flush=True)
+        if ok and args.robot == "so101":
+            disconnect_so101(so101)
+            print("torque off")
+        return
     print(f"rest pose {np.round(rest, 1)}", flush=True)
     session = RUNS / datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
@@ -585,13 +723,14 @@ def main(argv: list[str] | None = None) -> None:
                         break
                 out = session / f"attempt{i + 1:02d}"
                 meta = run_attempt(args, runner, robot, keys, task, out)
-                finish_attempt(args, robot, keys, guard_cfg, rest, meta)
+                # Score the attempt while the arm still holds where it ended, so a quit ("x") never loses it.
                 result = None if args.no_log or args.backend != "remote" else ask_result(keys, meta)
                 if result is not None:
                     meta["result"] = result
                     (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))
                     log_trial(args, task, meta, result, out)
                 print(f"saved {out}", flush=True)
+                finish_attempt(args, robot, keys, guard_cfg, rest, meta)
     except KeyboardInterrupt:
         print("quit requested", flush=True)
     finally:
