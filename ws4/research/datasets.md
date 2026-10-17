@@ -80,6 +80,13 @@ Long notes: `ws4/data/notes/human_handheld_datasets.md` (UMI, EgoDex, HOT3D and 
    - `siyulw2025`, `yihao-brain-bot`, `nbirukov`, `saivishwak/desk-marker` and others are ±100. Converting
      those needs the recorder's calibration spans: about ±3% for SO-101 joints, and unknown for XLeRobot
      wrist_roll, which is calibrated by a manual sweep.
+   - **The package's fixed normalization may be in the old SO-100 convention.** Per ws4-ik, flux-action issue #2
+     (open) reports that the released SO-101 checkpoint's stats come from `VoicAndrei/so100_kitchen`. Its
+     corpus entry confirms the old convention (state shoulder_lift q01..q99 = 84.8..184.2, elbow
+     61.4..178.9). The gated `dataset_statistics.json` itself is UNVERIFIED here.
+     Modern-degree data (ours and every public pick) would then sit off-centre in the package's quantiles. So
+     train the LoRAs on a package re-normalized with our own quantiles (`flux/GPU_RUNBOOK.md` §4, option A1)
+     rather than the stock one, and never mix old-convention datasets in.
 
 ## 2. Contracts
 
@@ -259,8 +266,16 @@ at 640x480 (LeRobot main's default codec, UNVERIFIED on the recording PC) to mer
   - Measured 1-second motion std (offset +30): UMI axibo 2 to 8 cm, roco 1 to 9 cm, `zonglin11` FK 2 to 3.5 cm.
     The scales are compatible, but human-held grippers move faster: consider time-scaling or per-embodiment
     z-scores (which EE50 does anyway).
-- **Robot joints to EE50** (`--preset so101_joints`): FK through ws4-ik `Station`. Valid only for degree
-  datasets, and only if the LeRobot calibration midpoint equals the URDF zero (open question to ws4-ik, sent).
+- **Robot joints to EE50** (`--preset so101_joints`): FK through ws4-ik `Station`. Valid for modern-degree
+  datasets. LeRobot's zero is the calibration midpoint, which is the zero of the SO-101 "new calib" URDF by
+  design (SO-ARM100@a758567c `Simulation/SO101/README.md:15`; LeRobot's own FK feeds `deg2rad(deg)` with no
+  offset), so no offset is needed (confirmed by ws4-ik).
+  - Expect a few degrees of per-robot error from asymmetric stops.
+  - Old-convention data (joints not centred on 0, e.g. shoulder_lift up to about 184) needs a rig-specific
+    adapter first.
+  - ws4-ik checked `zonglin11` on our station geometry: IK round trip exact, no collisions. But its grasps
+    happen 9 to 14 cm above our table plane (its work surface is near arm-base height, ours is 8.5 cm below
+    the bases). Its joint-space demos do not land on our table; relative EE motions are unaffected.
 
 ## 8. How much of our own data, and the time split (judging rule: "justify your time split")
 

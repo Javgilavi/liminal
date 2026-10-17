@@ -26,11 +26,19 @@ Owner: ws4-imagine. Code: `ws4/imagine/`. GPU steps: `ws4/imagine/GPU_RUNBOOK.md
   (`ws4/imagine/tests/test_imagine_lerobot_real.py`, 5 tests, run in a LeRobot-main venv.)
 - 157 CPU tests on this laptop's default env (the real-LeRobot file skips there because LeRobot 0.5.1 has no
   flux3). `ruff` is clean.
+- The frame timing assumptions hold against the **released** `flux-3-action-so101` config (repo sha
+  `0713a7af`), which I parsed with LeRobot's real `Flux3Config` (section 1.7). It gives 11 predicted latent
+  frames on an 8 x 16 grid, 41 decoded frames at offsets +2 .. +42, a 256 x 512 canvas, and 2 snapshots of 8
+  observations.
+- The released video VAE (`flux-3-action-base/video_vae.safetensors`, header only) matches LeRobot's VAE module
+  exactly: 547 tensors, no name or shape differences. It has 96 latent channels, /32 spatial, and 2 temporal
+  merge plus 2 temporal expansion layers (section 1.7).
 
 **Not verified (needs the cloud GPUs, see the runbook)**
 - Real-weight frame quality, decode latency and VRAM on RTX PRO 6000 (sm_120, NATTEN `cutlass-fna`
   expected).
-- That the trained VAE decoder follows the slot timing derived from its code (`vaecheck` measures it).
+- That the trained VAE decoder reproduces each slot's frame in order (the architecture matches; `vaecheck`
+  measures the learned behaviour).
 - The flux-action standalone path (same hook point, not run), DROID frame-conditioning on real code, and
   the gd/sd/fp8 variants.
 - Claude judge latency and usefulness.
@@ -179,6 +187,65 @@ should pick `cutlass-fna`. The NATTEN cu128 wheels include sm_120 (sibling notes
   actually acted on, which is also the honest story for judges.
 - Higher video CFG for offline, visualization-only imagination (e.g. counterfactuals in the video) may sharpen
   frames: **UNVERIFIED**.
+
+### 1.7 Checked against the released checkpoint config (2026-10-17)
+
+I downloaded only `config.json`, `policy_preprocessor.json`, `policy_postprocessor.json` and `lora.json` of
+`black-forest-labs/flux-3-action-so101` (repo sha `0713a7af`), no weights. The config is identical to the
+schema the real-code tests use (flux-action `tests/fixtures/so101_history/config.json`), apart from the pinned
+encoder ids.
+
+| Setting | Released value | What the Imaginer derives | Match |
+|---|---|---|---|
+| `conditioning`, `history_snapshots`, `n_obs_steps` | history, 2, 8 | 2 conditioning snapshots, 128 tokens each | yes |
+| `condition_on_past_actions`, `action_representation`, `delta_absolute_dims` | true, delta, [-1] | (does not touch actions; postprocessor integrates) | n/a |
+| `chunk_size`, `n_action_steps`, `fps` | 42, 32, 30.0 | `latent_frames(42)` = 11 predicted latents | yes |
+| `canvas_hw`, `camera_layout`, `camera_keys` | [256, 512], side_by_side, [scene, wrist] | latent grid 8 x 16, decoded 256 x 512, scene left | yes |
+| decoded frames and offsets | n/a | 41 frames at +2 .. +42; offset +32 is index 30 | n/a |
+| `video_position_fps` | 24.0 | RoPE positions only: future latent i at id `(2 + i) * 4 / 24 s` (33, 50, .. 200); the actions sit at k / 30 s | yes |
+| `sampler`, `num_inference_steps`, `sampler_shift`, `guidance_scale`, `guidance_scale_action` | euler, 4, 6.93, 3.0, null (= 3.0) | CFG on both streams: two DiT passes per step | yes |
+| `inference_seed` | 42 | best-of-N candidates use seeds 42, 43, .. (candidate 0 = stock) | yes |
+| `video_loss_weight` | 1.0 | the video stream was trained, so imagination is meaningful | yes |
+| `video_vae_id`, `text_encoder_id` | `black-forest-labs/flux-3-action-base:...@62878e29` | the same frozen VAE the policy uses decodes the frames | n/a |
+
+Method: `PreTrainedConfig.from_pretrained(<downloaded dir>)` in the LeRobot `146d847` venv returns a
+`Flux3Config`. `packing.build_packer(cfg).predicted_latent_frames(cfg)` returns 11, and
+`VideoSpec.from_config(cfg)` reproduces the offsets above.
+
+The pre/post-processor JSONs confirm the processor chain the wrapper assumes:
+- **Preprocessor:** rename, batch, device, history normalizer (`n_obs_steps` 8, `chunk_size` 42, past
+  actions), action-target normalizer, camera resize (a no-op for side_by_side).
+- **Postprocessor:** history unnormalizer (delta integration), then CPU.
+
+**VAE (checked 2026-10-17, no weights downloaded).** `flux-3-action-base` is accessible now.
+
+The repo has no VAE config file:
+- At the revision the SO-101 config pins (`62878e29`, 2026-09-22) it holds only `flux-3-action-base.safetensors`,
+  `video_vae.safetensors` and `text_encoder/`.
+- Main (`99bc185b`) adds a 333-byte `config.json`. It is a manifest only: `type flux3_action_base`, weight
+  file names, 457 tensors, bf16, streams video/text/action.
+- `video_vae.safetensors` is byte-identical in both revisions (2,508,132,617 bytes, LFS sha256 `db1c3211...`).
+
+So the VAE architecture lives in code, LeRobot's `ViTNormInferenceParams` (LR `video_vae.py:79-103`). I checked
+it against the checkpoint itself by reading only the safetensors header (`HfApi.parse_safetensors_file_metadata`,
+a range request).
+
+| Check | Result |
+|---|---|
+| Tensors in the checkpoint vs `ViTNormInference(ViTNormInferenceParams())` built on the meta device (LeRobot `146d847`) | 547 vs 547; **no missing, no extra, no shape mismatch** |
+| dtype, parameter count | 546 bf16 + 1 bool (`z_normalizer.initialized`); 1.254 B parameters |
+| Latent channels | `decoder.proj_in` [2048, 96], `encoder.proj` [192, 2048] (mean + logvar of 96), `z_normalizer.running_mean/var` [96]: **96 channels** |
+| Spatial patch | `decoder.proj_out` [48, 256] = 1 x 4 x 4 x 3; with 3 PatchMerging stages: **/32 spatial** |
+| Temporal layers | exactly **2 `TemporalMerging`** in the encoder (features 7 and 10) and **2 `TemporalExpansion`** in the decoder (features 1 and 5): **/4 temporal**, the structure `encoder_slots` / `decoded_slots` mirror |
+| Causality | `enc_causal=True`, `dec_causal=False` (code defaults, consistent with the module the weights load into) |
+
+The duplicate-first-frame rule for odd lengths (`TemporalMerging(dim, dim)` uses the default `zero_pad=False`,
+`video_vae.py:601, 212-215`) and the drop-first rule of `TemporalExpansion` are code, not weights, so this
+header check confirms the structure the frame timing rests on. `load_state_dict` is strict
+(`video_vae.py:1022, 1026`), so a mismatched file would fail to load rather than decode wrong.
+
+One check remains, on the GPU box: `vaecheck` (runbook step 3). It confirms that the trained decoder reproduces
+each slot's frame in order (decoded frame d shows control step d + 2 for the 42-frame SO-101 clip).
 
 ## 2. Uses, ranked for Sunday
 
