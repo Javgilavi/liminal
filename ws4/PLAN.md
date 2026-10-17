@@ -101,6 +101,10 @@ completed task steps recorded, plus where it failed and whether a human had to i
     Run the zero-shot attempts at both settings and log them as separate variants before standardising on 1.0.
   - An RTX PRO 6000 pod for the Sunday demo window would roughly halve the server time again (estimate) and fits
     two model instances for truly parallel arms. Two instances do not fit safely on this 32 GB card.
+  - **Measured: both arms on one shared model (ws4-orchestrator, default guidance).** The arms take turns and
+    never move together: 30% and 28% motion each, 1.76 s round trip per chunk, and the synchronous loop stalls up
+    to 3.84 s. So on this pod the demo should keep one arm acting while the other holds, which is the per-arm
+    plan anyway. Real simultaneous bimanual motion needs two model instances (an RTX PRO 6000 pod, or two pods).
 
 ### Training box GPUs (3x RTX PRO 6000, 96 GB)
 
