@@ -5,6 +5,9 @@ mujoco:
 arms:
   left:  {type: mujoco, actuator_prefix: "left_"}
   right: {type: mujoco, actuator_prefix: "right_"}
+# One skill may drive a group (option B bimanual policy). Order = action-vector order.
+arm_groups:
+  both: [left, right]
 cameras:
   top:         {type: mujoco, mj_camera: top}
   left_wrist:  {type: mujoco, mj_camera: left_wrist}

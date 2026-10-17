@@ -28,8 +28,18 @@ true*, and *whether the goal really happened*.
          SO-101 (LeRobot) · MuJoCo · mock
 ```
 
-Full design: [docs/architecture.md](docs/architecture.md). Who does what, and by when:
-[TASK.md](TASK.md). Rules for humans and coding agents: [AGENT.md](AGENT.md).
+Strategy and key decisions: [PLAN.md](PLAN.md). Full design: [docs/architecture.md](docs/architecture.md).
+Who does what, and by when: [TASK.md](TASK.md). Rules for humans and coding agents:
+[AGENT.md](AGENT.md) (`CLAUDE.md` is an identical copy for Claude Code).
+
+## Two ways to drive two arms with FLUX
+
+| Option | What | Skills target | Policy config |
+|--------|------|---------------|---------------|
+| **A, per-arm** (default) | one embodied FLUX policy per arm (A1: shared model; A2: one instance per arm) | `left`, `right` | `configs/policy/flux3_so101.yaml` |
+| **B, bimanual** | one new model fine-tuned on both arms together (12-D actions) | `both` | `configs/policy/flux3_dual_bimanual.yaml` |
+
+Same executor, safety and task grammar for both. Comparison and decision: [PLAN.md](PLAN.md).
 
 ## Workstreams
 
@@ -46,7 +56,7 @@ Full design: [docs/architecture.md](docs/architecture.md). Who does what, and by
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest                                   # 33 tests, all on mock arms
+pytest                                   # all tests run on mock arms
 
 # Run the cooperative-holding demo on mock arms
 liminal run configs/tasks/lid_hold_insert.yaml

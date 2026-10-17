@@ -24,7 +24,7 @@ def _run(args: argparse.Namespace) -> int:
 
     log = Path(args.log_dir) / f"{time.strftime('%Y%m%d-%H%M%S')}_{Path(args.task).stem}.jsonl"
     ctx = build_context(args.robot, backend=args.backend, policy=args.policy, log_path=log)
-    task = load_task(args.task, arms=ctx.arms.keys())
+    task = load_task(args.task, arms=ctx.arm_names)
     for a in ctx.arms.values():
         a.connect()
     try:

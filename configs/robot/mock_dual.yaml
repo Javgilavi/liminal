@@ -3,6 +3,9 @@ name: mock_dual
 arms:
   left:  {type: mock}
   right: {type: mock}
+# One skill may drive a group (option B bimanual policy). Order = action-vector order.
+arm_groups:
+  both: [left, right]
 cameras:
   top:         {type: mock}
   left_wrist:  {type: mock}

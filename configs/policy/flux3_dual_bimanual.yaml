@@ -1,0 +1,15 @@
+# Option B in PLAN.md: ONE model fine-tuned on both arms together (12-D actions).
+# Skills target the `both` arm group (see arm_groups in configs/robot/so101_dual.yaml).
+# Produced by WS4's bimanual fine-tune; nothing here works until that checkpoint exists.
+checkpoint: outputs/bimanual/flux3_dual_v1   # TODO(WS4): path/repo of the bimanual fine-tune
+device: cuda
+dtype: bfloat16
+action_dim: 12           # [left 6 | right 6], same order as arm_groups.both
+chunk_size: 42           # VERIFY (inherit from base checkpoint unless retrained)
+execute_steps: 32        # VERIFY
+control_hz: 30.0         # VERIFY
+obs_history: 8           # VERIFY
+camera_roles: [scene, left_wrist, right_wrist]
+camera_map:
+  both: {scene: top, left_wrist: left_wrist, right_wrist: right_wrist}
+lora_adapter: null

@@ -68,8 +68,11 @@ FLUX is a learned manipulation backend for bounded skills. It's not the coordina
   without two concurrent model calls.
 - Action chunks run through `SafetySupervisor.send()` at `control_hz`; the skill
   exits early as soon as its `success` predicate holds.
-- Released checkpoint is single-arm 6-D. Bimanual options: per-arm sessions (now) vs
-  a joint 12-D fine-tune (WS4 research).
+- Released checkpoint is single-arm 6-D. Two embodiment options ([PLAN.md](../PLAN.md)):
+  **A** per-arm policies (A1 shared model + optional per-arm LoRA, A2 one instance per
+  arm via `SkillRouter.arm_policies`) or **B** one bimanual 12-D fine-tune driving the
+  `both` arm group (state and images concatenated in, action split back per arm in
+  `arm_groups` order). The backend picks the behaviour from `action_dim` and rejects mismatches.
 - Planning-note numbers, all `VERIFY`: 7B world-action model, scene + wrist cameras,
   42-step chunks, 32 executed at 30 Hz, 8-frame history, ~32 GB VRAM in BF16, LoRA recipe ~10k steps.
 

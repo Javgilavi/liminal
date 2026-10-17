@@ -16,7 +16,7 @@ TASKS = sorted(Path("configs/tasks").glob("*.yaml"))
 @pytest.mark.parametrize("path", TASKS, ids=lambda p: p.stem)
 def test_shipped_tasks_succeed_on_mock(path, make_ctx):
     ctx = make_ctx()
-    report = asyncio.run(run_task(load_task(path, arms=ctx.arms.keys()), ctx))
+    report = asyncio.run(run_task(load_task(path, arms=ctx.arm_names), ctx))
     assert report.goal_verified, report
 
 

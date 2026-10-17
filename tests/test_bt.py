@@ -114,3 +114,20 @@ def test_waitfor_and_timeout(make_ctx):
         return ok, late
 
     assert run(scenario()) == (Status.SUCCESS, Status.TIMEOUT)
+
+
+def test_group_skill_claims_every_member_arm(make_ctx, mock_backend):
+    ctx = make_ctx()
+    assert run(bt.SkillNode(Skill("both", "open_lid_and_insert")).run(ctx)) is Status.SUCCESS
+    assert mock_backend.calls == ["both:open_lid_and_insert"]
+    clash = bt.Parallel([bt.SkillNode(Skill("both", "x")), bt.SkillNode(Skill("left", "y"))])
+    with pytest.raises(ArmConflict):
+        run(clash.run(ctx))
+
+
+def test_group_primitive_moves_both_arms(make_ctx):
+    ctx = make_ctx()
+    for a in ctx.arms.values():
+        a.state = [5.0] * 6
+    assert run(bt.SkillNode(Skill("both", "home")).run(ctx)) is Status.SUCCESS
+    assert all(a.state == [0.0] * 6 for a in ctx.arms.values())

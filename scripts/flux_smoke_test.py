@@ -15,19 +15,22 @@ ap.add_argument("--policy", default="configs/policy/flux3_so101.yaml")
 ap.add_argument("--iters", type=int, default=10)
 args = ap.parse_args()
 
-cfg = yaml.safe_load(open(args.policy))
+cfg = {k: v for k, v in yaml.safe_load(open(args.policy)).items() if k not in ("instances", "devices")}
 cfg["camera_roles"] = tuple(cfg.get("camera_roles", ("scene", "wrist")))
 backend = FluxPolicyBackend(FluxConfig(**cfg))
 backend.load()
 
 import numpy as np  # noqa: E402
 
+# Option A: one arm ("right", 6-D). Option B: the "both" group (12-D, one wrist image per arm).
+target = "right" if backend.cfg.action_dim == 6 else "both"
 frame = np.zeros((480, 640, 3), dtype=np.uint8)
-history = [Observation("right", [0.0] * 6, {"scene": frame, "wrist": frame}) for _ in range(backend.cfg.obs_history)]
+images = {role: frame for role in backend.cfg.camera_roles}
+history = [Observation(target, [0.0] * backend.cfg.action_dim, images) for _ in range(backend.cfg.obs_history)]
 lat = []
 for _ in range(args.iters):
     t = time.monotonic()
-    chunk = backend.predict(history, "Pick up the red block and place it in the bowl")
+    chunk = backend.predict(history, "Pick up the red block and place it in the bowl", target)
     lat.append(time.monotonic() - t)
 print(f"chunk: {len(chunk)} x {len(chunk[0])}")
 print(f"latency: median {statistics.median(lat)*1000:.0f} ms, max {max(lat)*1000:.0f} ms")

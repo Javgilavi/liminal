@@ -3,6 +3,9 @@ name: so101_dual
 arms:
   left:  {type: so101, port: /dev/ttyACM0, id: left_follower,  max_relative_target: 10}
   right: {type: so101, port: /dev/ttyACM1, id: right_follower, max_relative_target: 10}
+# One skill may drive a group (option B bimanual policy). Order = action-vector order.
+arm_groups:
+  both: [left, right]
 cameras:
   top:         {type: opencv, index: 0}
   left_wrist:  {type: opencv, index: 2}

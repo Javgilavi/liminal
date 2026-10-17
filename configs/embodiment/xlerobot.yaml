@@ -1,7 +1,7 @@
 # XLeRobot: two SO-101-style arms on a mobile base with a pan/tilt head camera.
 # VERIFY joint names against the XLeRobot repo / sim assets before converting data.
 name: xlerobot
-mode: per_arm            # per_arm (reuse single-arm checkpoint per arm) | joint (12-D bimanual fine-tune)
+mode: per_arm            # per_arm (option A: single-arm checkpoint per arm) | bimanual (option B: 12-D fine-tune)
 groups:
   - name: left_arm
     joints: [left_shoulder_pan, left_shoulder_lift, left_elbow_flex, left_wrist_flex, left_wrist_roll, left_gripper]

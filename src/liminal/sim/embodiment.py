@@ -3,9 +3,9 @@
 The released FLUX checkpoint is single-arm (6-D action). Two ways to drive a
 bimanual robot such as XLeRobot, compared in docs/research/04_xlerobot_sim.md:
 
-  A. "per-arm" - one policy session per arm, each seeing its own 6-D slice + wrist
+  A. "per_arm"  - one policy session per arm, each seeing its own 6-D slice + wrist
      camera; the orchestrator coordinates. No retraining of the action head.
-  B. "joint"   - fine-tune on a concatenated action vector (e.g. 12-D for two arms,
+  B. "bimanual" - fine-tune on a concatenated action vector (e.g. 12-D for two arms,
      + head/base for XLeRobot). Needs a bimanual dataset and an adapted action head.
 
 `Embodiment.split` / `merge` let both modes share the same dataset conversion code.

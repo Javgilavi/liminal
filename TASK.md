@@ -1,6 +1,7 @@
 # TASK.md: workstreams, milestones, acceptance
 
-30-hour plan for five people on two SO-101 arms (→ bimanual XLeRobot). One owner
+30-hour plan for five people on two SO-101 arms (→ bimanual XLeRobot). Strategy and the
+FLUX option A (per-arm) vs option B (bimanual fine-tune) decision: [PLAN.md](PLAN.md). One owner
 per workstream; everyone codes against the shared interfaces from **hour 2**.
 Fill in owners:
 
@@ -52,6 +53,8 @@ Brief: [docs/research/01_single_arm_baseline.md](docs/research/01_single_arm_bas
       60 episodes first, 100 if time allows. Same camera poses as eval.
 - [ ] **H10–18** LoRA fine-tune (`scripts/finetune_lora.sh`, fill in the BFL recipe), hold
       out ~10% of episodes. Re-run the same eval and compare against zero-shot.
+- [ ] **H10–14** Option A1 vs A2: if a second GPU is available, try `instances: per_arm` and
+      per-arm LoRAs (`arm_adapters`), especially if one arm's viewpoint hurts zero-shot success.
 - [ ] **Stretch** Prefetch the next chunk during execution to remove inter-chunk pauses.
       Second skill (`open_lid` or `push_aside`) for WS2/WS3.
 
@@ -120,9 +123,12 @@ Brief: [docs/research/04_xlerobot_sim.md](docs/research/04_xlerobot_sim.md)
       reading MuJoCo state). Gives WS2/WS3 a physics-backed test bed.
 - [ ] **H6–14** Dataset survey: open bimanual SO-101/XLeRobot LeRobot datasets, UMI-style
       egocentric human data. Record format, action space, camera setup, licence.
-- [ ] **H14–24** First embodiment fine-tune: map datasets into `configs/embodiment/xlerobot.yaml`
-      action layout (`Embodiment.split/merge`). Decide per-arm (reuse checkpoint) vs
-      joint 12-D head. Train a small run and evaluate in sim.
+- [ ] **H8–14** Option B prerequisites: confirm with BFL docs how to fine-tune a 12-D action
+      head; record a first batch of bimanual demos (two leader arms) for `open_lid_and_insert`.
+- [ ] **H14–18** Option B first fine-tune into `configs/policy/flux3_dual_bimanual.yaml`
+      (layout `configs/embodiment/so101_dual.yaml`). Evaluate `lid_hold_insert_bimanual` vs
+      `lid_hold_insert` in sim. **Go/no-go for hardware at H18** (PLAN.md).
+- [ ] **H18–24** Extend the recipe to XLeRobot (`configs/embodiment/xlerobot.yaml`, `Embodiment.split/merge`).
 - [ ] **Stretch** Sim-collected demos to augment WS1 data. Domain randomisation.
 
 **Provides:** `MujocoArm/MujocoCamera`, sim predicates, embodiment configs, dataset notes.

@@ -1,9 +1,9 @@
-# FLUX 3 Action, SO-101 checkpoint. Every value marked VERIFY comes from the planning
+# FLUX 3 Action, SO-101 checkpoint - option A (per-arm) in PLAN.md. Every value marked VERIFY comes from the planning
 # notes, not from running code - confirm against the BFL docs / model card in WS1.
 checkpoint: black-forest-labs/flux-3-action-so101   # VERIFY repo id
 device: cuda
 dtype: bfloat16          # VERIFY ~32 GB VRAM reported for BF16 inference
-action_dim: 6
+action_dim: 6            # one arm per skill
 chunk_size: 42           # VERIFY
 execute_steps: 32        # VERIFY default executed per chunk
 control_hz: 30.0         # VERIFY
@@ -13,3 +13,6 @@ camera_map:
   right: {scene: top, wrist: right_wrist}
   left:  {scene: top, wrist: left_wrist}
 lora_adapter: null       # e.g. outputs/lora/pick_place_v1 after WS1 fine-tuning
+arm_adapters: {}         # A1 + per-arm LoRA, e.g. {left: outputs/lora/left_v1, right: outputs/lora/right_v1}
+instances: shared        # shared = A1 (one model, single-flight) | per_arm = A2 (one model per arm, ~2x VRAM)
+devices: {}              # A2 only, e.g. {left: "cuda:0", right: "cuda:1"}

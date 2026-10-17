@@ -17,6 +17,7 @@ import asyncio
 import itertools
 from abc import ABC, abstractmethod
 from collections.abc import Sequence as Seq
+from contextlib import AsyncExitStack
 
 from liminal.core.types import Skill, Status
 from liminal.orchestration.context import ExecutionContext
@@ -59,11 +60,16 @@ class SkillNode(Node):
     async def _run(self, ctx: ExecutionContext) -> Status:
         s = self.skill
         ctx.safety.check()
-        async with ctx.safety.claim(s.arm, owner=self.name), ctx.safety.zones(s.zones):
+        members = ctx.members(s.arm)  # one arm, or every arm of a bimanual group
+        async with AsyncExitStack() as stack:
+            for arm in members:
+                await stack.enter_async_context(ctx.safety.claim(arm, owner=self.name))
+            await stack.enter_async_context(ctx.safety.zones(s.zones))
             try:
                 result = await asyncio.wait_for(ctx.skills.execute(s, ctx), timeout=s.timeout_s)
             except asyncio.TimeoutError:
-                ctx.arms[s.arm].stop()
+                for arm in members:
+                    ctx.arms[arm].stop()
                 ctx.world.log("skill_timeout", node=self.name)
                 return Status.TIMEOUT
         ctx.world.log("skill_result", node=self.name, status=result.status.value, message=result.message)
@@ -185,9 +191,11 @@ class While(Node):
         self.establish_timeout_s = establish_timeout_s
 
     async def _run(self, ctx: ExecutionContext) -> Status:
-        async with ctx.safety.claim(self.support_arm, owner=self.name):
-            ctx.arms[self.support_arm].hold()
-            ctx.world.set(f"{self.support_arm}_holding", True, source=self.name)
+        async with AsyncExitStack() as stack:
+            for arm in ctx.members(self.support_arm):
+                await stack.enter_async_context(ctx.safety.claim(arm, owner=self.name))
+                ctx.arms[arm].hold()
+                ctx.world.set(f"{arm}_holding", True, source=self.name)
             if not await ctx.world.wait_for(self.maintain, timeout=self.establish_timeout_s):
                 ctx.world.log("while_not_established", node=self.name, condition=self.maintain)
                 return Status.FAILURE

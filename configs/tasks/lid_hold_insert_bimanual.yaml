@@ -1,0 +1,23 @@
+# Demo A with option B (PLAN.md): the bimanual policy does hold + insert as ONE skill
+# on the `both` group. The tree still sequences, verifies and recovers around it.
+# Run with --policy configs/policy/flux3_dual_bimanual.yaml once the fine-tune exists.
+name: lid_hold_insert_bimanual
+description: Same goal as lid_hold_insert, executed by a single 12-D bimanual skill.
+goal: object_inserted
+initial_state: {lid_open: false, object_inserted: false}
+tree:
+  sequence:
+    - retry:
+        attempts: 2
+        recovery: {skill: {arm: both, name: home}}
+        do:
+          skill:
+            arm: both
+            name: open_lid_and_insert
+            target: block
+            prompt: Open the box lid with the left arm and keep it open while the right arm puts the block inside
+            success: object_inserted
+            timeout_s: 45
+            zones: [box]
+    - skill: {arm: both, name: release}
+    - check: object_inserted

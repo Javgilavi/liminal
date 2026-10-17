@@ -81,3 +81,9 @@ def test_demo_plan_covers_variations():
     plans = make_plan(60, ["Pick up the red block and place it in the bowl"], zones=["A", "B", "C"])
     assert len(plans) == 60
     assert {p.object_zone for p in plans} == {"A", "B", "C"}
+
+
+def test_claude_md_is_a_copy_of_agent_md():
+    from pathlib import Path
+
+    assert Path("CLAUDE.md").read_text() == Path("AGENT.md").read_text(), "run: cp AGENT.md CLAUDE.md"

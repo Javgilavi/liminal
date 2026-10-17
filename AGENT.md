@@ -7,7 +7,7 @@ hackathon. Read this before your first commit.
 
 A dual-arm orchestration layer on top of a learned VLA (FLUX 3 Action). **FLUX is the
 manipulation backend, not the coordinator.** It executes bounded, text-prompted skills
-on one arm. The behavior tree decides what runs, when, on which arm, and what must stay
+on one arm (option A) or on both arms as one bimanual skill (option B, see PLAN.md). The behavior tree decides what runs, when, on which arm, and what must stay
 true while it runs. Perception decides whether it worked.
 
 ## Commands
@@ -36,10 +36,12 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
    bypass that.
 4. **LLMs propose, the tree enforces.** Planners output task-file YAML that goes
    through `parse_task`. No LLM output ever reaches motors or marks a goal complete.
-5. **One arm, one owner.** Arm ownership is claimed by nodes (`safety.claim`). An
-   `ArmConflict` is a planning bug. Fix the tree, don't catch and ignore it.
-6. **Per-arm policy state.** FLUX observation history is kept per arm. Never mix the
-   two arms' queues. Inference is single-flight behind one lock.
+5. **One arm, one owner.** Arm ownership is claimed by nodes (`safety.claim`). A skill
+   on an arm group (`both`) claims every member. An `ArmConflict` is a planning bug.
+   Fix the tree, don't catch and ignore it.
+6. **Per-target policy state.** FLUX observation history is kept per skill target (an
+   arm in option A, the `both` group in option B). Never mix queues. Inference is
+   single-flight per model instance behind one lock.
 7. **Interfaces are contracts.** `core/types.py`, `core/interfaces.py` and the task-file
    grammar in `orchestration/task_spec.py` are shared by all workstreams. Change them
    only with a heads-up to the team, and update every implementation and test in the
@@ -47,6 +49,18 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
 8. **Mark unverified facts.** Numbers or APIs taken from docs you haven't run against
    get a `VERIFY` comment (see `configs/policy/flux3_so101.yaml`). Remove the marker
    once confirmed on real hardware or code.
+
+## Two FLUX embodiment options (see PLAN.md)
+
+- **Option A, per-arm** (default): skills target `left` / `right`; policy
+  `configs/policy/flux3_so101.yaml` (`action_dim: 6`). A1 = one shared model, A2 =
+  `instances: per_arm`.
+- **Option B, bimanual**: skills target the `both` group; policy
+  `configs/policy/flux3_dual_bimanual.yaml` (`action_dim: 12`, `[left | right]`).
+
+Keep both working: don't hard-code 6-D actions or single-arm skill targets outside
+`hardware/`. `FluxPolicyBackend` refuses a skill whose arm/group joint count doesn't match
+`action_dim`.
 
 ## Ownership (see TASK.md)
 
@@ -57,9 +71,12 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
 | `orchestration/`, `perception/`, `configs/tasks/`, `configs/skills.yaml` | WS3 long-horizon |
 | `sim/`, `configs/embodiment/`, `configs/robot/mujoco_*.yaml` | WS4 sim + XLeRobot |
 | `hardware/`, `safety/`, `ui/`, `configs/robot/so101_*.yaml`, `scripts/record_waypoints.py` | WS5 hardware + UI |
-| `core/`, `app.py`, `AGENT.md`, `TASK.md`, `README.md` | shared, so coordinate first |
+| `core/`, `app.py`, `AGENT.md`, `CLAUDE.md`, `PLAN.md`, `TASK.md`, `README.md` | shared, so coordinate first |
 
 Touching another workstream's path is fine for small fixes. Tell the owner.
+
+`CLAUDE.md` is an exact copy of this file, for Claude Code. Edit `AGENT.md`, then run
+`cp AGENT.md CLAUDE.md`. A test fails if they drift.
 
 ## How to extend
 

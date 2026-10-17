@@ -75,7 +75,7 @@ def build_policy(backend: str, policy_cfg: dict[str, Any] | None = None) -> Skil
     if backend == "flux":
         from liminal.policy.flux import FluxConfig, FluxPolicyBackend
 
-        cfg = dict(policy_cfg or {})
+        cfg = {k: v for k, v in (policy_cfg or {}).items() if k not in ("instances", "devices")}
         cfg["camera_roles"] = tuple(cfg.get("camera_roles", ("scene", "wrist")))
         return FluxPolicyBackend(FluxConfig(**cfg))
     raise ValueError(f"unknown backend {backend!r} (mock | scripted | flux)")
@@ -89,14 +89,31 @@ def build_context(robot: str | Path | dict[str, Any], backend: str = "mock",
     arms, cameras = build_arms(robot_cfg)
     limits = {k: JointLimits(**v) for k, v in robot_cfg.get("limits", {}).items()}
     p = robot_cfg.get("primitives", {})
+    policy_cfg = dict(policy_cfg or {})
+    # Option A2 (PLAN.md): one independent policy instance per arm, optionally on its own GPU.
+    instances = policy_cfg.pop("instances", "shared")
+    devices = policy_cfg.pop("devices", {})
+    arm_policies: dict[str, SkillBackend] = {}
+    if policy_backend is None and instances == "per_arm":
+        default_device = policy_cfg.get("device", "cuda")
+        # The shared `policy` below stays lazy (FLUX loads on first use), so it costs no VRAM here.
+        arm_policies = {a: build_policy(backend, {**policy_cfg, "device": devices.get(a, default_device)})
+                        for a in arms}
     router = SkillRouter(
         policy=policy_backend or build_policy(backend, policy_cfg),
         primitives=PrimitiveBackend(home_poses=robot_cfg.get("home", {}), **p),
+        arm_policies=arm_policies,
     )
+    groups = {g: list(m) for g, m in robot_cfg.get("arm_groups", {}).items()}
+    for g, members in groups.items():
+        unknown = set(members) - set(arms)
+        if g in arms or unknown:
+            raise ValueError(f"arm group {g!r} must not shadow an arm and must list known arms (unknown: {unknown})")
     return ExecutionContext(
         arms=arms,
         world=WorldState(log_path=log_path),
         safety=SafetySupervisor(arms, limits),
         skills=router,
         cameras=cameras,
+        arm_groups=groups,
     )

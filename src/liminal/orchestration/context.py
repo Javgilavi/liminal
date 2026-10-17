@@ -18,3 +18,15 @@ class ExecutionContext:
     safety: SafetySupervisor
     skills: SkillRouter
     cameras: dict[str, Any] = field(default_factory=dict)
+    # Named sets of arms a single skill may drive, e.g. {"both": ["left", "right"]} for a
+    # bimanual (option B) policy. Order matters: it is the action-vector order.
+    arm_groups: dict[str, list[str]] = field(default_factory=dict)
+
+    def members(self, arm: str) -> list[str]:
+        """An arm name or a group name -> the physical arms it covers."""
+        return list(self.arm_groups.get(arm, [arm]))
+
+    @property
+    def arm_names(self) -> list[str]:
+        """Every name a task file may use in `arm:` (physical arms and groups)."""
+        return [*self.arms, *self.arm_groups]

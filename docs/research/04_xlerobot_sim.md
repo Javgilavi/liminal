@@ -19,14 +19,16 @@
 - Sim predicates: write a `PredicateDetector` that reads object poses from `MjData`
   (ground truth), e.g. `block_in_bowl` = block centre inside the bowl volume.
 
-## Embodiment: action-space options (`sim/embodiment.py`)
+## Embodiment: action-space options (`sim/embodiment.py`, decision in [PLAN.md](../../PLAN.md))
 
 | Mode | How | Data needed | Pros | Cons |
 |------|-----|-------------|------|------|
 | `per_arm` | two sessions of the single-arm checkpoint, each its own 6-D slice + wrist cam | single-arm data per arm | works with the released checkpoint; orchestrator coordinates | no learned inter-arm coordination |
-| `joint` | fine-tune on concatenated 12-D (+ head/base) actions | bimanual demos | learned coordination (handovers, bimanual carry) | new action head/normalisation; much more data |
+| `bimanual` | fine-tune on concatenated 12-D (+ head/base) actions; skills target the `both` group | bimanual demos | learned coordination (handovers, bimanual carry) | new action head/normalisation; much more data |
 
-Recommendation: ship `per_arm` (matches the hackathon architecture), research `joint`.
+Recommendation: ship `per_arm` (option A, matches the hackathon architecture), research
+`bimanual` (option B). Code path for B: `configs/policy/flux3_dual_bimanual.yaml` +
+`configs/embodiment/so101_dual.yaml` + `configs/tasks/lid_hold_insert_bimanual.yaml`.
 
 ## Datasets to survey (record: action space, cameras, fps, licence, size)
 
