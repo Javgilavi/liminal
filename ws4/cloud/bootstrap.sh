@@ -8,8 +8,9 @@
 #                            # flux-3-action-base, -so101 and -droid (each repo is gated separately)
 #   bash bootstrap.sh        # idempotent, safe to re-run
 #
-# On a machine whose largest GPU has under 40 GB (e.g. the 4 GB laptop) it only builds the environments for
-# CPU tests and skips the weights. Force either way with PREFETCH=1 or PREFETCH=0.
+# On a machine whose largest GPU has under 16 GB (e.g. the 4 GB laptop) it only builds the environments for
+# CPU tests and skips the weights. Serving cards such as a 32 GB RTX PRO 4500 do prefetch (FLUX SO-101 fits there
+# with the Qwen text encoder on CPU). Force either way with PREFETCH=1 or PREFETCH=0.
 #
 # Produces:
 #   $WS4_ROOT/lerobot        LeRobot main + flux3/peft extras (LoRA task adaptation, robot I/O)
@@ -94,7 +95,7 @@ main() {
     warn "no nvidia-smi: CPU-only machine"
   fi
   if [ "$PREFETCH" = auto ]; then
-    if [ "$max_mib" -ge 40000 ]; then PREFETCH=1; else PREFETCH=0; fi
+    if [ "$max_mib" -ge 16000 ]; then PREFETCH=1; else PREFETCH=0; fi
   fi
   [ "$PREFETCH" = 1 ] || echo "largest GPU ${max_mib} MiB: building environments only, no weight download (PREFETCH=1 forces it)"
   local free_gb
@@ -123,7 +124,7 @@ main() {
         hf download black-forest-labs/flux-3-action-so101
         hf download black-forest-labs/flux-3-action-base
         # DROID: configs only (13.9 GB weights not needed unless we test the DROID policy).
-        hf download black-forest-labs/flux-3-action-droid --include "*.json" "*.md"
+        hf download black-forest-labs/flux-3-action-droid --include "*.json" --include "*.md"
         touch "$WS4_ROOT/.prefetch_done"
       ) > "$WS4_ROOT/prefetch.log" 2>&1 &
       prefetch_pid=$!
