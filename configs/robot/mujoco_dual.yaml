@@ -1,7 +1,7 @@
 # WS4: dual-arm MuJoCo scene with actuators named left_* / right_*.
 name: mujoco_dual
 mujoco:
-  xml: sim_assets/dual_so101/scene.xml   # TODO(WS4): point at the adopted scene
+  xml: examples/dual_so101_sim/scene.xml   # relative to liminal/; versioned Haller rig (2x SO-101)
 arms:
   left:  {type: mujoco, actuator_prefix: "left_"}
   right: {type: mujoco, actuator_prefix: "right_"}
