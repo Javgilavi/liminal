@@ -1,14 +1,20 @@
-# FLUX 3 Action, SO-101 checkpoint - option A (per-arm) in PLAN.md. Every value marked VERIFY comes from the planning
-# notes, not from running code - confirm against the BFL docs / model card in WS1.
-checkpoint: black-forest-labs/flux-3-action-so101   # VERIFY repo id
+# FLUX 3 Action, SO-101 checkpoint - option A (per-arm) in PLAN.md.
+# Source: HF model card + docs.bfl.ai/flux_3/flux3_action_so101 (read 2026-10-17). Gated: accept the FLUX Kommunity
+# License on the model page, then `hf auth login`. Weights are model.safetensors (13.9 GB, BF16), not a .pt; the
+# frozen encoders (Qwen3-VL-4B text encoder 8.9 GB + video VAE 2.5 GB) come from the base repo. Loaded through
+# LeRobot main: lerobot.policies.flux3.Flux3Policy.from_pretrained(checkpoint) + make_pre_post_processors.
+checkpoint: black-forest-labs/flux-3-action-so101
+checkpoint_revision: c9e13b2aca6a0a472b3ea03fd90cff32d3e85849
+encoders: black-forest-labs/flux-3-action-base
+encoders_revision: 62878e2925e59b7a89ec14463ce89932624c490d
 device: cuda
-dtype: bfloat16          # VERIFY ~32 GB VRAM reported for BF16 inference
-action_dim: 6            # one arm per skill
-chunk_size: 42           # VERIFY
-execute_steps: 32        # VERIFY default executed per chunk
-control_hz: 30.0         # VERIFY
-obs_history: 8           # VERIFY
-camera_roles: [scene, wrist]
+dtype: bfloat16          # VERIFY on first run: docs report ~32 GB GPU memory for BF16 inference
+action_dim: 6            # shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll (deg), gripper (0-100)
+chunk_size: 42           # model card: predict 42
+execute_steps: 32        # model card: execute 32, then replan
+control_hz: 30.0         # model card: 30 Hz
+obs_history: 8           # model card: eight observations (two visual snapshots + past commands)
+camera_roles: [scene, wrist]   # checkpoint keys observation.images.scene / .wrist, 256x256 each -> 512x256 canvas
 camera_map:
   right: {scene: top, wrist: right_wrist}
   left:  {scene: top, wrist: left_wrist}

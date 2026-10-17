@@ -38,6 +38,9 @@ if TYPE_CHECKING:
 @dataclass
 class FluxConfig:
     checkpoint: str = "black-forest-labs/flux-3-action-so101"
+    checkpoint_revision: str | None = None  # pin the HF commit; the encoders must match it
+    encoders: str | None = None  # repo with the frozen text encoder + video VAE (flux-3-action-base)
+    encoders_revision: str | None = None
     device: str = "cuda"
     dtype: str = "bfloat16"
     action_dim: int = 6  # 6 = per-arm (option A), 12 = bimanual (option B)
