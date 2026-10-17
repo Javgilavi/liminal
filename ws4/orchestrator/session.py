@@ -31,7 +31,7 @@ from flux.dual_arm_runner import per_arm_target
 from flux.safety import SafetyConfig, SafetyGuard
 
 from . import PACKAGE_DIR, WS4
-from .claude import ClaudeJSON, api_key_available
+from .claude import SDK_VERSION, ClaudeJSON, api_key_available, sdk_version
 from .cost import CostMeter
 from .events import EventLog
 from .executor import TERMINAL, Executor, RunResult
@@ -69,6 +69,7 @@ class SessionConfig:
     planner_model: str = "claude-opus-5-5"
     planner_effort: str = "medium"
     verifier_effort: str = "low"
+    verifier_thinking: str = "adaptive"  # Haiku 5.5 only: adaptive | disabled
     verifier_wrist: bool = False
     budget_usd: float = 5.0
     # Policy server (c): ssh -N -L 8765:127.0.0.1:8765 to the pod, see ws4/cloud/RUNPOD.md.
@@ -252,6 +253,11 @@ class Session:
         self._encode_frames(self._last_obs)
         self.events.add("info", f"session ready: env={cfg.env} policy={cfg.policy} planner={cfg.planner} "
                         f"verifier={self.verifier.name} gate={'on' if self.gate else 'off'}")
+        if cfg.planner == "claude" or self.verifier.name != "sim_truth":
+            installed = sdk_version()
+            self.events.add("info" if installed == SDK_VERSION else "warn",
+                            f"anthropic SDK {installed or 'not installed'} (code checked against {SDK_VERSION}); "
+                            f"API key {'found' if api_key_available() else 'NOT found'}")
 
     def _policy_backend(self, package: str) -> Any:
         cfg = self.cfg
@@ -273,7 +279,8 @@ class Session:
                 raise ValueError("verifier=truth needs the sim")
             return SimTruthVerifier(self.sim)
         if kind == "claude":
-            return ClaudeVerifier(self.llm, use_wrist=self.cfg.verifier_wrist, effort=self.cfg.verifier_effort)
+            return ClaudeVerifier(self.llm, use_wrist=self.cfg.verifier_wrist, effort=self.cfg.verifier_effort,
+                                  haiku_thinking=self.cfg.verifier_thinking)
         if kind == "shadow":
             if self.sim is None:
                 raise ValueError("verifier=shadow compares Claude with sim ground truth; it needs the sim")
@@ -287,7 +294,8 @@ class Session:
                                                                                          if shadow.error else ""))
 
             return ShadowVerifier(SimTruthVerifier(self.sim),
-                                  ClaudeVerifier(self.llm, self.cfg.verifier_wrist, self.cfg.verifier_effort), report)
+                                  ClaudeVerifier(self.llm, self.cfg.verifier_wrist, self.cfg.verifier_effort,
+                                                 haiku_thinking=self.cfg.verifier_thinking), report)
         if kind == "manual":
             return ManualVerifier()
         raise ValueError(f"unknown verifier {kind!r}")

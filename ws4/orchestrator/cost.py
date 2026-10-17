@@ -1,8 +1,13 @@
 """Token usage, estimated cost per Claude call, and a session budget guard.
 
-Prices are USD per million tokens from the claude-api skill's model table (cached 2026-10-06): input, output,
-cache read, 5-minute cache write (1.25x input). Claude Haiku 5.5's rate is for prompts up to 100K tokens; ours are
-a few thousand. Thinking tokens are billed as output and are included in ``usage.output_tokens``.
+Prices are USD per million tokens: base input, output, cache read, 5-minute cache write, from the official pricing
+page (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-10-17). Cache reads are 0.05x input on Opus
+5.5 and Sonnet 5.5 and 0.1x on Haiku 5.5. Haiku 5.5's rate is for prompts up to 100,000 tokens (ours are a few
+thousand; above that it is USD 0.50 / 2.50). Thinking tokens are billed as output and are included in
+``usage.output_tokens``; ``usage.output_tokens_details.thinking_tokens`` breaks them out
+(https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost).
+Doc vs skill: the claude-api skill (cached 2026-10-06) lists Sonnet 5.5 cache reads at USD 0.20; the pricing page says
+USD 0.10 (0.05x of USD 2). The pricing page wins.
 """
 
 from __future__ import annotations
@@ -16,7 +21,7 @@ from typing import Any
 
 PRICES: dict[str, tuple[float, float, float, float]] = {
     "claude-opus-5-5": (4.00, 20.00, 0.20, 5.00),
-    "claude-sonnet-5-5": (2.00, 10.00, 0.20, 2.50),
+    "claude-sonnet-5-5": (2.00, 10.00, 0.10, 2.50),
     "claude-haiku-5-5": (0.10, 0.50, 0.01, 0.125),
 }
 FALLBACK_PRICE = PRICES["claude-opus-5-5"]  # unknown model (for example a server-side fallback): assume Opus rates
@@ -26,9 +31,12 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+def _field(obj: Any, key: str) -> Any:
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+
 def _get(usage: Any, key: str) -> int:
-    value = usage.get(key) if isinstance(usage, dict) else getattr(usage, key, None)
-    return int(value or 0)
+    return int(_field(usage, key) or 0)
 
 
 def cost_of(model: str, usage: Any) -> float:
@@ -46,6 +54,7 @@ class CallRecord:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    thinking_tokens: int = 0
     cost_usd: float = 0.0
     latency_s: float = 0.0
     ok: bool = True
@@ -81,6 +90,7 @@ class CostMeter:
             input_tokens=_get(usage, "input_tokens"), output_tokens=_get(usage, "output_tokens"),
             cache_read_tokens=_get(usage, "cache_read_input_tokens"),
             cache_write_tokens=_get(usage, "cache_creation_input_tokens"),
+            thinking_tokens=_get(_field(usage, "output_tokens_details") or {}, "thinking_tokens"),
             cost_usd=cost_of(model, usage), latency_s=float(latency_s), ok=ok, note=note,
         )
         with self._lock:

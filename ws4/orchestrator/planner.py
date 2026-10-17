@@ -173,9 +173,10 @@ class ClaudePlanner:
         return SYSTEM_PROMPT + json.dumps(self.vocab.planner_view(), indent=1, sort_keys=True)
 
     def user_content(self, goal: str, image: np.ndarray | None, state: dict | None) -> list[dict]:
-        content: list[dict] = [{"type": "text", "text": f"Goal from the operator: {goal}"}]
-        if image is not None:
+        content: list[dict] = []
+        if image is not None:  # images before text work best (vision docs)
             content += [{"type": "text", "text": "Current head camera view:"}, image_block(image)]
+        content.append({"type": "text", "text": f"Goal from the operator: {goal}"})
         if state:
             content.append({"type": "text", "text": "Progress so far (JSON):\n" + json.dumps(state, indent=1)})
         content.append({"type": "text", "text": "Return the plan."})

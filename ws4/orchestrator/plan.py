@@ -135,7 +135,9 @@ def parse_plan(data: dict | str, goal: str = "", source: str = "") -> tuple[Plan
         if not isinstance(check, str):
             errors.append(f"{where}.success_check must be a string")
             check = ""
-        steps.append(Step(str(raw.get("id", "")), str(raw.get("arm", "")), str(raw.get("skill", "")),
+        # Structured outputs may return enum values in a different case (structured-outputs docs), so normalise.
+        steps.append(Step(str(raw.get("id", "")), str(raw.get("arm", "")).strip().lower(),
+                          str(raw.get("skill", "")).strip().lower(),
                           lists["depends_on"], lists["hold_until"], check.strip(), attempts))
     rationale = data.get("rationale", "")
     plan = Plan(steps, goal=goal or str(data.get("goal", "")), rationale=str(rationale), source=source,

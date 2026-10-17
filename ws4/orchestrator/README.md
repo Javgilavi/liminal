@@ -7,9 +7,9 @@ Design, plan format, measurements and open items: [`../research/orchestrator.md`
 
 ## Run it
 
-All commands from `ws4/` (they put `ws4/` on `sys.path`). Python 3.10+, `numpy`, `pyyaml`, `Pillow`, `mujoco` for the
-sim; `anthropic>=1.15` only for the Claude planner and verifier. Headless rendering uses `MUJOCO_GL=egl`
-(`osmesa` without a GPU).
+All commands from `ws4/` (they put `ws4/` on `sys.path`). `pip install -r orchestrator/requirements.txt` (Python 3.10+;
+the Anthropic SDK is pinned to 1.15.0, the version the Claude calls were checked against). Headless rendering uses
+`MUJOCO_GL=egl` (`osmesa` without a GPU).
 
 **(a) Laptop, no GPU, no key: sim + scripted stand-in skills + stub planner**
 
@@ -26,7 +26,8 @@ Sim attempts go to `ws4/orchestrator/runs/trials_sim.jsonl`:
 python eval/trial_log.py --log orchestrator/runs/trials_sim.jsonl summary --markdown
 ```
 
-**(b) Same with the real Claude planner** (export the key in your shell first; the code reads `ANTHROPIC_API_KEY` only)
+**(b) Same with the real Claude planner.** The key comes from `ANTHROPIC_API_KEY`, else from
+`~/.config/ws4/anthropic.env` (one line `ANTHROPIC_API_KEY=...`, mode 600; override the path with `ANTHROPIC_API_KEY_FILE`).
 
 ```bash
 python -m orchestrator hmi --open --planner claude                       # Opus 5.5 plans, sim ground truth verifies
@@ -36,7 +37,8 @@ python -m orchestrator hmi --open --planner claude --verifier claude --image-siz
 ```
 
 `--budget-usd` (default 5) caps the session's Claude spend; every call's tokens and estimated cost are in the HMI and in
-`runs/<run>/claude_calls.jsonl`.
+`runs/<run>/claude_calls.jsonl`. Measured: a plan takes 12 s cold, 6 s warm (USD 0.024 / 0.013), a Haiku check 1.5 s
+(USD 0.0001). To re-measure (about USD 0.04): `python -m orchestrator.live_check`.
 
 **(c) FLUX on the RunPod server** (ask Oscar before using the pod; model load is about 6.4 min per start)
 
@@ -67,7 +69,8 @@ python -m orchestrator plan --goal "..." [--planner claude] [--out plan.json]   
 python -m orchestrator validate plan.json                                         # validate a plan (e.g. from WS3)
 python -m orchestrator run --plan-file plan.json --yes --fast                     # run an external plan
 python -m orchestrator schema                                                     # the plan JSON schema
-python -m pytest orchestrator/tests -q                                            # 49 CPU tests, ~30 s
+python -m pytest orchestrator/tests -q                                            # 51 CPU tests, ~70 s, no network
+ORCH_LIVE=1 python -m pytest orchestrator/tests/test_claude_live.py -q -s         # live Claude calls, ~USD 0.04
 ```
 
 ## Files
@@ -77,7 +80,8 @@ python -m pytest orchestrator/tests -q                                          
 | `skills.yaml` | The vocabulary: exact FLUX prompts, allowed arms, success checks, timeouts, verifier model, sim bindings. **Placeholder until the demo task is final.** |
 | `plan.py` | Plan dataclasses, JSON schema, parsing and validation (vocabulary, arms, DAG, per-arm order, hold deadlocks), lanes, concurrency |
 | `planner.py` | `ClaudePlanner` (structured output, feedback loop, at most 2 rounds) and `StubPlanner` (offline, deterministic) |
-| `claude.py`, `cost.py` | One structured-output call with refusal fallbacks; token and cost ledger with a session budget guard |
+| `claude.py`, `cost.py` | One structured-output call with refusal fallbacks (doc URLs inline); token and cost ledger with a session budget guard |
+| `live_check.py`, `requirements.txt` | One live call per Claude feature with latency and cost; pinned dependencies |
 | `verifier.py` | `ClaudeVerifier` (Haiku 5.5 or Sonnet 5.5 per skill), `SimTruthVerifier`, `ShadowVerifier`, `ManualVerifier` |
 | `executor.py` | DAG scheduler and control loop: concurrency, verification cadence, timeouts, retries, replans, e-stop, make-way parking |
 | `gate.py` | Inter-arm collision gate (chunk truncation, tick-level e-stop) on `kinematics/mj_collision.py` |

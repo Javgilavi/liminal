@@ -29,6 +29,8 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--planner-model", default="claude-opus-5-5")
     g.add_argument("--planner-effort", default="medium", choices=("low", "medium", "high", "xhigh", "max"))
     g.add_argument("--verifier-wrist", action="store_true", help="also send the arm's wrist frame to the verifier")
+    g.add_argument("--verifier-thinking", choices=("adaptive", "disabled"), default="adaptive",
+                   help="Haiku 5.5 checks: adaptive thinking at low effort, or thinking disabled")
     g.add_argument("--budget-usd", type=float, default=5.0, help="Claude spend limit for this session")
     g.add_argument("--server", default="http://127.0.0.1:8765", help="FLUX policy server (ssh -L tunnel to the pod)")
     g.add_argument("--token-file", default=None)
@@ -68,7 +70,8 @@ def _config(a: argparse.Namespace):
     policy = a.policy or ("scripted" if a.env == "sim" else "remote")
     return SessionConfig(
         env=a.env, policy=policy, planner=a.planner, verifier=a.verifier, planner_model=a.planner_model,
-        planner_effort=a.planner_effort, verifier_wrist=a.verifier_wrist, budget_usd=a.budget_usd, server=a.server,
+        planner_effort=a.planner_effort, verifier_wrist=a.verifier_wrist, verifier_thinking=a.verifier_thinking,
+        budget_usd=a.budget_usd, server=a.server,
         token_file=a.token_file, package=a.package, left_package=a.left_package, right_package=a.right_package,
         async_inference=False if a.sync_inference else None, seed=a.seed, image_size=(h, w),
         randomize=not a.no_randomize, lid_on_box=a.lid_on_box, robot_id=a.robot_id, left_port=a.left_port,

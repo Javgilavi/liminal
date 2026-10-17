@@ -87,11 +87,14 @@ class ClaudeVerifier:
     name = "claude"
     fast = False
 
-    def __init__(self, llm: ClaudeJSON, use_wrist: bool = False, effort: str = "low", max_side: int = 640):
+    def __init__(self, llm: ClaudeJSON, use_wrist: bool = False, effort: str = "low", max_side: int = 640,
+                 haiku_thinking: str = "adaptive"):
         self.llm = llm
         self.use_wrist = use_wrist
         self.effort = effort
         self.max_side = max_side
+        # Haiku 5.5 accepts thinking "disabled" at effort <= high (api/errors docs); Sonnet 5.5 and Opus 5.5 do not.
+        self.haiku_thinking = haiku_thinking
 
     def content(self, step: Step, obs: dict) -> list[dict]:
         content: list[dict] = [{"type": "text", "text": "Head camera:"}, image_block(obs[HEAD], self.max_side)]
@@ -105,10 +108,12 @@ class ClaudeVerifier:
         model = skill.verifier_model
         start = time.perf_counter()
         spent0 = self.llm.meter.total_usd
+        thinking = {"type": self.haiku_thinking} if model == "claude-haiku-5-5" else None
         try:
             data, _ = self.llm.call(purpose="verify", model=model, system=VERIFY_SYSTEM,
                                     messages=[{"role": "user", "content": self.content(step, obs)}],
-                                    schema=VERIFY_SCHEMA, effort=self.effort, max_tokens=4000, cache_system=False)
+                                    schema=VERIFY_SCHEMA, effort=self.effort, max_tokens=4000, cache_system=False,
+                                    thinking=thinking)
         except (BudgetExceeded, ClaudeRefused, ClaudeUnavailable) as exc:
             return Verdict(False, 0.0, "verifier unavailable", model, time.perf_counter() - start,
                            error=f"{type(exc).__name__}: {exc}")

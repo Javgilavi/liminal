@@ -95,8 +95,7 @@ def test_verifier_uses_the_skill_model_and_never_raises(vocab, fake_claude):
     assert not broke.done and "BudgetExceeded" in broke.error
 
 
-def test_missing_key_is_reported_not_crashing(vocab, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+def test_missing_key_is_reported_not_crashing(vocab):
     obs = {"observation.images.head": np.zeros((8, 8, 3), np.uint8)}
     v = ClaudeVerifier(ClaudeJSON(CostMeter(1.0))).check(Step("a", "left", "put_apple_in_box", success_check="x"),
                                                          vocab["put_apple_in_box"], obs)
@@ -134,3 +133,26 @@ def test_shadow_verifier_logs_agreement(vocab, fake_claude):
         assert agreement["checks"] == 1
         assert agreement["false_positive"] == (0 if truth else 1)
     assert reports == [(True, True), (False, True)]
+
+
+def test_key_resolution_env_then_file(monkeypatch, tmp_path):
+    from orchestrator.claude import ClaudeUnavailable, api_key_available, resolve_api_key
+
+    assert not api_key_available()  # the autouse fixture hides any real key
+    with pytest.raises(ClaudeUnavailable) as err:
+        resolve_api_key()
+    assert "ANTHROPIC_API_KEY" in str(err.value)
+    key_file = tmp_path / "anthropic.env"
+    key_file.write_text("# comment\nexport ANTHROPIC_API_KEY='sk-test-file'\n")
+    monkeypatch.setenv("ANTHROPIC_API_KEY_FILE", str(key_file))
+    assert resolve_api_key() == "sk-test-file"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-env")
+    assert resolve_api_key() == "sk-test-env"  # the environment wins
+
+
+def test_image_tokens_follow_the_patch_formula():
+    from orchestrator.claude import image_tokens
+
+    assert image_tokens(640, 480) == 23 * 18 == 414
+    assert image_tokens(1000, 1000) == 1296  # vision docs table
+    assert image_tokens(200, 200) == 64

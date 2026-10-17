@@ -18,6 +18,18 @@ import orchestrator  # noqa: E402,F401  (path setup)
 from flux.contract import ARM_DIM, IMG_HEAD, IMG_LEFT_WRIST, IMG_RIGHT_WRIST, OBS_STATE  # noqa: E402
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "live: calls the real Claude API (needs a key; costs money)")
+
+
+@pytest.fixture(autouse=True)
+def no_api_key_unless_live(request, monkeypatch, tmp_path):
+    """Offline tests must never reach the API: hide the env key and point the key file at nothing."""
+    if request.node.get_closest_marker("live") is None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY_FILE", str(tmp_path / "no-key.env"))
+
+
 @pytest.fixture(scope="session")
 def can_render():
     """Skip rendering tests when no headless GL backend works (MUJOCO_GL=osmesa on GPU-less machines)."""

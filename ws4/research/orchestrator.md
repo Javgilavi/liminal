@@ -23,26 +23,27 @@ Line citations below are for the checkout at `e39c443` (branch `ws4-handoff`).
   same runner, gate, guard and executor code runs. "put the apple and the yellow block in the box, then close the lid"
   plans in 0.0 s (stub) as apple (left) || block (right), then lid (right), and runs to completion in sim.
 - Every run is logged as a graded attempt with `ws4/eval/trial_log.py` (sim runs in a separate log).
-- 49 CPU tests (about 30 s) plus one live Claude test that skips without `ANTHROPIC_API_KEY`; ruff clean.
+- 51 CPU tests (about 70 s) plus one opt-in live Claude test; ruff clean. Offline tests cannot reach the API (an
+  autouse fixture hides any key).
 
 **Verified:** everything in the test suite on this laptop; the end-to-end sim run on 4 random layouts (seeds 0 to 3, all
 3/3 steps); e-stop freezes the sim (no physics step, no command, active time stops) and the run completes after release
 and resume with the intervention logged; the gate's cost (0.05 to 0.06 ms per frame); the concurrency model below with a
 fake model at the pod's measured latency.
 
-**Also verified:** the request shapes against the real Python SDK (`anthropic` 1.15.0, installed in the laptop's base
-env) through a mock transport: the planner call goes to the beta endpoint with `server-side-fallback-2026-07-01`,
-`fallbacks: "default"`, adaptive thinking, effort `medium`, a JSON-schema output format and a cached system prompt; the
-Haiku verifier call goes to the plain endpoint with effort `low`.
+**Verified live against the Claude API (2026-10-17 15:06, `python -m orchestrator.live_check`, USD 0.04 in total):**
+the Opus 5.5 planner returns a valid plan from a 640x480 sim head frame in 12.1 s cold and 5.9 s with the cached system
+prompt; Haiku 5.5 checks take 1.2 to 2.1 s and answered 4 of 4 correctly (apple on the table / in the box); a Sonnet 5.5
+lid check takes 1.7 s and was correct. Request shapes were also checked against the real SDK (`anthropic` 1.15.0)
+through a mock transport. Details in "Claude: measured latency and cost" and "Claude API: docs and SDK".
 
-**Not verified:** no live Claude call has been made (no key in this environment), so planner and verifier latency and
-cost are estimates; no FLUX inference through the orchestrator (pod not used, needs Oscar's OK); nothing on the real
-robot. The skill vocabulary is a placeholder (the recording protocol's S1 to S5) until the demo task is final.
+**Not verified:** no FLUX inference through the orchestrator (pod not used, needs Oscar's OK); nothing on the real
+robot; Claude's checks on real camera frames (only sim renders so far). The skill vocabulary is a placeholder (the
+recording protocol's S1 to S5) until the demo task is final.
 
 **Next 3 steps:**
-1. Oscar: export `ANTHROPIC_API_KEY` and run `python -m pytest orchestrator/tests/test_claude_live.py -s`, then
-   backend (b) with `--verifier shadow --image-size 480x640` to measure Claude's plan and check latency, cost and
-   agreement with sim ground truth.
+1. Run backend (b) in the HMI with `--planner claude --verifier shadow --image-size 480x640` on several seeds to measure
+   Claude's check accuracy against sim ground truth over whole runs (the shadow verifier logs every disagreement).
 2. With the pod up: backend (c) on the sim and `measure_concurrency --backend remote` to replace the modelled numbers.
 3. Replace `skills.yaml` with the final demo prompts (exact strings as trained and as in `/workspace/prompts.txt` on the
    pod), then run (d) zero-shot (A0, A0r) and with the LoRAs, logging every attempt.
@@ -150,20 +151,65 @@ Feed a plan from elsewhere with `python -m orchestrator validate plan.json`, `ru
 - The HMI binds to 127.0.0.1 only, refuses non-local Host headers (DNS rebinding) and requires `X-HMI: 1` with a JSON
   body on every POST, so another page in the operator's browser cannot approve a plan.
 
-## Claude: models, cost, latency
+## Claude: measured latency and cost
 
-| Use | Model | Settings | Estimated cost per call (UNVERIFIED) |
-|---|---|---|---|
-| Plan | `claude-opus-5-5` | adaptive thinking, effort `medium`, structured output, system prompt + vocabulary cached, `fallbacks: "default"` | ~2.3k input + 1k to 3k output tokens: about USD 0.03 to 0.07 |
-| Plain checks ("X inside the box") | `claude-haiku-5-5` | effort `low`, structured output, head frame at 640 px | ~0.6k input + 0.1k to 0.3k output: about USD 0.0002 |
-| Subtle checks (lid closed) | `claude-sonnet-5-5` | effort `low`, `fallbacks: "default"` | about USD 0.002 to 0.004 |
+Measured with `python -m orchestrator.live_check` on 2026-10-17 at 15:06 CEST (`runs/live_claude_20261017_150603.json`,
+SDK 1.15.0, frames from the pack-box sim rendered at 640x480 and sent as JPEG, 414 image tokens each). One call each:
 
-Prices from the claude-api skill's model table (cached 2026-10-06): Opus 5.5 USD 4 / 20 per million input / output
-tokens, Sonnet 5.5 USD 2 / 10, Haiku 5.5 USD 0.10 / 0.50 (prompts up to 100K tokens). Images cost about
-width x height / 750 tokens. A three-step run with one plan and 10 to 20 checks is roughly USD 0.05 to 0.10, so the USD
-200 of credits cover well over a thousand runs. The session budget guard (`--budget-usd`, default 5) refuses calls
-once spent; a check that cannot run leaves the step running and tells the operator to mark it in the HMI.
-Every call's tokens, cost and latency are logged; replace these estimates with the live test's numbers.
+| Call | Model, settings | Latency | Input (uncached / cache write / cache read) | Output (thinking) | Cost USD | Result |
+|---|---|---|---|---|---|---|
+| Plan, cold | `claude-opus-5-5`, effort `medium`, adaptive thinking, structured output, fallbacks | 12.1 s | 465 / 2,207 / 0 | 565 (93) | 0.0242 | valid, 5 steps |
+| Plan, same request again | same | 5.9 s | 465 / 0 / 2,207 | 522 (90) | 0.0127 | valid, 5 steps |
+| Check "apple in box", apple on the table | `claude-haiku-5-5`, effort `low`, adaptive | 1.89 s | 826 | 58 (0) | 0.00011 | no (correct) |
+| same, apple in the box | same | 1.54 s | 826 | 57 (0) | 0.00011 | yes (correct) |
+| same two checks, thinking disabled | `claude-haiku-5-5`, effort `low`, `disabled` | 2.06 s, 1.15 s | 825 | 52, 49 (0) | 0.00011 | no, yes (correct) |
+| Check "lid on the box", lid on the table | `claude-sonnet-5-5`, effort `low`, adaptive, fallbacks | 1.67 s | 835 | 68 (0) | 0.0024 | no (correct) |
+
+What the numbers say:
+- Prompt caching works on the planner: the system prompt plus vocabulary (2,207 tokens, above the 512 minimum) is
+  written on the first call and read on the second, which halves latency (12.1 to 5.9 s) and cost (0.024 to 0.013).
+  It stays warm for 5 minutes between plans; replans within a run hit it.
+- Haiku 5.5 at effort `low` did not think at all (0 thinking tokens) on these checks, so disabling thinking changed
+  nothing measurable; the default stays adaptive. A check costs USD 0.0001 and about 1.5 s, so checking every 2 chunks
+  (2.1 s) keeps at most one check in flight per step.
+- Claude's plan (both calls): apple (left) || block (right), then `home` on the left arm, then the lid with the right
+  arm, then `home` on the right arm. It parks the left arm before the lid on its own, which is the blocking case the
+  executor's make-way rule exists for.
+- A three-step run with one plan and 10 to 20 checks costs about USD 0.03 to 0.05 (Opus plan plus Haiku checks, one
+  or two Sonnet lid checks). The USD 200 of credits are not a constraint; the session guard (`--budget-usd`, default 5)
+  refuses calls once spent, and a check that cannot run leaves the step running and asks the operator to mark it.
+- One sample per call: latency will vary (the planner's p90 is unknown). Every call in a session is logged to
+  `runs/<run>/claude_calls.jsonl` with tokens, cost, latency and the request id.
+
+## Claude API: docs and SDK
+
+SDK: `anthropic==1.15.0` (pinned in `orchestrator/requirements.txt`, Python >= 3.10, httpx2 transport), installed in the
+laptop's base env. Key: `ANTHROPIC_API_KEY`, else `ANTHROPIC_API_KEY_FILE` (default `~/.config/ws4/anthropic.env`); never
+logged. Official pages read on 2026-10-17 for every feature used (also cited in `orchestrator/claude.py`):
+
+| Feature | How it is used | Docs |
+|---|---|---|
+| Messages API | `client.messages.create` (Haiku), `client.beta.messages.create` (Opus, Sonnet: fallback beta) | https://platform.claude.com/docs/en/api/messages/create |
+| Structured outputs | `output_config.format = {type: json_schema}`; closed objects, `enum` for skills and arms, no numeric bounds (checked by the validator); enum values normalised to lower case because the docs warn casing may differ | https://platform.claude.com/docs/en/build-with-claude/structured-outputs |
+| Why not tool use | we want the reply itself as JSON, not a function call, and forced `tool_choice` is a 400 on Opus 5.5 and Sonnet 5.5 | same page, "Strict tool use vs JSON outputs"; https://platform.claude.com/docs/en/api/errors |
+| Adaptive thinking, effort | `thinking: adaptive`; effort `medium` (planner) and `low` (checks); thinking tokens billed as output, reported in `usage.output_tokens_details.thinking_tokens` | https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost |
+| Vision | base64 JPEG, head frame downscaled to 640 px long edge (414 tokens = ceil(w/28) x ceil(h/28)); images placed before the text; limits 8000x8000 px and 10 MB per image, 32 MB per request | https://platform.claude.com/docs/en/build-with-claude/vision |
+| Prompt caching | `cache_control: ephemeral` on the planner's system block (5-minute TTL, write 1.25x, read 0.05x on Opus 5.5); minimum 512 tokens on all three 5.5 models; changing effort or the output format invalidates it | https://platform.claude.com/docs/en/build-with-claude/prompt-caching |
+| Refusals, fallback | `stop_reason == "refusal"` checked before reading content; `fallbacks: "default"` + beta `server-side-fallback-2026-07-01` on Opus 5.5 and Sonnet 5.5; Haiku 5.5 has no server-side fallback, so a refused check returns "not verified" and the step keeps running | https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback |
+| Errors, retries | SDK typed exceptions; it retries 408, 409, 429, 5xx and connection errors twice with backoff and honours `retry-after`; a spend-cap 429 has no `retry-after` | https://platform.claude.com/docs/en/api/errors, https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/python |
+| Rate limits | Start tier: 1,000 RPM and 2M input tokens per minute per 5.5 model; cache reads do not count; far above our rate (one plan, one check every 2 s) | https://platform.claude.com/docs/en/api/rate-limits |
+| Pricing | Opus 5.5 4 / 20, Sonnet 5.5 2 / 10, Haiku 5.5 0.10 / 0.50 USD per million input / output tokens (Haiku up to 100k-token prompts); cache reads 0.20 / 0.10 / 0.01 | https://platform.claude.com/docs/en/about-claude/pricing |
+| Streaming | not used: replies are short (under 1k tokens), so non-streaming calls with a 180 s timeout are well inside the SDK's 10-minute limit | https://platform.claude.com/docs/en/build-with-claude/streaming |
+
+Mismatches found:
+- Pricing: the claude-api skill (cached 2026-10-06) lists Sonnet 5.5 cache reads at USD 0.20 per million tokens; the
+  pricing page says USD 0.10 (0.05x of input). The code uses the pricing page.
+- Image tokens: an earlier comment here (and `imagine/score.py`'s docstring) used width x height / 750; the vision page
+  defines ceil(w/28) x ceil(h/28) patches (414 tokens for 640x480, about the same; diverges for small images).
+- The structured-outputs page does not say whether it combines with adaptive thinking, images and server-side
+  fallbacks. The live planner call uses all four together on the beta endpoint and works.
+- No doc vs SDK mismatch for the parameters used: SDK 1.15.0 accepts `fallbacks`, `betas`, `output_config` and
+  `thinking` as typed arguments and serialises them as the docs describe (checked through a mock transport).
 
 ## Concurrency on one shared model (backend c)
 
