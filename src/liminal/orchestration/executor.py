@@ -21,6 +21,8 @@ class RunReport:
 
 
 async def run_task(task: TaskSpec, ctx: ExecutionContext) -> RunReport:
+    if (ctx.verification is not None or ctx.attempts is not None) and task.initial_state:
+        raise ValueError("an evidence-backed attempt cannot initialize physical facts")
     ctx.world.update(task.initial_state, source="task_init")
     ctx.world.log("task_start", task=task.name)
     t0 = time.monotonic()
@@ -31,7 +33,20 @@ async def run_task(task: TaskSpec, ctx: ExecutionContext) -> RunReport:
         ctx.safety.estop()
         status, error = Status.FAILURE, f"{type(e).__name__}: {e}"
     # Never report success on the tree's word alone: re-check the goal predicate.
-    goal_ok = status.ok and (task.goal is None or ctx.world.holds(task.goal))
+    scope = ctx.verification
+    if scope is not None:
+        from liminal.perception.evidence import Truth
+
+        goal_ok = (status.ok and task.goal == scope.expected_effect
+                   and scope.result is not None and scope.result.decision is Truth.TRUE
+                   and ctx.world.holds(scope.expected_effect, bindings=scope.bindings))
+    elif ctx.attempts is not None:
+        # Evidence-backed authored tree: the goal must be named and freshly observed.
+        if status.ok and task.goal is not None and ctx.observe is not None:
+            await ctx.observe()
+        goal_ok = status.ok and task.goal is not None and ctx.world.holds(task.goal)
+    else:
+        goal_ok = status.ok and (task.goal is None or ctx.world.holds(task.goal))
     report = RunReport(task.name, status if goal_ok or not status.ok else Status.FAILURE,
                        goal_ok, time.monotonic() - t0, error)
     ctx.world.log("task_end", task=task.name, status=report.status.value, goal_verified=goal_ok, error=error)

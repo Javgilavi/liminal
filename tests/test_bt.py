@@ -131,3 +131,23 @@ def test_group_primitive_moves_both_arms(make_ctx):
         a.state = [5.0] * 6
     assert run(bt.SkillNode(Skill("both", "home")).run(ctx)) is Status.SUCCESS
     assert all(a.state == [0.0] * 6 for a in ctx.arms.values())
+
+
+def test_while_drops_the_hold_on_failure_and_keeps_it_on_legacy_success(make_ctx):
+    ctx = make_ctx()
+    node = bt.While("left", maintain="lid_open", body=bt.Check("x"), establish_timeout_s=0.05)
+    assert run(node.run(ctx)) is Status.FAILURE
+    assert ctx.arms["left"].holding is None  # never leave a hold running on an arm nobody owns
+    assert ctx.world.get("execution.left.hold_mode") is False
+
+
+def test_while_runs_establish_and_release_inside_its_claim(make_ctx):
+    ctx = make_ctx()
+    ctx.world.set("lid_open", True)
+    node = bt.While("left", maintain="lid_open", until="object_inserted", name="w",
+                    body=bt.SkillNode(Skill("right", "pick_place", success="object_inserted")),
+                    establish=bt.SkillNode(Skill("left", "open_lid")), release=bt.SkillNode(Skill("left", "release")))
+    assert run(node.run(ctx)) is Status.SUCCESS
+    names = [e["node"] for e in ctx.world.events if e["kind"] == "node_start"]
+    assert names.index("left:open_lid") < names.index("right:pick_place") < names.index("left:release")
+    assert ctx.arms["left"].holding is None and ctx.safety.owner_of("left") is None

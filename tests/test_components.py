@@ -13,7 +13,7 @@ from liminal.sim.embodiment import Embodiment
 
 def test_world_state_negation_and_log(tmp_path):
     w = WorldState(log_path=tmp_path / "e.jsonl")
-    assert w.holds("!lid_open")
+    assert not w.holds("lid_open") and not w.holds("!lid_open")
     w.set("lid_open", True, source="test")
     assert w.holds("lid_open") and not w.holds("!lid_open")
     assert (tmp_path / "e.jsonl").read_text().count("lid_open") == 1
@@ -86,4 +86,6 @@ def test_demo_plan_covers_variations():
 def test_claude_md_is_a_copy_of_agent_md():
     from pathlib import Path
 
-    assert Path("CLAUDE.md").read_text() == Path("AGENT.md").read_text(), "run: cp AGENT.md CLAUDE.md"
+    # The checkout migrated the instruction filename to AGENTS.md before WS3 work.
+    instructions = Path("AGENTS.md") if Path("AGENTS.md").exists() else Path("AGENT.md")
+    assert Path("CLAUDE.md").read_text() == instructions.read_text(), "keep agent instruction copies in sync"
