@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Liminal operator console</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">LIMINAL <span>operator console</span></div>
+  <div id="banner" class="banner">REPLAY/MOCK, not hardware</div>
+  <div id="runstate" class="pill">idle</div>
+  <button id="estop" class="estop" title="Cancel the run and e-stop the safety supervisor">E-STOP</button>
+</header>
+
+<main>
+  <section class="col side">
+    <div class="panel" id="p-options">
+      <h2>1 · Options</h2>
+      <label>Scenario <select id="o-scenario"></select></label>
+      <div class="row2">
+        <label>Mode <select id="o-mode"></select></label>
+        <label>Model <select id="o-model"></select></label>
+      </div>
+      <div class="row2">
+        <label>Max attempts <input id="o-max" type="number" min="1" value="6"></label>
+        <label>Interrupt after <input id="o-int" type="number" min="1" placeholder="never"></label>
+      </div>
+      <div class="checks">
+        <label class="chk"><input id="o-fail" type="checkbox"> fail first</label>
+        <label class="chk"><input id="o-lie" type="checkbox"> lie first (false success)</label>
+      </div>
+      <div id="o-memory"></div>
+    </div>
+
+    <div class="panel" id="p-input">
+      <h2>2 · Input</h2>
+      <div class="tabs">
+        <button class="tab on" data-tab="text">Text prompt</button>
+        <button class="tab" data-tab="video">Demo video</button>
+      </div>
+      <div id="tab-text">
+        <textarea id="goal" rows="3" placeholder="e.g. put the red block in the box, then the blue block in the left bin"></textarea>
+        <button id="b-ground" class="primary">Break down into skills</button>
+      </div>
+      <div id="tab-video" hidden>
+        <label>Pick a demo <select id="v-demo"></select></label>
+        <label>…or upload <input id="v-file" type="file" accept="video/*"></label>
+        <button id="b-video" class="primary">Extract &amp; break down</button>
+        <div id="v-extract" class="muted"></div>
+        <div id="v-frames" class="thumbs"></div>
+      </div>
+      <div id="g-error" class="callout err" hidden></div>
+    </div>
+  </section>
+
+  <section class="col mid">
+    <div class="panel" id="p-plan">
+      <h2>3 · Plan <small id="plan-meta"></small></h2>
+      <div id="plan-warn"></div>
+      <div id="plan-empty" class="muted">Enter a prompt or pick a demo, then break it down. Nothing runs until you accept.</div>
+      <div id="lanes" class="lanes" hidden>
+        <div class="lane left"><h3><span class="badge L">LEFT</span></h3><div id="lane-left"></div></div>
+        <div class="lane right"><h3><span class="badge R">RIGHT</span></h3><div id="lane-right"></div></div>
+      </div>
+      <div id="lane-other"></div>
+      <h3 class="sub" id="steps-h" hidden>Atomic FLUX calls (edit, then accept)</h3>
+      <div id="steps"></div>
+      <div id="plan-oblig" class="chips"></div>
+      <div id="run-error" class="callout err" hidden></div>
+      <div class="actions">
+        <button id="b-accept" class="go" disabled>Accept &amp; Run</button>
+        <button id="b-resume" disabled>Resume run</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="col right">
+    <div class="panel" id="p-exec">
+      <h2>4 · Execution <small id="exec-meta"></small></h2>
+      <div id="oblig" class="chips"></div>
+      <img id="scene" alt="current scene" hidden>
+      <div id="attempts"></div>
+      <div id="timeline" class="timeline"></div>
+    </div>
+    <div class="panel" id="p-mem">
+      <h2>5 · Memory</h2>
+      <div id="mem-summary" class="muted">Starts when a planner run records frames.</div>
+      <div id="mem-frames" class="thumbs"></div>
+      <div id="mem-extra"></div>
+    </div>
+  </section>
+</main>
+<script src="/web/app.js"></script>
+</body>
+</html>

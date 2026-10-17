@@ -16,7 +16,7 @@ flux = ["torch", "transformers", "peft", "huggingface_hub"]  # VERIFY against BF
 sim = ["mujoco>=3"]
 perception = ["opencv-python", "numpy"]
 llm = ["anthropic", "google-genai"]
-ui = ["fastapi", "uvicorn"]
+ui = ["fastapi", "uvicorn", "httpx"]
 dev = ["pytest>=8", "ruff"]
 
 [project.scripts]

@@ -4,6 +4,8 @@
     liminal plan "put the block in the box" --planner template
     liminal validate configs/tasks/*.yaml
     liminal serve --robot configs/robot/so101_dual.yaml --backend flux
+    liminal episode configs/replay/two_blocks.yaml --db runs/x.sqlite3 [--interrupt-after 1 | --resume RUN_ID]
+    liminal episode configs/replay/two_blocks.yaml --task configs/tasks/replay_two_blocks_v1.yaml
 """
 
 from __future__ import annotations
@@ -70,6 +72,119 @@ def _plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_breakdown(proposal, rows) -> None:
+    print(f"goal: {proposal.goal_text}")
+    print(f"atomic skills ({len(rows)}), obligations: {', '.join(proposal.obligations) or '-'}")
+    for r in rows:
+        after = f"  after {','.join(r['depends_on'])}" if r["depends_on"] else ""
+        print(f"  {r['id']:>4}  {r['arm'].upper():<5} {r['skill']}({r['object_id']} -> {r['destination_id']})"
+              f"  FLUX: \"{r['flux_prompt']}\"{after}")
+    for item in proposal.unsupported:
+        print(f"  UNSUPPORTED (not run): {item}")
+    for item in proposal.unresolved:
+        print(f"  UNRESOLVED: {item}")
+
+
+def _memory_options(args: argparse.Namespace) -> dict:
+    memory: dict = {}
+    if args.keyframes != "event":
+        memory["keyframes"] = args.keyframes
+    if args.max_keyframes is not None:
+        memory["max_keyframes"] = args.max_keyframes
+    if args.experience != "off":
+        memory["experience_mode"] = args.experience
+    if args.experience_db:
+        memory["experience_db"] = args.experience_db
+    if args.experience_frozen:
+        memory["experience_frozen"] = True
+    return memory
+
+
+def _eval(args: argparse.Namespace) -> int:
+    from liminal.eval import eval_main
+
+    return eval_main([args.experiment, *(["--out", args.out] if args.out else [])])
+
+
+def _episode(args: argparse.Namespace) -> int:
+    import uuid
+
+    from liminal.orchestration import TaskSpecError, service
+    from liminal.orchestration.procedure import ProcedureError, describe
+
+    mode = "authored" if args.task or args.authored else "planner"
+    run_id = args.resume or f"run-{uuid.uuid4().hex[:8]}"
+    if mode == "planner" and not args.db and not args.plan_only:
+        print("--db is required for planner episodes", file=sys.stderr)
+        return 2
+    if mode == "authored" and (args.resume or args.interrupt_after is not None):
+        print("--task/--authored (V1) has no ledger: --resume and --interrupt-after need the planner path",
+              file=sys.stderr)
+        return 2
+    # A grounded goal is frozen next to the ledger so a resume re-runs the SAME accepted obligations.
+    frozen = Path(f"{args.db}.{run_id}.procedure.json") if args.db else None
+    procedure = None
+    if frozen is not None and args.resume and frozen.exists():
+        procedure = json.loads(frozen.read_text())
+    elif args.goal or args.demo:
+        try:
+            if args.demo:
+                proposal, rows, extraction = service.ground_demo(args.scenario, args.demo, args.model,
+                                                                 strategy=args.demo_strategy)
+                print(f"demo: {extraction.get('demo')} ({extraction.get('strategy')} keyframes, "
+                      f"{len(extraction.get('frames', []))} frames; {extraction.get('model')})")
+            else:
+                proposal, rows = service.ground(args.scenario, args.goal, args.model)
+        except (ProcedureError, RuntimeError, ImportError, OSError, ValueError) as e:
+            print(f"could not ground {'demo' if args.demo else 'goal'}: {e}", file=sys.stderr)
+            return 2
+        _print_breakdown(proposal, rows)
+        if args.plan_only:
+            return 0
+        if not proposal.steps:
+            print("nothing to run: no supported atomic skill in this goal", file=sys.stderr)
+            return 2
+        procedure = proposal.to_dict()
+        if frozen is not None:
+            frozen.parent.mkdir(parents=True, exist_ok=True)
+            frozen.write_text(json.dumps(procedure, indent=2))
+    elif args.plan_only:
+        print("--plan-only needs --goal or --demo", file=sys.stderr)
+        return 2
+    options = service.RunOptions(
+        args.scenario, mode=mode, model=args.model, procedure=procedure, task=args.task, db=args.db,
+        run_id=run_id, resume=bool(args.resume), interrupt_after=args.interrupt_after,
+        fail_first=args.fail_first, lie_first=args.lie_first, max_attempts=args.max_attempts,
+        max_model_calls=args.max_model_calls, robot=args.robot, log_dir=args.log_dir, scene_state=args.scene_state,
+        memory=_memory_options(args))
+    try:
+        prepared = service.prepare(options)
+    except (TaskSpecError, ProcedureError, ValueError) as e:
+        print(f"cannot start episode: {e}", file=sys.stderr)
+        return 2
+    if procedure is not None and not (args.goal or args.demo):
+        _print_breakdown(prepared.procedure, describe(prepared.procedure, service.skill_world(prepared.scenario)))
+    try:
+        report = asyncio.run(service.execute(prepared))
+    except KeyboardInterrupt:
+        prepared.ctx.safety.estop()
+        hint = f"; resume with --resume {run_id}" if mode == "planner" else ""
+        print(f"e-stop: interrupted{hint}", file=sys.stderr)
+        return 130
+    except (RuntimeError, ImportError) as e:
+        print(f"model unavailable: {e}", file=sys.stderr)
+        return 2
+    except ValueError as e:  # e.g. an authored skill the scenario cannot apply
+        print(f"task does not fit scenario {prepared.scenario.name}: {e}", file=sys.stderr)
+        return 2
+    print(report.summary())
+    print("NOTE: replay/mock run: scene evidence is simulated, not hardware verification.")
+    print(f"event log: {prepared.log_path}")
+    if not report.completed and mode == "planner":
+        print(f"resume: liminal episode {args.scenario} --db {args.db} --resume {run_id}")
+    return 0 if report.completed else 1
+
+
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
@@ -102,6 +217,38 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--skills", default="configs/skills.yaml")
     p.add_argument("--task-dir", default="configs/tasks")
     p.set_defaults(fn=_plan)
+
+    e = sub.add_parser("episode", help="evidence-verified, resumable episode (replay/mock by default)")
+    e.add_argument("scenario", help="replay scenario, e.g. configs/replay/two_blocks.yaml")
+    e.add_argument("--db", default=None, help="SQLite memory path, e.g. runs/x.sqlite3 (planner path)")
+    e.add_argument("--task", default=None, help="authored task file (V1): run its tree instead of the planner")
+    e.add_argument("--goal", default=None, help='free-text goal, grounded into atomic skills')
+    e.add_argument("--authored", action="store_true", help="run a --goal as a compiled reactive tree (no planner)")
+    e.add_argument("--plan-only", action="store_true",
+                   help="with --goal/--demo: print the atomic-skill breakdown and exit")
+    e.add_argument("--demo", default=None, help="demonstration folder (V4), e.g. configs/demos/two_blocks_demo")
+    e.add_argument("--demo-strategy", default="sampled", choices=["sampled", "manual"], help="demo keyframes")
+    e.add_argument("--keyframes", default="event", choices=["event", "nominated", "none"], help="visual memory")
+    e.add_argument("--max-keyframes", type=int, default=None)
+    e.add_argument("--experience", default="off", choices=["off", "read", "readwrite"], help="cross-run memory")
+    e.add_argument("--experience-db", default=None, help="default runs/experience.sqlite3")
+    e.add_argument("--experience-frozen", action="store_true", help="read-only experience corpus")
+    e.add_argument("--model", default="replay", choices=["replay", "claude"])
+    e.add_argument("--interrupt-after", type=int, default=None, help="stop after N verified attempts")
+    e.add_argument("--resume", default=None, metavar="RUN_ID", help="continue an existing run id from --db")
+    e.add_argument("--log-dir", default="runs")
+    e.add_argument("--robot", default="configs/robot/mock_dual.yaml")
+    e.add_argument("--scene-state", default=None, help="replay scene state file (default: next to --db)")
+    e.add_argument("--max-attempts", type=int, default=6)
+    e.add_argument("--max-model-calls", type=int, default=None, help="default 20 (replay) / .env cap (claude)")
+    e.add_argument("--fail-first", action="store_true", help="replay backend fails its first call")
+    e.add_argument("--lie-first", action="store_true", help="replay backend claims success without acting")
+    e.set_defaults(fn=_episode)
+
+    ev = sub.add_parser("eval", help="compare harness configurations on replay (V6)")
+    ev.add_argument("experiment", help="experiment YAML, e.g. configs/eval/orchestration.yaml")
+    ev.add_argument("--out", default=None, help="output directory (default runs/eval/<name>)")
+    ev.set_defaults(fn=_eval)
 
     s = sub.add_parser("serve", help="HTTP trigger + state API for the operator UI")
     s.add_argument("--robot", default="configs/robot/mock_dual.yaml")
