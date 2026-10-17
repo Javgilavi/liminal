@@ -60,8 +60,10 @@ from flux.dual_arm_runner import ArmCalibration, DualArmRunner, per_arm_target  
 from flux.history import HistoryBuffer  # noqa: E402
 from flux.safety import DEFAULT_MAX_STEP, SafetyConfig, SafetyGuard, limits_from_lerobot_calibration  # noqa: E402
 from keepout import ZONES, KeepOut, read_arm_joints  # noqa: E402
+from placement import PlacementView, composite, load_refs, read_rgb, ref_shift  # noqa: E402
 
 CHECKPOINT = "black-forest-labs/flux-3-action-so101@0713a7a"  # weights identical to c9e13b2 (flux/checkpoint_facts.md)
+POLICY_BACKENDS = ("remote", "act")  # learned policies: warmed up, graded and logged
 STOP_FILE = HERE / "STOP"
 KEY_FILE = HERE / "KEY"  # one character, read once: lets a headless operator answer the same prompts as the keyboard
 RUNS = HERE / "runs"
@@ -71,7 +73,9 @@ PHANTOM_STATE = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 50.0])  # the unused slot; co
 # Graded steps per trial task (ws4/eval/trial_log.py steps_total / steps_done); --steps overrides.
 TASK_STEPS = {
     "stack_cups": ("grasp a cup", "lift it clear of the table", "release it inside the other cup"),
-    "put_pen_in_slot": ("grasp the pen", "lift it clear of the mat", "put it in its slot"),
+    # Post-training protocol (orchestrator, 17 Oct night): reach = fingers around the pen on the mat, grasp = pen
+    # lifted in the gripper, insert = pen in its slot and released (the dataset's keep rule).
+    "put_pen_in_slot": ("reach the pen", "grasp the pen", "insert it in its slot"),
 }
 STEPS = TASK_STEPS["stack_cups"]
 
@@ -390,15 +394,25 @@ class Keys:
             return sys.stdin.read(1)
         return None
 
-    def wait(self, allowed: str, prompt: str, auto: str | None = None) -> str:
-        """Block until one of ``allowed`` (or a stop) arrives; ``auto`` answers at once when stdin is no TTY."""
+    def wait(self, allowed: str, prompt: str, auto: str | None = None, tick: Any = None, tick_s: float = 0.2) -> str:
+        """Block until one of ``allowed`` (or a stop) arrives; ``auto`` answers at once when stdin is no TTY.
+        ``tick()`` runs every ``tick_s`` while waiting (the placement page); its errors are reported, never raised."""
         print(prompt, flush=True)
         if not sys.stdin.isatty() and auto is not None:
             return auto
+        next_tick, failed = 0.0, False
         while True:
             key = self.poll()
             if key is not None and (key in allowed or key in ("ctrl-c", "stop-file")):
                 return key
+            if tick is not None and time.monotonic() >= next_tick:
+                next_tick = time.monotonic() + tick_s
+                try:
+                    tick()
+                except Exception as e:  # noqa: BLE001 (a view must never block the operator)
+                    if not failed:
+                        print(f"(placement view failed: {e!r})", flush=True)
+                    failed = True
             time.sleep(0.02)
 
 
@@ -462,8 +476,19 @@ def build_backend(args: argparse.Namespace) -> Any:
         gripper = None if args.fake_gripper < 0 else args.fake_gripper
         velocity = np.array(args.fake_velocity)
         return FakeBackend(SO101_CONTRACT, velocity=velocity, absolute=gripper, delay_s=args.fake_delay)
+    if args.backend == "act":
+        # LeRobot ACT baseline (ws4/act): absolute joint chunks through the same FluxBackend interface, so every
+        # command still passes the guard, keep-out, envelope, ramps, stall and load freeze.
+        from act.backend import ActBackend
+
+        if not args.act_checkpoint:
+            raise SystemExit("--backend act needs --act-checkpoint")
+        return ActBackend.from_pretrained(args.act_checkpoint, device=args.act_device, n_action_steps=args.act_steps)
     from flux.remote import RemoteBackend
 
+    if getattr(args, "imagine", None):  # opt-in: the server also keeps FLUX's imagined frames (ws4/imagine/README.md)
+        return RemoteBackend(args.server, args.package, token=read_token(args), timeout_s=args.timeout,
+                             imagine=args.imagine)  # fmt: skip
     return RemoteBackend(args.server, args.package, token=read_token(args), timeout_s=args.timeout)
 
 
@@ -545,6 +570,14 @@ def run_attempt(
     args: argparse.Namespace, runner: DualArmRunner, robot: SingleArmRobot, keys: Keys, task: str, out: Path
 ) -> dict[str, Any]:
     rec = Recorder(out, video=not args.no_video)
+    irec = None
+    if getattr(args, "imagine", None) and hasattr(runner.backends.get("policy"), "fetch_imagination"):
+        try:  # opt-in; flag off imports nothing from ws4/imagine
+            from imagine.attempt import AttemptImagination
+
+            irec = AttemptImagination(out)
+        except Exception as exc:
+            print(f"imagination off for this attempt: {type(exc).__name__}: {exc}", flush=True)
     target = robot.slot
     other_q = None
     keepout = getattr(runner.guard, "keepout", None)
@@ -572,7 +605,8 @@ def run_attempt(
     guard_ticks, capped0 = 0, robot.capped
     load_run = np.zeros(ARM_DIM - 1, dtype=int)
     load_cap = 10.0 * (args.torque_limit if args.robot == "so101" else 100.0)  # load units at the torque cap
-    keep_run, keep0 = 0, dict(getattr(runner.guard, "counts", {}))
+    keep_win: deque[bool] = deque(maxlen=args.keepout_window)
+    keep_zone, keep0 = "", dict(getattr(runner.guard, "counts", {}))
     stall = np.zeros(ARM_DIM - 1, dtype=int)
     volts: list[float] = []
     healths: list[dict | None] = []
@@ -602,10 +636,15 @@ def run_attempt(
         guard_ticks += report.guard_intervened
         q = np.array([float(robot.last_raw[f"{j}.pos"]) for j in ARM_JOINTS])
         zone = getattr(runner.guard, "last_zone", "")
-        keep_run = keep_run + 1 if zone else 0
-        if keep_run >= args.keepout_ticks:
+        # Persistent pushing into a zone ends the attempt: --keepout-ticks refusals among the last --keepout-window
+        # policy ticks. Ticks that only hold the pose between chunks neither count nor clear: with a consecutive count
+        # they reset it, and FLUX's 32-step chunks never reached 45 (every Haller attempt so far ran to its end).
+        if zone or report.status.get(target) != "waiting":
+            keep_win.append(bool(zone))
+            keep_zone = zone or keep_zone
+        if sum(keep_win) >= args.keepout_ticks:
             runner.guard.estop()
-            end_reason = f"stop (keep-out: {zone} refused for {keep_run} ticks)"
+            end_reason = f"stop (keep-out: {keep_zone} refused for {sum(keep_win)} ticks of the last {len(keep_win)})"
             hold_here(robot)
             break
         # Stall check on the arm joints (not the gripper, which legitimately squeezes a cup): a joint that lags its
@@ -636,6 +675,8 @@ def run_attempt(
                          "guard": report.guard_intervened, "status": report.status.get(target, ""),
                          "keepout": zone})  # fmt: skip
         rec.frame(robot.last_raw, f"{task} | {report.status.get(target, '')} | t={time.monotonic() - t0:4.1f}s")
+        if irec is not None:  # queues frames only (bounded, drops when full); never raises
+            irec.tick(len(rec.rows) - 1, robot.last_raw, report.status.get(target) == "replanned", ts.last_response)
         if report.tick % 30 == 0:
             volts.append(robot.min_voltage())
             healths.append(robot.health())
@@ -661,9 +702,18 @@ def run_attempt(
         "health_per_s": healths,
         "keepout_refusals": {z: n - keep0.get(z, 0) for z, n in getattr(runner.guard, "counts", {}).items()},
         "args": {k: v for k, v in vars(args).items() if k != "token_cmd"},
-        "checkpoint": CHECKPOINT if args.backend == "remote" else f"{args.backend} backend",
+        "checkpoint": (f"{args.act_checkpoint} (LeRobot ACT)" if args.backend == "act" else args.checkpoint)
+        if args.backend in POLICY_BACKENDS else f"{args.backend} backend",
     }  # fmt: skip
     rec.close(meta)
+    if irec is not None:  # after meta.json, before scoring; bounded by --imagine-timeout and never raises
+        try:
+            from imagine.attempt import finish_with_timeout
+
+            finish_with_timeout(irec, runner.backends["policy"], timeout_s=getattr(args, "imagine_timeout", 30.0),
+                                render=getattr(args, "imagine_render", False), task=task)  # fmt: skip
+        except Exception as exc:
+            print(f"imagination not saved: {type(exc).__name__}: {exc}", flush=True)
     return meta
 
 
@@ -731,11 +781,12 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
 
     failure = "" if result["steps_done"] == len(STEPS) else f"stopped before: {STEPS[result['steps_done']]}"
     trial = trial_log.Trial(
-        task=args.trial_task, condition="zero_shot", variant=args.variant, checkpoint=meta["checkpoint"],
+        task=args.trial_task, condition=args.condition, variant=args.variant, checkpoint=meta["checkpoint"],
         steps_total=len(STEPS), steps_done=result["steps_done"],
         success=result["steps_done"] == len(STEPS) and result["interventions"] == 0,
-        interventions=result["interventions"], layout=args.layout, failure=failure,
+        interventions=result["interventions"], layout=meta.get("layout") or args.layout, failure=failure,
         notes=f"{args.note + '; ' if args.note else ''}prompt={task!r}; guidance {args.guidance_note}; "
+        f"{'start ' + meta['layout_ref'] + '; ' if meta.get('layout_ref') else ''}"
         f"safety: {args.max_step} deg/tick guard, LeRobot cap "
         f"{args.max_relative_target} deg, torque limit {args.torque_limit:.0f}%; "
         f"min supply {meta.get('min_supply_v')} V; keep-out refusals {meta.get('keepout_refusals')}; "
@@ -744,9 +795,75 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
         video=str((out / "video.mp4").relative_to(WS4.parent)) if (out / "video.mp4").exists() else "",
         operator=args.operator,
     )  # fmt: skip
-    trial = trial_log.append(trial_log.DEFAULT_LOG, trial)
+    trial = trial_log.append(Path(os.environ.get("WS4_TRIAL_LOG", trial_log.DEFAULT_LOG)), trial)  # env: tests only
     print(f"logged {args.trial_task}/{args.variant} attempt {trial.attempt}: {trial.steps_done}/{trial.steps_total}",
           flush=True)  # fmt: skip
+
+
+def attempt_plan(args: argparse.Namespace) -> list[str]:
+    """Layout of each attempt: ``--layouts A B --per-layout 3`` gives A A A B B B, otherwise ``--layout`` repeated
+    ``--attempts`` times."""
+    if args.layouts:
+        return [layout for layout in args.layouts for _ in range(args.per_layout)]
+    return [args.layout] * args.attempts
+
+
+def start_check(robot: SingleArmRobot, ref_img: np.ndarray, label: str, out: Path) -> dict[str, Any]:
+    """The scene as the attempt starts, next to its reference (start_check.jpg), and how far the background sits
+    from the reference: a camera bumped since recording shows up as a shift of more than a few px."""
+    import cv2
+
+    out.mkdir(parents=True, exist_ok=True)
+    live = robot.get_observation()[IMG_HEAD]
+    cv2.imwrite(str(out / "start_check.jpg"), cv2.cvtColor(composite(live, ref_img, label), cv2.COLOR_RGB2BGR))
+    try:
+        dx, dy, rot = ref_shift(live, ref_img)
+    except cv2.error:
+        print("start check: base plate not aligned (camera moved a lot, or the view is blocked)", flush=True)
+        return {}
+    print(f"start check: scene background shift {dx:+.1f} px, {dy:+.1f} px, {rot:+.2f} deg vs the reference",
+          flush=True)  # fmt: skip
+    return {"start_shift_px": [round(dx, 1), round(dy, 1)], "start_rot_deg": round(rot, 2)}
+
+
+def check_at_home(args: argparse.Namespace, runner: DualArmRunner, robot: SingleArmRobot, keys: Keys,
+                  session: Path) -> bool:  # fmt: skip
+    """Ramp to the start pose (as an attempt does), then the runner's live frames and joints vs the at-home
+    references (``home_check.py``). Saves home_check.jpg / .json in the session folder; True = go on."""
+    import cv2
+    import home_check as hc
+
+    keepout = getattr(runner.guard, "keepout", None)
+    if args.other_arm_port and keepout is not None:
+        keepout.other_q = tuple(float(v) for v in read_arm_joints(args.other_arm_port, args.other_arm_id))
+    if args.start_pose is not None and args.robot == "so101" and not args.observe:
+        print(f"home check: ramping to the start pose {args.start_pose} ...", flush=True)
+        ramp_ko = keepout.without_envelope() if keepout is not None else None
+        if not move_to(robot, np.array(args.start_pose), getattr(runner, "ramp_config", runner.guard.config),
+                       args.return_speed, keys, ramp_ko):  # fmt: skip
+            return False
+        time.sleep(1.0)
+    session.mkdir(parents=True, exist_ok=True)
+    try:  # the arm holds at home here: a failed analysis is reported, the operator still decides
+        ref_head, ref_wrist, ref_state, ref_name = hc.load_refs(Path(args.home_check), args.home_check_take)
+        obs = robot.get_observation()
+        q = robot.joints()
+        ok, lines, img = hc.home_check(obs[IMG_HEAD], obs[WRIST_KEY[robot.slot]], q, ref_head, ref_wrist, ref_state)
+        cv2.imwrite(str(session / "home_check.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+        (session / "home_check.json").write_text(json.dumps({"ok": ok, "reference": ref_name, "lines": lines,
+                                                             "q": np.round(q, 2).tolist()}, indent=1))  # fmt: skip
+        print(f"home check vs {ref_name}: {'PASS' if ok else 'CHECK'} (image {session / 'home_check.jpg'})",
+              flush=True)  # fmt: skip
+    except Exception as e:  # noqa: BLE001
+        ok, lines = False, [f"home check could not run: {e!r}"]
+    for line in lines:
+        print(f"  {line}", flush=True)
+    if not sys.stdin.isatty():
+        return True
+    if ok:
+        return keys.wait("\n", ">>> home check PASS: Enter = continue to the attempts, Ctrl-C = stop and park") == "\n"
+    return ask_line(keys, ">>> home check did NOT pass (above): go = run the attempts anyway, park = stop and park",
+                    ("go", "park")) == "go"  # fmt: skip
 
 
 # ---------------------------------------------------------------------- main
@@ -796,7 +913,12 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--keepout-config", default=None, help="workspace JSON (keepout.py); default red_follower's")
     p.add_argument("--wrist-rotate", type=int, choices=(0, 90, 180, 270), default=0)
     p.add_argument("--slot", choices=("left", "right"), default="left", help="runner slot; no effect on the model")
-    p.add_argument("--backend", choices=("fake", "remote"), default="fake")
+    p.add_argument("--backend", choices=("fake", *POLICY_BACKENDS), default="fake",
+                   help="remote = FLUX (or act/serve.py) server; act = LeRobot ACT checkpoint in this process")
+    p.add_argument("--act-checkpoint", default=None, help="--backend act: the checkpoint's pretrained_model folder")
+    p.add_argument("--act-device", default="auto", help="--backend act: cuda, cpu or auto")
+    p.add_argument("--act-steps", type=int, default=None,
+                   help="--backend act: commands executed per chunk before re-planning (default: the checkpoint's)")
     p.add_argument("--fake-delay", type=float, default=0.6, help="fake inference latency, s")
     p.add_argument("--fake-velocity", type=float, nargs=ARM_DIM, default=[0.2, 0.2, -0.2, 0.2, 0.0, 0.0],
                    help="fake policy drift, deg per tick per joint")  # fmt: skip
@@ -821,20 +943,39 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--load-sustain", type=float, default=0.7, help="load freeze: fraction of the torque cap ...")
     p.add_argument("--load-ticks", type=int, default=9, help="... held this many ticks (9 = 0.3 s)")
     p.add_argument("--load-peak", type=float, default=0.9, help="load freeze: fraction of the cap on any tick")
-    p.add_argument("--keepout-ticks", type=int, default=45, help="consecutive keep-out refusals that end an attempt")
+    p.add_argument("--keepout-ticks", type=int, default=45,
+                   help="keep-out refusals within --keepout-window policy ticks that end an attempt")
+    p.add_argument("--keepout-window", type=int, default=60, help="policy ticks (holds between chunks excluded)")
     p.add_argument("--no-keepout", action="store_true", help="disable the FK keep-out (fake-arm tests only)")
     p.add_argument("--stall-ticks", type=int, default=15, help="consecutive stalled ticks before freezing (15 = 0.5 s)")
     p.add_argument("--offset", type=float, nargs=ARM_DIM, default=None, help="model = scale * robot + offset")
     p.add_argument("--scale", type=float, nargs=ARM_DIM, default=None,
                    help="model = scale * robot + offset; must match the package's training data (D: 1 -1 1 1 -1 1)")
     p.add_argument("--variant", default="A0")
+    p.add_argument("--checkpoint", default=CHECKPOINT, help="what the served package is, for the trial log "
+                   "(a LoRA: its package path and microstep)")
     p.add_argument("--layout", default="")
+    p.add_argument("--layouts", nargs="+", default=None, help="layout sequence, e.g. A B C D (overrides --attempts)")
+    p.add_argument("--per-layout", type=int, default=1, help="attempts per layout with --layouts")
+    p.add_argument("--start-at", type=int, default=1, help="resume: skip to this attempt of the sequence (1-based)")
+    p.add_argument("--layout-ref", default=None, help="dir of <layout>_ep<NN>_head.jpg start frames (placement page)")
+    p.add_argument("--placement-port", type=int, default=8899)
+    p.add_argument("--home-check", default=None, metavar="REF_DIR",
+                   help="before the attempts: ramp to --start-pose and compare live frames and joints with these "
+                   "at-home references (frames/reference_2026-10-17_night)")
+    p.add_argument("--home-check-take", type=int, default=None, help="reference take in --home-check (default last)")
+    p.add_argument("--condition", choices=("zero_shot", "post_training"), default="zero_shot")
     p.add_argument("--note", default="", help="free text prepended to every logged trial's notes")
     p.add_argument("--trial-task", default="stack_cups", help=f"one of {sorted(TASK_STEPS)} or any with --steps")
     p.add_argument("--steps", nargs="+", default=None, help="graded steps of the task, in order")
     p.add_argument("--operator", default="oscar")
     p.add_argument("--no-log", action="store_true", help="never write to ws4/eval/trials.jsonl")
     p.add_argument("--no-video", action="store_true")
+    p.add_argument("--imagine", choices=("lazy", "async", "sync"), default=None,
+                   help="also save FLUX's imagined frames per chunk (remote backend; ws4/imagine/README.md). lazy: the "
+                   "server decodes them after the attempt while the arm holds. Not for graded eval rows")
+    p.add_argument("--imagine-timeout", type=float, default=30.0, help="max seconds to fetch them after an attempt")
+    p.add_argument("--imagine-render", action="store_true", help="also write imagination/imagined_vs_actual.mp4")
     p.add_argument("--yes", action="store_true", help="start attempts without waiting for Enter")
     p.add_argument("--home", action="store_true", help="red arm: move slowly to its saved rest pose, then torque off")
     p.add_argument("--park-pose", type=float, nargs=ARM_DIM, default=None,
@@ -846,7 +987,7 @@ def main(argv: list[str] | None = None) -> None:
     import logging
 
     logging.getLogger().setLevel(logging.ERROR)  # LeRobot logs every capped goal at WARNING, 30 times a second
-    if args.scene_cam == "blank" and args.backend == "remote" and not args.no_log:
+    if args.scene_cam == "blank" and args.backend in POLICY_BACKENDS and not args.no_log:
         raise SystemExit("a blank scene camera is out of distribution: such attempts must not be logged (--no-log)")
 
     calib_path = None
@@ -899,19 +1040,40 @@ def main(argv: list[str] | None = None) -> None:
     session = RUNS / datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
         with Keys() as keys:
-            if args.backend == "remote":
+            if args.backend in POLICY_BACKENDS:
                 warm_up(backend, robot, target, sorted(set(tasks)))
-            for i in range(args.attempts):
+            layouts = attempt_plan(args)
+            if args.home_check and not check_at_home(args, runner, robot, keys, session):
+                layouts = []  # Ctrl-C at the home check: no attempts, park below
+            refs = load_refs(Path(args.layout_ref)) if args.layout_ref else {}
+            view = PlacementView(args.placement_port) if refs and sys.stdin.isatty() else None
+            if view is not None:
+                print(f"placement page: {view.url} (open it in a browser)", flush=True)
+            seen: dict[str, int] = {}
+            for i, layout in enumerate(layouts):
+                k = seen[layout] = seen.get(layout, -1) + 1  # attempt index within this layout
+                if i + 1 < args.start_at:
+                    continue
                 task = tasks[i % len(tasks)]
+                ref = refs[layout][k % len(refs[layout])] if layout in refs else None
+                ref_img = read_rgb(ref) if ref is not None else None
+                label = f"attempt {i + 1}/{len(layouts)}: layout {layout}" + (f", reference {ref.stem}" if ref else "")
                 if not args.yes:
-                    key = keys.wait("\n ", f"[{i + 1}/{args.attempts}] layout {args.layout or '-'}, prompt {task!r}: "
-                                    "Enter = start, Ctrl-C = quit", auto="\n")  # fmt: skip
+                    tick = None
+                    if view is not None and ref_img is not None:
+                        def tick(ref_img: np.ndarray = ref_img, label: str = label) -> None:
+                            view.update(robot.get_observation()[IMG_HEAD], ref_img, label)
+                    key = keys.wait("\n ", f"[{label}] prompt {task!r}: Enter = start, Ctrl-C = quit", auto="\n",
+                                    tick=tick)  # fmt: skip
                     if key in ("ctrl-c", "stop-file"):
                         break
                 out = session / f"attempt{i + 1:02d}"
+                start = start_check(robot, ref_img, label, out) if ref_img is not None else {}
                 meta = run_attempt(args, runner, robot, keys, task, out)
+                meta.update(layout=layout, layout_ref=ref.stem if ref else "", **start)
+                (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))
                 # Score the attempt while the arm still holds where it ended, so a quit ("x") never loses it.
-                result = None if args.no_log or args.backend != "remote" else ask_result(keys, meta)
+                result = None if args.no_log or args.backend not in POLICY_BACKENDS else ask_result(keys, meta)
                 if result is not None:
                     meta["result"] = result
                     (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))

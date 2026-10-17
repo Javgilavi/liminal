@@ -161,6 +161,101 @@ Load measured on the Haller during these runs never exceeded 29 % of max torque,
 end stops; the red arm's damaging attempts reached 92 % (uncapped) and a sustained 60 % (at the cap).
 
 
+### Post-training eval on the Haller pen task (kit ready 2026-10-17 22:15, not yet run on the arm)
+
+Protocol (orchestrator): for every LoRA checkpoint, 4 start layouts x 3 attempts = 12, from haller home, verbatim
+prompt "put the red pen in its slot in the cardboard box", every guard, guidance 1.0 as served. Logged as task
+`put_pen_in_slot`, condition `post_training`, variant `lora_<microsteps>`, steps done of 3 (reach, grasp, insert),
+interventions. Baseline row: zero-shot A0r-B on the same layouts, 1 attempt each. Layouts and scoring rules:
+[layouts/README.md](layouts/README.md) (references = frame 0 of the 12 held-out takes, attempt k of a layout uses
+held-out take k).
+
+1. When the orchestrator says the arm is ours (someone else used the robot): read-only preflight. It checks ports
+   free, both arms' EEPROM against the calibration files and the files against the repo copies, the task arm's
+   servos and supply, and the scene and wrist camera against reference frames (colour, wrist orientation, mast
+   camera shift on the robot's base plate). No servo writes, no motion.
+
+   ```bash
+   python ws4/single_arm/preflight.py --ref-dir ws4/single_arm/frames/reference_2026-10-17_night
+   ```
+
+   It picks take 103 from ws4-vr2's lossless references (layout D, nobody in view; `--ref-take` for another).
+   Without `--ref-dir` it compares against held-out take 20's start frames. Offline check: take 20 vs take 103
+   gives brightness 0.97 and a base-plate shift of +0.9 / +4.9 px (the mast camera held still through the
+   recording); a 180 deg rotation is flagged on both cameras. Do it with the arm at home if possible: the
+   references are at home, and each eval attempt repeats the base-plate check at home (`start_check.jpg`).
+2. Server (orchestrator plan, 17 Oct night): real-serve-6000 (`ssh root@157.157.221.177 -p 15377`, RTX PRO 6000
+   96 GB). ws4-datasets runs `/workspace/serve/pen_serve.sh 005000` = one server on port 8790 with `base` =
+   `/workspace/packages/so101_haller_pen_B84` (stock so101 + B quantiles of the 84 train takes) and `lora_5000` =
+   base + the lora_pen84 EMA adapter at 5,000 microsteps (folded into the weights in memory at load by
+   `cloud/lora_adapter.py`, same merge as `real_lora.sh merge`), guidance 1.0 + compile, pen prompt pre-encoded.
+   Later checkpoints (10k, 15k, 20k) replace `lora_<N>` on the same port after about 5 min of downtime;
+   ws4-datasets asks first and holds while an arm session runs. The two
+   rows then differ only by the adapter. Token in `/workspace/flux_token` there. Port 8780 is ws4-imagine's test
+   server: leave it alone.
+3. One arm session, as Oscar approved (17 Oct night, "ok i ll follow your recommendations"): checks, then 5
+   attempts each of `base` (variant `A0r-B84`, zero_shot), `median` (`A0r-M`, zero_shot) and the checkpoint
+   (`LoRA-5k`, post_training). All rows use layouts A B C D A (held-out takes 20, 36, 86, 101, 21), 40 s each and
+   the same prompt and guards. One command runs all three rows over one tunnel:
+
+   ```bash
+   POD_HOST=157.157.221.177 POD_PORT=15377 LORA=lora_5000 bash ws4/single_arm/eval_pen.sh session
+   ```
+
+   If `median` is not served yet when the session starts, the rows become B84, LoRA-5k, median. Before the median
+   row the wrapper checks the server again and skips it with a message if it is still missing (then `eval_pen.sh
+   median` later). Tested against the live server with `base` + `lora_500` and no `median`: both rows ran and
+   median was skipped. `base` or the LoRA missing, or the server down, stops before the arm moves.
+
+   The wrapper checks that the packages are served before the arm moves. Between the rows the arm parks and the
+   wrapper waits for Enter; the next row then reconnects, ramps to home and repeats the home check (well under a
+   minute, no server restart). The trial-log checkpoint strings are ws4-datasets' (the B84 package path; the adapter
+   path on B84 with its microsteps). `baseline` or `lora` instead of `session` runs one row; `START_AT=<N>` resumes
+   the first row; `DRY_RUN=1` prints the runner commands; `FAKE_ROBOT=1` rehearses against the real server with the
+   fake arm (nothing logged, no arm port). `--imagine` stays off for these graded rows.
+
+   **Median row (A0r-M)** (`eval_pen.sh median` runs it alone; `ROWS="baseline lora"` leaves it out):
+   package `median` = `/workspace/packages/so101_haller_pen_M`, stock weights with the median statistics of
+   current-calibration SO-101 datasets (multimodalart Space 09edebb). A teammate's own script "basically worked"
+   with it; through this wrapper it gets the same layouts, budget, prompt, guards, checks and logging. It runs
+   only if ws4-datasets serves `median` (the wrapper checks before the arm moves). How M meets our arm:
+   - Gripper: M's gripper spans 0..40 (state q99 40.3, action q99 40.7), ours 0..100 with open = 100. The guards
+     never fight it: gripper limits 0..100, 5 %/tick, and the keep-out, envelope, stall and load freeze ignore
+     the gripper. But M never opens past about 41, and our home gripper (100) normalizes to +4.0, so the first
+     chunk sees an out-of-range gripper history until the gripper closes to 41 (12 ticks at 5 %/tick, then the
+     8-tick history refills: about 0.7 s). Two opt-in fixes, never both: `M_START_GRIP=40` (start inside M's
+     range) or `M_GRIP_SCALE=0.4` (model = 0.4 x robot gripper: our 100 is M's 40, M's open 40 becomes our 100;
+     variant `A0r-M-g0.4`). Default: start at 100 like every other row. The notes record which was used.
+   - Arm: M's ranges come from other arms and tasks. Home wrist flex 0 normalizes to -1.6 (M's flex 23..96), our
+     reach goes to lift 73 (M's q99 43) and roll 66 (M's q99 18). B84's ranges are our own demos' (flex -18..76,
+     lift -25..73, roll -56..66).
+
+   The wrapper refuses busy ports, opens the tunnel, checks the packages are served (6-D, before touching the arm).
+   The runner then ramps to haller home and runs the **home check** (`home_check.py`): its live head and wrist
+   frames and joints against ws4-vr2's at-home references (take 103): brightness, mast camera shift on the base
+   plate, wrist orientation, the task arm's position in the head view (a different calibration draws home
+   elsewhere) and joints vs the recorded home (6 deg). PASS asks Enter. Otherwise you type `go` to run anyway or
+   `park`. It saves `home_check.jpg` / `.json` in the session folder. Offline on the recorded frames: the arm at
+   home in layouts A to D overlaps the reference 0.74 to 0.92 (pass); a 25 px displacement gives 0.46 (flagged).
+   Then the layouts run in blocks. Before each attempt the placement page (http://127.0.0.1:8899) runs until Enter.
+   After each attempt the runner asks steps and interventions (typed, Enter), logs one line and returns to home.
+   At the end it parks at rest with torque off. Quit with Ctrl-C at an Enter prompt; resume with
+   `START_AT=<attempt> HOME_REF=none` (same layout and reference order). Attempt cap 40 s (`ATTEMPT_S`), 2.5x the
+   longest held-out take (16 s).
+4. Keep-out: `calibration/haller_right_workspace_final.json` = the station zones plus a demonstrated envelope from
+   the 84 train takes of all four layouts (joints -32..58, -52..84, -77..74, -40..105, -77..82 deg; 1,574 TCP
+   voxels). Replays: station zones refuse 0 of 43,015 steps over all 96 good takes, and the envelope refuses 0 steps
+   of the 12 held-out takes. The old `haller_right_workspace.json` envelope came from layouts A and B only and would
+   have blocked C and D. Wrist flex: only train take 13 (layout A) goes above the 93.5 deg policy soft limit (56
+   frames, max 95), so the soft limits leave the demonstrated motion intact.
+
+Tested without the arm: 8 unit tests (`tests/test_eval_kit.py`: layout plan, references, composite, base-plate shift
+on real frames, parity flags, placement page, logged fields, home check pass and fail) and pty rehearsals with the
+fake robot and a local fake server: the LoRA sequence (resume, placement page fetched, typed scores, log rows with
+layout, condition, checkpoint) and the baseline (home check, `go` after a failed check, 5 rows A B C D A with the
+right references). The rehearsal caught one crash (a numpy bool in home_check.json), fixed. Not yet run on the arm
+or against the real server.
+
 ### Imported by ws4-orchestrator (stable through Sunday)
 
 `ws4/orchestrator` drives the Haller task arm with these, imported read-only; only keyword arguments with defaults
@@ -338,6 +433,14 @@ State on 2026-10-17 17:35 CEST: A0 halted after 3 attempts at 12 V because the e
 | `keepout_demos.py` | replay recorded demos through the keep-out: every demonstrated motion must pass (0 refusals) |
 | `compare_frames.py` | recorded dataset frame vs the runner's live camera path: orientation, colour, brightness |
 | `joint_test.py` | one joint, small slow motion at a low torque cap: does the output follow (gear check)? |
+| `eval_pen.sh` | pen eval rows (`session` = B84 baseline then LoRA, 5 attempts each): tunnel, server check, home check |
+| `preflight.py` | read-only checks before an eval: ports, EEPROM vs calibration files, servo health, camera parity |
+| `placement.py` | placement page (reference start vs live head camera) and the base-plate shift check |
+| `home_check.py` | at home before the first attempt: the runner's live frames and joints vs the at-home references |
+| `make_layout_refs.py` | held-out takes' start frames into `layouts/` (references, overview, index) |
+| `layouts/` | the 12 reference start frames (head, wrist), `overview.jpg`, `index.json`, placement and scoring guide |
+| `offline_diag.py`, `serve_lowmem.py` | offline data-format diagnostic (variants A to E); flux.remote server for 24 GB GPUs |
+| `calibration/haller_*.json` | Haller calibration (EEPROM harvest) and keep-out workspaces (`_final`: envelope from the 84 train takes) |
 | `calibration/` | `red_follower.json` (as used), `red_follower_rest.json` |
 | `frames/` | camera frames Oscar confirmed (`scene_final_L1.jpg`) and earlier placements |
 | `handguided/` | the hand-guided episodes and `stats_red_follower.json` |
