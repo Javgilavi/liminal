@@ -25,7 +25,7 @@ from .claude import SDK_VERSION, ClaudeJSON, sdk_version
 from .cost import CostMeter
 from .plan import Step, concurrent_pairs
 from .planner import ClaudePlanner
-from .skills import load_vocabulary
+from .skills import SIM_VOCABULARY, load_vocabulary
 from .verifier import ClaudeVerifier
 
 GOAL = "put the apple and the yellow block in the box, then close the lid"
@@ -58,7 +58,7 @@ def _frames(vocab) -> tuple[dict, dict]:
 
 
 def run(budget_usd: float = 0.5, client: Any = None) -> dict[str, Any]:
-    vocab = load_vocabulary()
+    vocab = load_vocabulary(SIM_VOCABULARY)  # the frames are pack-box sim renders
     meter = CostMeter(budget_usd)
     llm = ClaudeJSON(meter, client=client)
     before, after = _frames(vocab)

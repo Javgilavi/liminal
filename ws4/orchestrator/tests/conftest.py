@@ -48,9 +48,9 @@ def can_render():
 
 @pytest.fixture(scope="session")
 def vocab():
-    from orchestrator.skills import load_vocabulary
+    from orchestrator.skills import SIM_VOCABULARY, load_vocabulary
 
-    return load_vocabulary()
+    return load_vocabulary(SIM_VOCABULARY)  # the sim pack-box vocabulary; test_haller.py covers skills.yaml
 
 
 class FollowRobot:

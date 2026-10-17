@@ -67,9 +67,15 @@ class StubPlanner:
         start = time.perf_counter()
         done = _done_ids(state)
         done_skills = {d["skill"] for d in (state or {}).get("done", [])}
-        clauses = [c.strip() for c in re.split(r"\bthen\b|;|\.(?:\s|$)", goal.lower()) if c.strip()]
+        text = goal.lower()
+        repeat = 1
+        m = re.search(r"\b(\d+)\s*(?:x|times|cycles?|rounds?)\b", text)
+        if m:
+            repeat = max(1, min(int(m.group(1)), 10))
+            text = text[:m.start()] + text[m.end():]
+        clauses = [c.strip() for c in re.split(r"\bthen\b|\band then\b|;|,|\.(?:\s|$)", text) if c.strip()]
         stages = [[s for s in self._clause_skills(c) if s.name not in done_skills] for c in clauses]
-        stages = [s for s in stages if s]
+        stages = [s for s in stages if s] * repeat
         if not stages:
             return PlanResult(None, [f"no vocabulary skill matches the goal {goal!r}"], 1, self.name)
         used: set[str] = set(done)
@@ -170,7 +176,9 @@ class ClaudePlanner:
         self.schema = plan_json_schema(vocab)
 
     def system_prompt(self) -> str:
-        return SYSTEM_PROMPT + json.dumps(self.vocab.planner_view(), indent=1, sort_keys=True)
+        station = self.vocab.station
+        note = f"Station ({station.name}): {station.notes}\n\n" if station.notes else ""
+        return SYSTEM_PROMPT + note + json.dumps(self.vocab.planner_view(), indent=1, sort_keys=True)
 
     def user_content(self, goal: str, image: np.ndarray | None, state: dict | None) -> list[dict]:
         content: list[dict] = []

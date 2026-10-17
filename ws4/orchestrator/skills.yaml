@@ -1,24 +1,27 @@
-# Skill vocabulary for the XLeRobot orchestrator.
+# Skill vocabulary for the Sunday demo on the green Haller (XLeRobot torso), final as of 2026-10-17 evening.
 #
-# PLACEHOLDER until the team's demo task is final. The FLUX prompts are the recording protocol's S1 to S5
-# (ws4/research/xlerobot_recording_protocol.md, "Demo task proposal") and match ws4/cloud/warm_prompts.py
-# character for character, because FLUX conditions on the exact caption and the pod pre-encodes these strings.
-# The planner may only pick skills from this file; it never writes a prompt.
+# One task arm: the robot's LEFT arm (port /dev/haller_arm_right, calibration haller_right, alias xlerobot_left). The
+# robot-RIGHT arm stays parked and holding and is never commanded. FLUX: the per-arm SO-101 package (a LoRA from
+# tonight's VR demos replaces it Sunday morning), served from the RTX PRO 6000 pod.
 #
-# Fields (per skill; `defaults` fill what a skill leaves out):
-#   kind            flux (a FLUX policy runs the prompt) or primitive (scripted, never FLUX)
-#   prompt          exact FLUX caption (flux only)
-#   arms            arms this skill may run on (per-arm SO-101 checkpoint or LoRA)
-#   success_check   default sentence for the vision verifier; a plan step may rephrase it
-#   timeout_s       a FLUX skill does not stop by itself: the step ends on a verified check or this timeout
-#   verify_every_chunks   vision check cadence while a FLUX skill runs (1 chunk = 32 actions = 1.07 s)
-#   verifier_model  claude-haiku-5-5 for plain "is X in Y" checks, claude-sonnet-5-5 for subtler states
-#   confidence      minimum verifier confidence to accept success
-#   package         FLUX package name on the policy server (null: the session default for that arm)
-#   keywords        goal phrases the offline stub planner maps to this skill
-#   sim             scripted sim binding (ws4/orchestrator/sim_backend.py); null = not available in sim
-#   sim_check       ground-truth predicate the sim verifier evaluates
-version: 1
+# The two FLUX prompts are the exact strings of the recorded datasets (ws4-vr2); FLUX conditions on the exact caption,
+# so never edit them here without changing the dataset and the served package. The planner may only pick skills from
+# this file; it never writes a prompt. Every FLUX step starts from the VR demos' start pose (station.home_pose).
+#
+# Fields: see skills_sim_pack_box.yaml. Extra: `start_pose: home` makes the executor ramp the arm to
+# station.home_pose (through the same guard and keep-out) before it starts the FLUX policy.
+version: 2
+
+station:
+  name: haller
+  arms_available: [left]
+  # LeRobot degrees (arm joints at their calibration middle) and gripper 100 = open: where every VR demo starts
+  # (ws4/single_arm/README.md, "Haller").
+  home_pose: [0, 0, 0, 0, 0, 100]
+  notes: >-
+    Only the robot's LEFT arm is used; the right arm stays parked and must not get any step. On the table: a cardboard
+    box with a slot that holds the red pen upright, and a mat next to it. Every FLUX step starts from the home pose
+    (the executor moves the arm there first), so do not add home steps between FLUX steps yourself.
 
 defaults:
   timeout_s: 45
@@ -29,84 +32,34 @@ defaults:
   package: null
 
 skills:
-  put_apple_in_box:
+  put_pen_in_slot:
     kind: flux
-    prompt: "Put the apple in the box"
-    arms: [left, right]
-    description: "Pick up the apple from the table and drop it into the open box."
-    success_check: "The red apple is inside the box."
-    timeout_s: 40
-    keywords: ["apple"]
-    sim: {action: pick_place, object: apple, width: 0.044, place: box}
-    sim_check: {in_box: apple}
-
-  put_block_in_box:
-    kind: flux
-    prompt: "Put the yellow block in the box"
-    arms: [left, right]
-    description: "Pick up the yellow block from the table and drop it into the open box."
-    success_check: "The yellow block is inside the box."
-    timeout_s: 40
-    keywords: ["yellow block", "block"]
-    sim: {action: pick_place, object: yellow_block, width: 0.040, place: box}
-    sim_check: {in_box: yellow_block}
-
-  close_lid:
-    kind: flux
-    prompt: "Close the box lid"
-    arms: [left, right]
-    description: "Put the lid on the box so the box is closed. Only possible once nothing else has to go in."
-    success_check: "The lid lies flat on top of the box and covers its opening."
-    timeout_s: 45
-    verifier_model: claude-sonnet-5-5
-    keywords: ["close the lid", "close the box", "close lid", "put the lid on"]
-    sim: {action: place_lid}
-    sim_check: {lid_on_box: true}
-
-  open_lid:
-    kind: flux
-    prompt: "Open the box lid with the left arm and hold it open"
+    prompt: "put the red pen in its slot in the cardboard box"
     arms: [left]
-    description: "Open the box lid. On the real box the left arm then keeps holding it: follow it with a hold step."
-    success_check: "The box is open: the lid no longer covers it."
-    timeout_s: 45
-    hold_after: true
-    keywords: ["open the lid", "open the box", "open lid"]
-    sim: {action: remove_lid}
-    sim_check: {lid_off_box: true}
+    description: "Pick up the red pen from the mat and put it upright into its slot in the cardboard box."
+    success_check: "The red pen is standing in its slot in the cardboard box."
+    start_pose: home
+    keywords: ["put the pen in", "put the red pen in", "pen in the box", "pen in its slot", "put it back", "put it in",
+               "insert"]
 
-  push_bottle_away:
+  take_pen_out:
     kind: flux
-    prompt: "Push the bottle away from the box"
+    prompt: "take the red pen out of its slot and put it on the mat"
     arms: [left]
-    description: "Push the bottle that blocks the front of the box out of the way."
-    success_check: "No bottle stands in front of the box."
-    timeout_s: 30
-    keywords: ["bottle"]
-    sim: null
-    sim_check: null
+    description: "Pull the red pen out of its slot in the box and lay it on the mat."
+    success_check: "The red pen is lying on the mat, outside the box."
+    start_pose: home
+    keywords: ["take it out", "take the pen out", "take the red pen out", "out of the box", "out of its slot", "remove"]
 
-  # Scripted primitives: never FLUX, no camera check needed.
+  # Scripted primitives: never FLUX.
   hold:
     kind: primitive
     arms: [left, right]
-    description: "Keep this arm still at its last command (for example holding the lid) until the steps in hold_until finish."
+    description: "Keep this arm still at its last command until the steps in hold_until finish."
     timeout_s: 300
 
   home:
     kind: primitive
-    arms: [left, right]
-    description: "Move this arm to its ready pose."
-    timeout_s: 15
-
-  open_gripper:
-    kind: primitive
-    arms: [left, right]
-    description: "Open this arm's gripper (releases what it holds)."
-    timeout_s: 5
-
-  close_gripper:
-    kind: primitive
-    arms: [left, right]
-    description: "Close this arm's gripper."
-    timeout_s: 5
+    arms: [left]
+    description: "Move the arm slowly to the home pose (also where every FLUX step starts)."
+    timeout_s: 30

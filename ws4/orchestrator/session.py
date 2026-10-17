@@ -16,6 +16,7 @@ import dataclasses
 import importlib.util
 import io
 import json
+import os
 import re
 import sys
 import threading
@@ -39,11 +40,12 @@ from .gate import CollisionGate, GatedDualArmRunner, TickGuardRobot
 from .plan import Plan, Step, concurrent_pairs, fill_defaults, levels, parse_plan, validate_plan
 from .planner import ClaudePlanner, PlanResult, StubPlanner, arm_by_side
 from .primitives import PrimitiveBackend
-from .skills import Skill, Vocabulary, load_vocabulary
+from .skills import SIM_VOCABULARY, Skill, Vocabulary, load_vocabulary
 from .verifier import ClaudeVerifier, ManualVerifier, ShadowVerifier, SimTruthVerifier
 
 RUNS_DIR = PACKAGE_DIR / "runs"
 SIM_TRIAL_LOG = RUNS_DIR / "trials_sim.jsonl"
+MOCK_TRIAL_LOG = RUNS_DIR / "trials_mock.jsonl"  # haller with the fake arm or in observe mode: never graded
 GRADED_TRIAL_LOG = WS4 / "eval" / "trials.jsonl"
 CAMERAS = {"head": IMG_HEAD, "left_wrist": IMG_LEFT_WRIST, "right_wrist": IMG_RIGHT_WRIST}
 
@@ -62,7 +64,7 @@ def load_trial_log():
 
 @dataclass
 class SessionConfig:
-    env: str = "sim"  # sim | xlerobot
+    env: str = "sim"  # sim | haller (Sunday demo: robot-left arm via ws4/single_arm) | xlerobot (both arms)
     policy: str = "scripted"  # scripted (sim only) | fake | remote
     planner: str = "stub"  # stub | claude
     verifier: str = "auto"  # auto | truth | claude | shadow | manual
@@ -92,6 +94,26 @@ class SessionConfig:
     left_wrist_cam: str = ""
     right_wrist_cam: str = ""
     calibration_limits: bool = False
+    # Haller (env=haller): run_single_arm.py's robot side, same flags and defaults as its CLI
+    robot: str = "so101"  # so101 | fake
+    observe: bool = False  # real arm, torque never enabled, nothing sent
+    port: str = "/dev/haller_arm_right"
+    wrist_cam: str = "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.2:1.0-video-index0"
+    wrist_rotate: int = 180
+    scene_fourcc: str = "none"
+    wrist_fourcc: str = "none"
+    keepout_config: str = str(WS4 / "single_arm" / "calibration" / "haller_right_workspace.json")
+    max_relative_target: float = 20.0
+    torque_limit: float = 60.0
+    max_step: float = 2.0
+    max_gripper_step: float = 5.0
+    limit_margin: float = 5.0
+    stall_deg: float = 8.0
+    stall_ticks: int = 15
+    keepout_ticks: int = 45
+    home_speed: float = 1.0  # deg per tick when ramping to the start pose (run_single_arm --return-speed)
+    allow_torque_off: bool = False
+    token_cmd: str = ""  # e.g. "ssh -p PORT root@HOST cat /workspace/flux_token"; output never shown
     # Execution
     gate: bool = True
     realtime: bool = True
@@ -142,7 +164,8 @@ class Session:
 
     def __init__(self, cfg: SessionConfig | None = None, llm_client: Any = None, threaded: bool = False):
         self.cfg = cfg = cfg or SessionConfig()
-        self.vocab: Vocabulary = load_vocabulary(cfg.vocabulary)
+        self.vocab: Vocabulary = load_vocabulary(cfg.vocabulary or (SIM_VOCABULARY if cfg.env == "sim" else None))
+        self.rig = None  # HallerRig on env=haller
         self.runs_dir = Path(cfg.runs_dir) if cfg.runs_dir else RUNS_DIR
         self.events = EventLog(echo=cfg.echo_events)
         self.meter = CostMeter(cfg.budget_usd)
@@ -191,6 +214,11 @@ class Session:
 
             self.sim = PackBoxSim(image_size=tuple(cfg.image_size), randomize=cfg.randomize)
             base_robot: Any = SimRobot(self.sim, cfg.seed, cfg.lid_on_box)
+        elif cfg.env == "haller":
+            from . import haller
+
+            self.rig = haller.build(cfg)
+            base_robot = self.rig.robot
         elif cfg.env == "xlerobot":
             from flux.run_xlerobot import LeRobotBimanualRobot, build_robot
 
@@ -204,8 +232,11 @@ class Session:
         self.backends: dict[str, Any] = {}  # runner backend name -> backend
         self.target_backend: dict[str, Any] = {}  # runner target name -> backend object
         targets = []
-        prim = PrimitiveBackend()
-        for arm in ARMS:
+        arms = self.vocab.station.arms_available if self.rig is not None else ARMS
+        home = self.vocab.station.home_pose
+        prim = PrimitiveBackend(home=None if home is None else np.array(home),
+                                joint_step=cfg.home_speed if self.rig is not None else 2.0)
+        for arm in arms:
             name = f"prim_{arm}"
             self.backends[name] = prim
             targets.append(dataclasses.replace(per_arm_target(arm, name), name=f"{arm}:prim"))
@@ -215,27 +246,29 @@ class Session:
                 raise ValueError("policy=scripted is the sim stand-in; use policy=remote on the real robot")
             from .sim_backend import ScriptedSimBackend
 
-            for arm in ARMS:
+            for arm in arms:
                 be = ScriptedSimBackend(self.sim)
                 self.backends[f"sim_{arm}"] = be
                 targets.append(dataclasses.replace(per_arm_target(arm, f"sim_{arm}"), name=f"{arm}:sim"))
                 self.target_backend[f"{arm}:sim"] = be
         elif cfg.policy in ("fake", "remote"):
-            packages = sorted({cfg.package_for(a) for a in ARMS} | {s.package for s in self.vocab.skills.values()
+            packages = sorted({cfg.package_for(a) for a in arms} | {s.package for s in self.vocab.skills.values()
                                                                     if s.package})
             for pkg in packages:
                 self.backends[pkg] = self._policy_backend(pkg)
-                for arm in ARMS:
+                for arm in arms:
                     t = f"{arm}:{pkg}"
                     targets.append(dataclasses.replace(per_arm_target(arm, pkg), name=t))
                     self.target_backend[t] = self.backends[pkg]
         else:
             raise ValueError(f"unknown policy {cfg.policy!r}")
 
-        self.gate = CollisionGate() if cfg.gate else None
+        # One moving arm on the Haller: the other is parked and not connected, so an inter-arm check against the
+        # phantom slot would be meaningless; the FK keep-out (midline zone included) guards that side instead.
+        self.gate = CollisionGate() if cfg.gate and self.rig is None else None
         robot = TickGuardRobot(base_robot, self.gate, self._tick_estop) if self.gate else base_robot
         self.robot = robot
-        guard = SafetyGuard(SafetyConfig())
+        guard = self.rig.guard if self.rig is not None else SafetyGuard(SafetyConfig())
         if cfg.env == "xlerobot" and cfg.calibration_limits:
             from flux.safety import limits_from_lerobot_calibration
             from lerobot.utils.constants import HF_LEROBOT_CALIBRATION
@@ -249,6 +282,10 @@ class Session:
                                                                                                         **data))
         self.verifier = self._make_verifier()
         self.planner = self._make_planner()
+        if self.rig is not None and cfg.policy == "remote":
+            policy_targets = [t for t in targets if not t.name.endswith(":prim")]
+            for t in policy_targets[:1]:
+                self.rig.warm_up(self.backends[t.backend], t, self.vocab.flux_prompts())
         self._last_obs = base_robot.get_observation()
         self._encode_frames(self._last_obs)
         self.events.add("info", f"session ready: env={cfg.env} policy={cfg.policy} planner={cfg.planner} "
@@ -267,8 +304,19 @@ class Session:
             return FakeBackend(SO101_CONTRACT, velocity=0.0, delay_s=0.02)
         from flux.remote import RemoteBackend
 
-        token = Path(cfg.token_file).read_text().strip() if cfg.token_file else None
-        return RemoteBackend(cfg.server, package, token=token)
+        token = None
+        if cfg.token_file:
+            token = Path(cfg.token_file).expanduser().read_text().strip()
+        elif cfg.token_cmd:  # same mechanism as run_single_arm --token-cmd: the token never reaches argv or a log
+            import shlex
+            import subprocess
+
+            out = subprocess.run(shlex.split(os.path.expanduser(cfg.token_cmd)), capture_output=True, text=True,
+                                 stdin=subprocess.DEVNULL, timeout=30)
+            if out.returncode != 0 or not out.stdout.strip():
+                raise SystemExit(f"--token-cmd failed (exit {out.returncode}): {out.stderr.strip()[:200]}")
+            token = out.stdout.strip()
+        return RemoteBackend(cfg.server, package, token=token, timeout_s=90.0)
 
     def _make_verifier(self) -> Any:
         kind = self.cfg.verifier
@@ -352,7 +400,9 @@ class Session:
         self.events.add("info", f"planning ({self.planner.name}): {goal}" if kind == "plan"
                         else f"replanning ({self.planner.name}) after a failure")
         try:
-            result = self.planner.plan(goal, image=self.head_image(), state=state)
+            # The fake arm's cameras are noise: never show them to Claude as the scene.
+            image = None if (self.rig is not None and not self.rig.real) else self.head_image()
+            result = self.planner.plan(goal, image=image, state=state)
         except Exception as exc:
             result = PlanResult(None, [f"planner error: {type(exc).__name__}: {exc}"], 1, self.planner.name)
         finally:
@@ -471,6 +521,8 @@ class Session:
         if self._thread is not None:
             self._thread.join(timeout=5)
         self.runner.close()
+        if self.rig is not None:
+            self.events.add("info", f"robot closed: {self.rig.close()}")
 
     def _loop(self) -> None:
         while not self._closing:
@@ -515,6 +567,10 @@ class Session:
             realtime=cfg.realtime, clock="ticks" if self.sim is not None else "wall", max_replans=cfg.max_replans,
             on_replan=self._on_replan, on_frame=lambda obs, report: self._encode_frames(obs),
             max_run_s=cfg.max_run_s,
+            home_target=lambda arm: f"{arm}:prim" if f"{arm}:prim" in self.target_backend else None,
+            monitors=self.rig.monitors if self.rig is not None else None,
+            on_attempt=self._log_attempt,
+            on_estop=self.rig.hold if self.rig is not None else None,
         )
         result = self.executor.run(plan)
         self._encode_frames(self.base_robot.get_observation())
@@ -542,16 +598,57 @@ class Session:
     def trial_log_path(self) -> Path:
         if self.cfg.trial_log:
             return Path(self.cfg.trial_log)
-        return SIM_TRIAL_LOG if self.sim is not None else GRADED_TRIAL_LOG
+        if self.sim is not None:
+            return SIM_TRIAL_LOG
+        if self.rig is not None and (not self.rig.real or self.rig.observe or self.cfg.policy != "remote"):
+            return MOCK_TRIAL_LOG
+        return GRADED_TRIAL_LOG
+
+    def _arms(self) -> tuple[str, ...]:
+        return self.vocab.station.arms_available if self.rig is not None else ARMS
+
+    def _variant(self) -> str:
+        cfg = self.cfg
+        if cfg.variant:
+            return cfg.variant
+        if self.sim is not None:
+            return f"{cfg.policy}+{cfg.planner}"
+        return "+".join(sorted({cfg.package_for(a) for a in self._arms()})) + f"+{cfg.planner}"
+
+    def _checkpoint(self) -> str:
+        cfg = self.cfg
+        if cfg.checkpoint:
+            return cfg.checkpoint
+        if cfg.policy == "scripted":
+            return "sim:scripted-stand-in"
+        return ", ".join(f"{a}={cfg.package_for(a)}" for a in self._arms())
+
+    def _log_attempt(self, run: Any, ok: bool, reason: str) -> None:
+        """One trial_log line per FLUX attempt (task = the skill), so each skill's success rate is graded too."""
+        cfg = self.cfg
+        tl = load_trial_log()
+        verdict = run.verdicts[-1] if run.verdicts else None
+        notes = (f"step {run.step.id} attempt {run.attempt}/{run.step.max_attempts} of run "
+                 f"{self.run_dir.name if self.run_dir else '-'}; prompt {run.skill.prompt!r}; "
+                 f"{(self.executor.t if self.executor else 0) - run.t_start:.1f} s, {run.chunks} chunks; "
+                 f"verifier={self.verifier.name}"
+                 + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"
+                    if verdict else ""))
+        trial = tl.Trial(
+            task=run.skill.name, condition=cfg.condition, variant=self._variant(), checkpoint=self._checkpoint(),
+            steps_total=1, steps_done=1 if ok else 0, success=ok and run.attempt_interventions == 0,
+            interventions=run.attempt_interventions, layout=self.layout_name(), failure="" if ok else reason[:120],
+            notes=notes[:600], operator=cfg.operator,
+        )
+        tl.append(self.trial_log_path(), trial)
+        self.events.add("info", f"attempt logged: {trial.task} #{trial.attempt} {'verified' if ok else 'failed'}")
 
     def _log_trial(self, result: RunResult, plan: Plan) -> dict:
         cfg = self.cfg
         tl = load_trial_log()
         sim = self.sim is not None
-        variant = cfg.variant or (f"{cfg.policy}+{cfg.planner}" if sim else
-                                  "+".join(sorted({cfg.package_for(a) for a in ARMS})) + f"+{cfg.planner}")
-        checkpoint = cfg.checkpoint or ("sim:scripted-stand-in" if cfg.policy == "scripted" else
-                                        ", ".join(f"{a}={cfg.package_for(a)}" for a in ARMS))
+        variant = self._variant()
+        checkpoint = self._checkpoint()
         notes = (f"orchestrator {'SIMULATION, ' if sim else ''}policy={cfg.policy} planner={cfg.planner} "
                  f"verifier={self.verifier.name} replans={result.replans} "
                  f"claude_usd={self.meter.total_usd:.4f} t={result.duration_s:.1f}s run={self.run_dir.name}")

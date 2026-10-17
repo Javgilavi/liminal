@@ -21,7 +21,9 @@ from . import WS4  # noqa: F401  (sets sys.path for flux, sim, kinematics)
 
 def _session_args(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("backend")
-    g.add_argument("--env", choices=("sim", "xlerobot"), default="sim")
+    g.add_argument("--env", choices=("sim", "haller", "xlerobot"), default="sim",
+                   help="sim = laptop sim; haller = Sunday demo (robot-left arm via ws4/single_arm); "
+                        "xlerobot = both arms")
     g.add_argument("--policy", choices=("scripted", "fake", "remote"), default=None,
                    help="scripted = sim stand-in (default in sim), remote = FLUX policy server (default on the robot)")
     g.add_argument("--planner", choices=("stub", "claude"), default="stub")
@@ -44,9 +46,30 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     s.add_argument("--no-randomize", action="store_true")
     s.add_argument("--image-size", default="240x320", help="HxW of the sim cameras (480x640 for Claude checks)")
     r = p.add_argument_group("real robot (only when it is connected)")
-    for flag in ("--robot-id", "--left-port", "--right-port", "--head-cam", "--left-wrist-cam", "--right-wrist-cam"):
-        r.add_argument(flag, default="xlerobot" if flag == "--robot-id" else "")
+    r.add_argument("--robot-id", default=None, help="LeRobot calibration id (haller: haller_right, xlerobot: xlerobot)")
+    for flag in ("--left-port", "--right-port", "--left-wrist-cam", "--right-wrist-cam"):
+        r.add_argument(flag, default="")
+    r.add_argument("--head-cam", default=None, help="haller default /dev/haller_cam_mast")
     r.add_argument("--calibration-limits", action="store_true")
+    h = p.add_argument_group("haller (run_single_arm.py flags and defaults)")
+    h.add_argument("--robot", choices=("so101", "fake"), default="so101", help="fake = run_single_arm's FakeSO101")
+    h.add_argument("--observe", action="store_true", help="real arm, torque never enabled, nothing sent")
+    h.add_argument("--arm-port", default="/dev/haller_arm_right", help="serial port of the ROBOT's left arm")
+    h.add_argument("--wrist-cam", default="/dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.2:1.0-video-index0")
+    h.add_argument("--wrist-rotate", type=int, choices=(0, 90, 180, 270), default=180)
+    h.add_argument("--scene-fourcc", default="none")
+    h.add_argument("--wrist-fourcc", default="none")
+    h.add_argument("--keepout-config", default=None, help="default single_arm/calibration/haller_right_workspace.json")
+    h.add_argument("--max-relative-target", type=float, default=20.0)
+    h.add_argument("--torque-limit", type=float, default=60.0)
+    h.add_argument("--max-step", type=float, default=2.0)
+    h.add_argument("--max-gripper-step", type=float, default=5.0)
+    h.add_argument("--stall-deg", type=float, default=8.0)
+    h.add_argument("--stall-ticks", type=int, default=15)
+    h.add_argument("--keepout-ticks", type=int, default=45)
+    h.add_argument("--home-speed", type=float, default=1.0, help="deg per tick to the start pose")
+    h.add_argument("--allow-torque-off", action="store_true")
+    h.add_argument("--token-cmd", default="", help="command printing the policy server token (never shown)")
     e = p.add_argument_group("execution and logging")
     e.add_argument("--no-gate", action="store_true", help="disable the inter-arm collision gate")
     e.add_argument("--fast", action="store_true", help="sim: run as fast as possible instead of 30 Hz")
@@ -54,7 +77,7 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     e.add_argument("--auto-approve-replans", action="store_true")
     e.add_argument("--trial-log", default=None,
                    help="default: runs/trials_sim.jsonl in sim, ws4/eval/trials.jsonl on the robot")
-    e.add_argument("--task", default="pack_box")
+    e.add_argument("--task", default=None, help="trial log task name (default pack_box in sim, pen_chain on haller)")
     e.add_argument("--condition", default="zero_shot", choices=("zero_shot", "post_training"))
     e.add_argument("--variant", default=None)
     e.add_argument("--checkpoint", default=None)
@@ -67,19 +90,34 @@ def _config(a: argparse.Namespace):
     from .session import SessionConfig
 
     h, w = (int(x) for x in a.image_size.lower().split("x"))
-    policy = a.policy or ("scripted" if a.env == "sim" else "remote")
+    haller = a.env == "haller"
+    extra = {}
+    if haller:
+        extra = dict(
+            robot=a.robot, observe=a.observe, port=a.arm_port, wrist_cam=a.wrist_cam, wrist_rotate=a.wrist_rotate,
+            scene_fourcc=a.scene_fourcc, wrist_fourcc=a.wrist_fourcc,
+            keepout_config=a.keepout_config or SessionConfig.keepout_config,
+            max_relative_target=a.max_relative_target, torque_limit=a.torque_limit, max_step=a.max_step,
+            max_gripper_step=a.max_gripper_step, stall_deg=a.stall_deg, stall_ticks=a.stall_ticks,
+            keepout_ticks=a.keepout_ticks, home_speed=a.home_speed, allow_torque_off=a.allow_torque_off,
+            token_cmd=a.token_cmd,
+        )
     return SessionConfig(
-        env=a.env, policy=policy, planner=a.planner, verifier=a.verifier, planner_model=a.planner_model,
-        planner_effort=a.planner_effort, verifier_wrist=a.verifier_wrist, verifier_thinking=a.verifier_thinking,
-        budget_usd=a.budget_usd, server=a.server,
-        token_file=a.token_file, package=a.package, left_package=a.left_package, right_package=a.right_package,
-        async_inference=False if a.sync_inference else None, seed=a.seed, image_size=(h, w),
-        randomize=not a.no_randomize, lid_on_box=a.lid_on_box, robot_id=a.robot_id, left_port=a.left_port,
-        right_port=a.right_port, head_cam=a.head_cam, left_wrist_cam=a.left_wrist_cam,
-        right_wrist_cam=a.right_wrist_cam, calibration_limits=a.calibration_limits, gate=not a.no_gate,
-        realtime=not a.fast, max_replans=a.max_replans, auto_approve_replans=a.auto_approve_replans,
-        trial_log=a.trial_log, task=a.task, condition=a.condition, variant=a.variant, checkpoint=a.checkpoint,
-        layout=a.layout, operator=a.operator, vocabulary=a.vocabulary,
+        **extra,
+        env=a.env, policy=a.policy or ("scripted" if a.env == "sim" else "remote"), planner=a.planner,
+        verifier=a.verifier, planner_model=a.planner_model, planner_effort=a.planner_effort,
+        verifier_wrist=a.verifier_wrist, verifier_thinking=a.verifier_thinking, budget_usd=a.budget_usd,
+        server=a.server, token_file=a.token_file, package=a.package, left_package=a.left_package,
+        right_package=a.right_package, async_inference=False if a.sync_inference else None, seed=a.seed,
+        image_size=(h, w), randomize=not a.no_randomize, lid_on_box=a.lid_on_box,
+        robot_id=a.robot_id or ("haller_right" if haller else "xlerobot"), left_port=a.left_port,
+        right_port=a.right_port, head_cam=a.head_cam if a.head_cam is not None else ("/dev/haller_cam_mast" if haller
+                                                                                      else ""),
+        left_wrist_cam=a.left_wrist_cam, right_wrist_cam=a.right_wrist_cam, calibration_limits=a.calibration_limits,
+        gate=not a.no_gate, realtime=not a.fast, max_replans=a.max_replans,
+        auto_approve_replans=a.auto_approve_replans, trial_log=a.trial_log,
+        task=a.task or ("pen_chain" if haller else "pack_box"), condition=a.condition, variant=a.variant,
+        checkpoint=a.checkpoint, layout=a.layout, operator=a.operator, vocabulary=a.vocabulary,
     )
 
 

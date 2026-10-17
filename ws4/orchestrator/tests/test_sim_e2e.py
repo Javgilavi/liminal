@@ -33,9 +33,13 @@ def test_demo_goal_runs_to_completion_with_concurrency(session, tmp_path):
     # The attempt is in the trial log and in trial_log.py's summary table.
     tl = load_trial_log()
     trials = tl.load(tmp_path / "trials.jsonl")
-    assert len(trials) == 1 and trials[0].success and trials[0].steps_done == 3
+    runs = [t for t in trials if t.task == "pack_box"]
+    attempts = [t for t in trials if t.task != "pack_box"]  # one line per FLUX attempt, task = the skill
+    assert len(runs) == 1 and runs[0].success and runs[0].steps_done == 3
+    assert sorted(t.task for t in attempts) == ["close_lid", "put_apple_in_box", "put_block_in_box"]
+    assert all(t.steps_done == 1 and t.success for t in attempts)
     table = tl.render(tl.summarize(trials), markdown=True)
-    assert "pack_box" in table and "1/1 (100%)" in table
+    assert "pack_box" in table and "1/1 (100%)" in table and "close_lid" in table
     run_dir = session.run_dir
     summary = json.loads((run_dir / "result.json").read_text())
     assert summary["result"]["status"] == "succeeded" and (run_dir / "plan_v1.json").exists()

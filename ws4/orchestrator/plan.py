@@ -65,8 +65,10 @@ def plan_json_schema(vocab: Vocabulary | None = None) -> dict[str, Any]:
     """JSON schema for structured output (and for other planners). Every object is closed and lists every key as
     required, as structured outputs expect. Numeric bounds are checked by :func:`validate_plan` instead."""
     skill: dict[str, Any] = {"type": "string"}
+    arms = list(ARMS)
     if vocab is not None:
         skill["enum"] = vocab.names()
+        arms = list(vocab.station.arms_available)
     ids = {"type": "array", "items": {"type": "string"}}
     return {
         "type": "object",
@@ -78,7 +80,7 @@ def plan_json_schema(vocab: Vocabulary | None = None) -> dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "id": {"type": "string"},
-                        "arm": {"type": "string", "enum": list(ARMS)},
+                        "arm": {"type": "string", "enum": arms},
                         "skill": skill,
                         "depends_on": ids,
                         "hold_until": ids,

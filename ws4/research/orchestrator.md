@@ -23,7 +23,7 @@ Line citations below are for the checkout at `e39c443` (branch `ws4-handoff`).
   same runner, gate, guard and executor code runs. "put the apple and the yellow block in the box, then close the lid"
   plans in 0.0 s (stub) as apple (left) || block (right), then lid (right), and runs to completion in sim.
 - Every run is logged as a graded attempt with `ws4/eval/trial_log.py` (sim runs in a separate log).
-- 51 CPU tests (about 70 s) plus one opt-in live Claude test; ruff clean. Offline tests cannot reach the API (an
+- 58 CPU tests (about 30 s) plus one opt-in live Claude test; ruff clean. Offline tests cannot reach the API (an
   autouse fixture hides any key).
 
 **Verified:** everything in the test suite on this laptop; the end-to-end sim run on 4 random layouts (seeds 0 to 3, all
@@ -48,6 +48,36 @@ recording protocol's S1 to S5) until the demo task is final.
    released checkpoint does anything sensible on the sim images, and to log it as a sim attempt.
 3. Replace `skills.yaml` with the final demo prompts (exact strings as trained and as in `/workspace/prompts.txt` on the
    pod), then run (d) zero-shot (A0, A0r) and with the LoRAs, logging every attempt.
+
+## Sunday demo: the Haller pen task (wired 2026-10-17 evening)
+
+- **Task** (final, from the orchestrator session): the robot's LEFT arm (`/dev/haller_arm_right`, calibration
+  `haller_right`) runs two FLUX skills with the datasets' exact prompts, "put the red pen in its slot in the cardboard
+  box" and "take the red pen out of its slot and put it on the mat", plus the `home` primitive at
+  `[0, 0, 0, 0, 0, 100]` and `hold`. The robot-RIGHT arm stays parked and is not connected. `skills.yaml` now holds
+  this vocabulary with a `station` block (available arms, home pose, notes for the planner); the sim pack-box vocabulary
+  moved to `skills_sim_pack_box.yaml`.
+- **Arm side**: `orchestrator/haller.py` imports `ws4/single_arm/run_single_arm.py` read-only (`connect_so101`,
+  `SingleArmRobot`, `build_guard`, `KeepOutGuard`, `hold_here`, `warm_up`, `disconnect_so101`, `FakeSO101`) and the
+  `keepout` module; `orchestrator/monitors.py` rebuilds its per-tick stall stop (8 deg for 15 ticks, arm joints only)
+  and keep-out stop (45 consecutive refusals). The inter-arm collision gate is off on this station (one moving arm, the
+  other not connected); the keep-out's midline zone guards that side. Every FLUX step first ramps to the home pose at
+  1 deg per tick through the same guard, because every VR demo starts there. A stop freezes the arm at its MEASURED
+  pose (`hold_here`), as the single-arm runner does.
+- **Logging**: one `trial_log.py` line per FLUX attempt (task = the skill, 1/1 or 0/1 with the failure reason and the
+  interventions during that attempt) and one per chain (task `pen_chain`). The fake arm and observe mode log to
+  `runs/trials_mock.jsonl`, never the graded log.
+- **Verified (no hardware, no pod)**: on run_single_arm's `FakeSO101` with a fake policy, "put the pen in the box,
+  take it out, put it back" plans as three chained left-arm steps; the arm is within 3 deg of home each time a FLUX
+  policy starts; a failed attempt (timeout) is logged and retried; a monitor stop latches the e-stop and calls the hold
+  (`tests/test_haller.py`, 7 tests). Live Claude plan for "put the pen in the box, take it out, put it back, and
+  repeat the whole cycle twice": 14.2 s, USD 0.030, 8 steps, left arm only, pen states consistent (it inserted a
+  take-out between cycles) and a final `home`.
+- **Not verified**: anything on the real arm (VR recording holds it tonight), the policy server on the RTX PRO 6000 pod
+  for this run, and Haiku's checks on real head frames: the pen in its slot is a small detail in a 640x480 frame. In
+  the observe dry run, look at a few checks; if Haiku misjudges, add `--verifier-wrist` (the wrist frame goes in too)
+  or switch these two skills to `claude-sonnet-5-5` in `skills.yaml`.
+- **Run command**: `orchestrator/README.md`, "Sunday demo".
 
 ## Architecture
 

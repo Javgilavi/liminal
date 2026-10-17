@@ -55,6 +55,10 @@ class StepRun:
     verdicts: list[Verdict] = field(default_factory=list)
     reason: str = ""
     phase: str = ""
+    homing: bool = False  # ramping to the skill's start pose before the policy starts
+    t_home: float = 0.0
+    policy_started: bool = False
+    attempt_interventions: int = 0
 
     def to_json(self, now: float) -> dict[str, Any]:
         s = self.step
@@ -102,6 +106,10 @@ class Executor:
         on_frame: Callable[[dict, Any], None] | None = None,
         frame_period_s: float = 0.2,
         max_run_s: float | None = None,
+        home_target: Callable[[str], str | None] | None = None,
+        monitors: list[Callable[[Any, dict], str | None]] | None = None,
+        on_attempt: Callable[[StepRun, bool, str], None] | None = None,
+        on_estop: Callable[[str], None] | None = None,
     ):
         self.runner = runner
         self.robot = robot
@@ -118,6 +126,10 @@ class Executor:
         self.on_frame = on_frame
         self.frame_period_s = frame_period_s
         self.max_run_s = max_run_s
+        self.home_target = home_target  # arm -> primitive target that can run "home" (start_pose: home skills)
+        self.monitors = list(monitors or [])  # per-tick checks; a returned reason latches the e-stop
+        self.on_attempt = on_attempt  # every FLUX attempt that started: (run, verified, reason)
+        self.on_estop = on_estop
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="verify")
         self._lock = threading.RLock()
         self._commands: list[tuple[str, Any]] = []
@@ -229,6 +241,12 @@ class Executor:
             obs = self.robot.get_observation()
             if active and self.state == "running":
                 self._update(report, obs)
+                for monitor in self.monitors:
+                    reason = monitor(report, obs)
+                    if reason:
+                        self.events.add("error", f"safety monitor: {reason}")
+                        self.estop(reason)
+                        break
             if self.on_frame is not None and (now_wall - self._last_frame >= self.frame_period_s
                                               or self.state in TERMINAL):
                 self._last_frame = now_wall
@@ -286,6 +304,11 @@ class Executor:
                     continue
                 if self.state != "estopped":
                     self.interventions += 1
+                    if self.on_estop is not None:
+                        self.on_estop(str(arg))
+                    for r in self.runs.values():
+                        if r.status == "running":
+                            r.attempt_interventions += 1
                     self._state_before_estop = "awaiting_replan" if self.state == "awaiting_replan" else "running"
                     self._interrupt_all()
                     self.events.add("error", f"E-STOP ({arg}): both arms hold")
@@ -316,6 +339,7 @@ class Executor:
         if run is None or self.state in TERMINAL:
             return
         self.interventions += 1
+        run.attempt_interventions += 1
         self.events.add("warn", f"operator marked {step_id} {'done' if done else 'failed'}")
         if done:
             if run.status != "done":
@@ -351,17 +375,32 @@ class Executor:
                      + (f" because {', '.join(failed)} failed" if failed else ""))
 
     def _start(self, run: StepRun) -> None:
-        from .sim_backend import SimSkillError
-
         step, skill = run.step, run.skill
         run.attempt += 1
         run.status, run.t_start, run.t_end = "running", self.t, None
         run.chunks, run.verify_at, run.final_check = 0, skill.verify_every_chunks, False
-        run.reason, run.phase = "", ""
+        run.reason, run.phase, run.homing, run.policy_started = "", "", False, False
+        run.attempt_interventions = 0
         if skill.name == "hold":
             run.target = None
             self.events.add("info", f"{step.id}: {step.arm} arm holds until {', '.join(step.hold_until)} done")
             return
+        home = self.home_target(step.arm) if (self.home_target and skill.is_flux and skill.start_pose == "home") \
+            else None
+        if home is not None:
+            # Every FLUX step starts where its demonstrations started: ramp there through the same guard first.
+            self.runner.start(home, "home")
+            run.target, run.homing, run.t_home, run.phase = home, True, self.t, "homing"
+            self.events.add("info", f"{step.id}: moving the {step.arm} arm to the start pose before attempt "
+                            f"{run.attempt}/{step.max_attempts}")
+            return
+        self._start_policy(run)
+
+    def _start_policy(self, run: StepRun) -> None:
+        from .sim_backend import SimSkillError
+
+        step, skill = run.step, run.skill
+        run.t_start, run.chunks, run.verify_at, run.phase = self.t, 0, skill.verify_every_chunks, ""
         target = self.resolve_target(step, skill)
         backend = self.backends.get(target)
         try:
@@ -373,6 +412,7 @@ class Executor:
             self._fail_attempt(run, str(exc), retry=False)
             return
         run.target = target
+        run.policy_started = skill.is_flux
         what = f"FLUX prompt {skill.prompt!r}" if skill.is_flux else "scripted primitive"
         self.events.add("info", f"{step.id}: start on {step.arm} arm, attempt {run.attempt}/{step.max_attempts}, "
                         f"{what} via {target}")
@@ -410,9 +450,21 @@ class Executor:
                 elif "failed" in status:
                     self._complete(run, "released: a step it waited for failed")
                 continue
+            backend = self.backends.get(run.target)
+            state6 = state12[arm_slice(step.arm)]
+            if run.homing:
+                if backend.reached("home", report.command[arm_slice(step.arm)], state6):
+                    self.runner.stop(run.target)
+                    run.homing = False
+                    self.events.add("info", f"{step.id}: at the start pose")
+                    self._start_policy(run)
+                else:
+                    limit = self.vocab["home"].timeout_s if "home" in self.vocab else 30.0
+                    if self.t - run.t_home > limit:
+                        self._fail_attempt(run, f"did not reach the start pose within {limit:.0f} s", retry=False)
+                continue
             if report.status.get(run.target) == "replanned":
                 run.chunks += 1
-            backend = self.backends.get(run.target)
             if hasattr(backend, "progress"):
                 run.phase = backend.progress(run.target)[2]
             if run.verifying is not None and run.verifying.done():
@@ -420,7 +472,6 @@ class Executor:
                 self._on_verdict(run, fut.result())
                 if run.status != "running":
                     continue
-            state6 = state12[arm_slice(step.arm)]
             if skill.kind == "primitive":
                 if backend.reached(skill.name, report.command[arm_slice(step.arm)], state6):
                     self._complete(run, "pose reached")
@@ -456,7 +507,16 @@ class Executor:
         elif run.final_check:
             self._fail_attempt(run, f"motion finished but the check failed: {verdict.observation}")
 
+    def _report_attempt(self, run: StepRun, ok: bool, reason: str) -> None:
+        if self.on_attempt is not None and run.skill.is_flux and run.policy_started:
+            run.policy_started = False
+            try:
+                self.on_attempt(run, ok, reason)
+            except Exception as exc:  # logging must never stop the arm
+                self.events.add("warn", f"attempt log failed: {type(exc).__name__}: {exc}")
+
     def _complete(self, run: StepRun, why: str) -> None:
+        self._report_attempt(run, True, why)
         self._release(run)
         run.status, run.t_end, run.reason = "done", self.t, why
         self.done_ids.add(run.step.id)
@@ -476,6 +536,7 @@ class Executor:
                 backend.end(run.target)
 
     def _fail_attempt(self, run: StepRun, reason: str, retry: bool = True) -> None:
+        self._report_attempt(run, False, reason)
         self._release(run)
         run.reason, run.t_end = reason, self.t
         if retry and run.attempt < run.step.max_attempts:
@@ -499,6 +560,7 @@ class Executor:
             del self.parking[arm]
         for run in self.runs.values():
             if run.status == "running":
+                self._report_attempt(run, False, f"interrupted ({self.failure or 'e-stop, abort or replan'})")
                 self._release(run)
                 run.status = "interrupted"
                 run.attempt -= 1  # an interrupted attempt does not count
