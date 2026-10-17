@@ -3,11 +3,9 @@
 WS4, 2026-10-17. Owner of this file and of `ws4/flux/**`: the ws4-flux-dual agent.
 Evidence format: `repo@commit:path:line`. Repos read: LeRobot `146d847` (main, Oct 16 2026, `lerobot@146d847`),
 flux-action `830f1ce` (`fa@830f1ce`), XLeRobot `b017b5e`. Model pages: https://bfl.ai/models/flux-3-action,
-https://huggingface.co/black-forest-labs/flux-3-action-so101 (and `-base`, `-droid`). The HF repos are gated
-(`gated: auto`); this laptop has no HF token, so their `config.json`, processor JSONs and quantile files were
-**not** read. Their schema is taken from the fixture BFL ships for tests
-(`fa@830f1ce:tests/fixtures/so101_history/config.json`) and the model card; values tagged UNVERIFIED need
-`flux.inspect_checkpoint` on the GPU box (runbook section 1).
+https://huggingface.co/black-forest-labs/flux-3-action-so101 (and `-base`, `-droid`). The HF repos are gated;
+their configs, processor files, quantiles and safetensors headers (no weights) were read on 2026-10-17 with
+Oscar's token. Those facts, with revisions and hashes, are in `ws4/flux/checkpoint_facts.md`.
 
 ## Status report
 
@@ -22,7 +20,8 @@ https://huggingface.co/black-forest-labs/flux-3-action-so101 (and `-base`, `-dro
   bimanual base builder, latency/VRAM and checkpoint-inspection scripts, and `GPU_RUNBOOK.md`.
 
 **Verified (run on CPU)**
-- 24 tests pass (20 numpy-only with the system Python; all 24 in a LeRobot-main CPU venv).
+- 26 tests pass (20 numpy-only with the system Python; all 26 in a LeRobot-main CPU venv, two of them on the
+  real SO-101 package files from the HF cache).
 - On LeRobot's real `flux3` code with a tiny random DiT: our runner (history kept on the robot side, one
   stateless call per chunk) produces **the same commands as LeRobot's documented synchronous loop**
   (`pre -> select_action -> post` every tick) over three replans, to 1e-3.
@@ -31,18 +30,23 @@ https://huggingface.co/black-forest-labs/flux-3-action-so101 (and `-base`, `-dro
   only the four embodiment-head tensors resized and re-initialized (zero output layer), grid camera layout,
   `delta_absolute_dims=[5, 11]`, and the result runs end to end in the runner.
 - Re-normalizing a package swaps the quantiles and keeps weights bit-identical (symlinked).
+- Against the real SO-101 package (config, processor JSONs and quantile files from the HF cache, no weights):
+  its config equals our `SO101_CONTRACT`, and our runner matches LeRobot's synchronous loop with the real
+  config and real processors around a tiny random DiT (8 ticks, 2 snapshots, 42 / 32 actions, two replans).
+- The package's normalization is one community dataset's (`VoicAndrei/so100_kitchen`, legacy degrees), and the
+  base ships EE50 heads `action_prediction_ee50` [50 / 50] and gaming heads [64], no 14-D joint head (A.4, B).
 
 **Not verified**
 - Anything on a GPU or with the real 7B weights: latency, VRAM, NATTEN on sm_120, LoRA step time.
-- The SO-101 package's actual quantiles and config (gated). Zero-shot quality on our arms.
+- Zero-shot quality on our arms, and whether package quantiles (A0) or our own (A0r) work better.
 - LeRobot PEFT training of fresh 12-D heads (code path exists, BFL says it is not validated for new embodiments).
 
 **Next 3 steps**
 1. GPU box, after `ws4/cloud/bootstrap.sh`: run runbook sections 0 to 2 (session setup, package inspection,
-   `measure_latency`, cross-check against BFL's standalone SO-101 inference), and paste `so101_quantiles.json`
-   and the latency JSON into this memo.
+   `measure_latency`, cross-check against BFL's standalone SO-101 inference), and paste the latency JSON into
+   this memo.
 2. Robot: calibrate both arms in LeRobot degrees mode, serve `so101` from GPU 0, run `flux.run_xlerobot` with
-   one arm at a time on a simple prompt (zero-shot, A0) and with re-normalized packages (A1).
+   one arm at a time on a simple prompt, first with re-normalized packages (A0r), then the package as is (A0).
 3. Record 50+ single-arm demos per skill of the demo task tonight and start the per-arm task LoRA on GPU 1;
    start the 12-D LoRA on GPU 2 only if two leader arms and 50+ bimanual demos exist.
 
@@ -59,20 +63,20 @@ zero-shot SO-101 checkpoint per arm, then the team's single SO-101 station.
 
 | GPU | Job | Why |
 |---|---|---|
-| 0 | Policy server for robot testing all night and for the demo (`flux.remote`): `so101` (A0), re-normalized `left`/`right` packages (A1), later the LoRAs | The robot needs a GPU in the loop to test anything; 2 to 3 instances fit in 96 GB |
-| 1 | Per-arm task LoRA on our XLeRobot single-arm demos (LeRobot `lora.json`, base = A0 or A1 package) | Highest demo value per GPU-hour; existing heads, existing processors |
+| 0 | Policy server for robot testing all night and for the demo (`flux.remote`): re-normalized `left`/`right` packages (A0r), `so101` as is (A0), later the LoRAs | The robot needs a GPU in the loop to test anything; 2 to 3 instances fit in 96 GB |
+| 1 | Per-arm task LoRA on our XLeRobot single-arm demos (LeRobot `lora.json`, base = the A0r package) | Highest demo value per GPU-hour; existing heads, existing processors |
 | 2 | Stretch: 12-D bimanual LoRA from the SO-101 checkpoint (`make_bimanual_base`, option C) if 50+ bimanual demos exist; otherwise a second option A variant (other normalization, or the other arm's adapter) | Only path to learned coordination by Sunday; high risk |
 
 No EE50 training and no flux-action full fine-tuning tonight (sections B and C.3).
 
 ## Comparison
 
-| | A0: SO-101 zero-shot per arm | A1: per-arm task LoRA | B: EE50 (Simone) | C1: 12-D heads, LeRobot PEFT from SO-101 | C2: 12-D heads, flux-action full FT from base | D: harness on A |
+| | A0 / A0r: SO-101 zero-shot per arm (package / own quantiles) | A1: per-arm task LoRA | B: EE50 (Simone) | C1: 12-D heads, LeRobot PEFT from SO-101 | C2: 12-D heads, flux-action full FT from base | D: harness on A |
 |---|---|---|---|---|---|---|
 | Data | none (5 to 10 teleop episodes for a quantile check) | 50 to 100 single-arm demos per skill, one leader arm | FK-converted robot data + UMI converted to unpublished conventions | 50 to 100+ bimanual 12-D demos, two leader arms | hundreds+ bimanual demos | none beyond A |
 | Compute | inference only | 1 GPU, roughly 3 to 6 h (estimate) | full FT or new LeRobot processors, multi-GPU | 1 to 2 GPUs, roughly 4 to 8 h (estimate) | 3 GPUs FSDP over PCIe, about 10 h per 1k updates at batch 64 (estimate) | LLM API, cents per plan |
 | Time to first result | 1 to 2 h | tonight | days (code missing) | Sunday morning at best | after the hackathon | hours (WS3) |
-| Risk | viewpoint, soft gripper, calibration, prompt wording | low to medium | very high | high (unvalidated path, fresh heads, little data) | very high | low |
+| Risk | viewpoint, soft gripper, prompt wording; A0 normalizes with a legacy-convention dataset's bounds (A.4) | low to medium | very high | high (unvalidated path, fresh heads, little data) | very high | low |
 | Learned coordination | no | no | yes in principle | yes | yes | scripted |
 | Judging value | FLUX in the loop, weak reliability | reliable FLUX demo on real hardware (25% + 20%) | originality, but will not run | technical difficulty | none by Sunday | long chains score higher |
 
@@ -156,7 +160,8 @@ No EE50 training and no flux-action full fine-tuning tonight (sections B and C.3
 
 ### A.4 Units, calibration, normalization
 
-- The package expects LeRobot degrees mode: 0 is the middle of each joint's calibrated range
+- BFL documents the package's units as degrees and gripper percentage points (`fa@830f1ce:docs/setup.md:172-176`).
+  Today's LeRobot degrees mode puts 0 at the middle of each joint's calibrated range
   (`(raw - mid) * 360 / 4095`, LeRobot `motors_bus.py` `_normalize`), gripper `RANGE_0_100`. LeRobot main and 0.5.1
   default `use_degrees=True` (`lerobot@146d847:src/lerobot/robots/so_follower/config_so_follower.py:42`); the
   XLeRobot plugin defaults to `False` (+-100 ranges) and refuses to connect without the base wheel motors, so
@@ -164,13 +169,26 @@ No EE50 training and no flux-action full fine-tuning tonight (sections B and C.3
   `right_gripper.pos`, cameras `head`, `left_wrist`, `right_wrist` (`flux/run_xlerobot.py`).
 - The package's quantiles "assume its joint order, units and calibration; they are not universal SO-101
   calibration values"; different statistics need "a separate base with matching processors"
-  (`flux3.mdx:180-184`). The values themselves are gated (UNVERIFIED; `inspect_checkpoint --quantiles`).
+  (`flux3.mdx:180-184`). **Read from the package** (`ws4/flux/checkpoint_facts.md`): state q01..q99 are pan
+  -92..54, lift 85..184, elbow 61..179, wrist flex -24..81, roll -125..60, gripper 0.5..54; command deltas
+  about +-3 to 5 deg per tick, gripper 0..54. These are exactly the bounds of one corpus part,
+  `VoicAndrei/so100_kitchen` (`fa@830f1ce:configs/so101/community_corpus.json:316`), recorded in the pre-2025
+  SO-100 degree convention (zero at a folded pose; ws4/data `contracts.py` calls it `degrees_legacy`).
+- Consequence for our arms in today's degrees mode: at a joint's mid-range zero, lift normalizes to -2.7 and
+  elbow to -2.0; over Oscar's calibrated ranges (`haller_follower.json`: lift +-104, elbow +-97 degrees) lift spans
+  -4.8..-0.6 and elbow -3.7..-0.4, while the package's own data spans -1..1. A fully open gripper (100) maps to
+  2.75. So **A0 feeds shifted states** on the two joints that matter most for reaching.
 - The corpus mixes units: about 795 parts in degrees and 226 within +-100 (notes report, from
   `community_corpus.json` quantiles), and BFL's full fine-tune normalized each part with its own q01/q99
   (`community_corpus.json` `builder.normalization`). The trunk therefore learned per-dataset normalized joint
-  spaces. That supports **A1: re-normalize per arm** with q01/q99 from our own teleop data, which is a cheap
-  package edit (`flux.package_tools.renormalize_package`: same weights, new processor state, CPU-tested). Test A0
-  against A1 on the robot; keep whichever moves sensibly.
+  spaces. That supports **A0r: re-normalize per arm** with q01/q99 from our own teleop data, a cheap package
+  edit (`flux.package_tools.renormalize_package`: same weights, new processor state, CPU-tested). Use A0r for
+  zero-shot and as the LoRA base. BFL keeps the package statistics fixed for its own task LoRAs and calls them
+  "a choice for this adaptation workflow" (`fa@830f1ce:docs/so101-lora.md:32-38`), so a LoRA on A0 should also
+  adapt, at the cost of starting from shifted inputs. Mapping our degrees into the legacy convention with
+  `ArmCalibration` offsets would need the legacy zero pose and signs (UNVERIFIED); not recommended.
+- Command-delta scale: one normalized unit of the package is about 3 to 5 degrees per tick (90 to 160 deg/s);
+  A0r rescales to our own teleop speed. Keep the guard's per-tick step limit on either way.
 - Soft fin-ray gripper: still one channel, 0..100 between the calibrated closed and open ends (0 closed, 100
   open per ws4/kinematics). Re-calibrate the gripper range with the fin-ray fingers mounted. Compliance means a
   "closed" command on an object stalls against it, which is how the stock gripper is used as well. It looks
@@ -178,7 +196,7 @@ No EE50 training and no flux-action full fine-tuning tonight (sections B and C.3
 
 ### A.5 Expected quality
 
-- Zero-shot (A0/A1): no published success rate on a new SO-101 setup. BFL's SO-101 examples are task LoRAs
+- Zero-shot (A0/A0r): no published success rate on a new SO-101 setup. BFL's SO-101 examples are task LoRAs
   (color selection, screwdriver, box on cup; `fa@830f1ce:docs/so101-lora.md:14-20`). Expect reaching and
   pushing roughly toward the prompted object, unreliable grasps. Good for a "FLUX in the loop" demo of simple
   verbs, not for a judged chain.
@@ -197,11 +215,15 @@ No EE50 training and no flux-action full fine-tuning tonight (sections B and C.3
   `src/` returns nothing. What exists: the base checkpoint "has 457 tensors, with video and text streams, a
   shared action trunk, and ee50/gaming action heads" (base model card), and the conventions described on the
   BFL model page (CONTEXT.md, EE50 section).
-- **Head reuse is possible in principle.** The wiring keeps an `emb_in`/`final_layer` head whose name equals
-  the configured `action_modality` and drops other `action_prediction*` heads (`f3/wiring.py:131-156`). The
-  head names and widths are in the gated safetensors header (runbook section 1, `--keys`). flux-action forbids
-  the bare name `action_prediction` (`fa@830f1ce:src/flux_action/config.py:177-183`); LeRobot's config does not
-  (`configuration_flux3.py:252-255`).
+- **Head reuse is mechanically supported.** The base header (`ws4/flux/checkpoint_facts.md`) has
+  `emb_in.action_prediction_ee50` [3072, 50], `emb_in.action_prediction_ee50_cond` [3072, 50] and the matching
+  final layers, gaming heads of width 64, and **no 14-D joint head** (the header metadata says the release
+  removed "joint14 heads" from the step-724k EMA trunk). The conditioning width 50 means the EE50
+  midtraining conditioned on state only, without past commands (`f3/packing.py:603-604`). The wiring keeps a head
+  whose name equals the configured `action_modality` and drops other `action_prediction*` heads
+  (`f3/wiring.py:131-156`), so `action_modality="action_prediction_ee50"`, `action_dim=50`,
+  `condition_on_past_actions=false` loads these heads in LeRobot (`export_base.py` with the base trunk) or
+  flux-action (only the bare `action_prediction` is reserved, `fa@830f1ce:src/flux_action/config.py:177-183`).
 - **LoRA exists only in LeRobot.** flux-action has no LoRA or PEFT (no match in `src/`); it does full
   fine-tuning with FSDP2/HSDP (`fa@830f1ce:src/flux_action/training/distributed.py:117-128,155-187`). LeRobot PEFT
   needs a saved complete policy as base (`modeling_flux3.py:251-257`) whose processors match the data.
@@ -232,19 +254,21 @@ No EE50 training and no flux-action full fine-tuning tonight (sections B and C.3
    constrained IK must choose which rotation to ignore (ws4-ik owns this). Missing: a joint-space baseline to
    compare against, which A gives for free.
 3. **Embodiment fine-tuning with LoRA from the EE50 checkpoint.** Not possible as stated: flux-action has no
-   LoRA, and LeRobot cannot load the base with EE50 heads until someone builds a LeRobot package for them with
-   an EE50 processor (normalization and anchor handling above). Full fine-tuning on our 3 PCIe GPUs is slow
-   (section C.3). Missing: the inference side (EE50 outputs -> IK -> joints every tick; `flux/ee50_hook.py` is the
-   hook, without any EE50 backend behind it).
+   LoRA. LeRobot can build a base that keeps the EE50 heads (head names confirmed, see above), but its
+   processors cannot express EE50's anchor-relative, per-offset z-scored representation, so a new EE50 processor
+   (normalization and anchor handling above) has to be written and validated first. Full fine-tuning on our 3
+   PCIe GPUs is slow (section C.3). Missing: the inference side (EE50 outputs -> IK -> joints every tick;
+   `flux/ee50_hook.py` is the hook, without any EE50 backend behind it).
 4. **Task LoRA, 50 to 100 demos.** Right number. A second LoRA on top of the first needs merging the first
    adapter into a new complete base package first (LeRobot adapters reference one base,
    `flux3.mdx:186-188`); doable, one extra step.
 5. **Evaluation.** Right metrics. Add offline held-out evaluation (`flux-action evaluate`, or LeRobot eval
    loss) before robot time, and sim rollouts via the runner (`GymEnvRobot`).
 - **Critical decision.** Agree with the spirit; the evidence already decides it for this weekend: no released
-  EE50 pipeline, no LoRA path, unknown head names and statistics, and BFL's DROID result favoring joint heads.
-  **Order:** A0 now, A1 tonight, C1 as stretch, EE50 as a post-hackathon research track (keep ws4/kinematics'
-  codec and IK; they also help analysis and the "imagine" visualization).
+  EE50 pipeline, no LoRA path, unpublished statistics and conventions (only the head names are known), and BFL's
+  DROID result favoring joint heads. **Order:** A0r / A0 zero-shot now, A1 task LoRA tonight, C1 as stretch,
+  EE50 as a post-hackathon research track (keep ws4/kinematics' codec and IK; they also help analysis and the
+  "imagine" visualization).
 
 ## C. New 12-D joint heads
 
@@ -357,6 +381,7 @@ From the notes report `flux_dual_arm_docs_blackwell.md`, with the source checks 
 | `package_tools.py` | Quantiles (`export_base` rule), per-arm re-normalized packages |
 | `make_bimanual_base.py` | Option C1/C base builder and LoRA training config |
 | `measure_latency.py`, `inspect_checkpoint.py` | GPU latency/VRAM; gated header and quantile inspection |
+| `checkpoint_facts.md` | What the gated so101, base and droid packages contain (configs, quantiles, heads, revisions) |
 | `crosscheck_so101.py` | Same observation through BFL's standalone SO-101 inference and our backend |
 | `GPU_RUNBOOK.md` | After `ws4/cloud/bootstrap.sh`: inspection, smoke test, serving, recording, training commands |
 

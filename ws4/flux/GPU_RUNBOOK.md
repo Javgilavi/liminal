@@ -20,7 +20,7 @@ source $WS4_ROOT/lerobot/.venv/bin/activate          # LeRobot env: everything i
 export PYTHONPATH=<path-to-liminal-checkout>/ws4    # ws4/flux imports as `flux` (copy ws4/ without ws4/.cache)
 export HF_TOKEN=hf_...                                # same account bootstrap used
 grep -E "lerobot @|flux-action @|torch tag|natten|sm_|FAILED|WARNING" $WS4_ROOT/bootstrap.log
-python -m pytest $PYTHONPATH/flux/tests -q           # 24 CPU-level tests, incl. LeRobot flux3 integration
+python -m pytest $PYTHONPATH/flux/tests -q           # 26 CPU-level tests, incl. LeRobot flux3 integration
 ```
 
 Check in the log: both envs report `sm_120`, a NATTEN version, `natten 3D op ok`, and `lerobot Flux3Policy
@@ -37,9 +37,9 @@ python -m flux.inspect_checkpoint --repo black-forest-labs/flux-3-action-base \
   --file flux-3-action-base.safetensors --keys --grep 'emb_in|final_layer' > ~/base_heads.txt
 ```
 
-`so101_quantiles.json` (state and command-delta q01/q99, `config.json`, `dataset_statistics.json`) answers "do
-the package's quantiles cover our arms' degrees?" (section 4). `base_heads.txt` lists the EE50 / gaming head
-names and widths (option B, research only). Paste both into the memo.
+Already read once from this laptop on 2026-10-17 and written up in `ws4/flux/checkpoint_facts.md`: the package
+normalizes with one legacy-convention dataset's bounds (lift 85..184 degrees), and the base has EE50 heads of
+width 50 and no 14-D joint head. Re-run only to check that nothing changed on the Hub.
 
 ## 2. Smoke test, latency and VRAM (GPU 0, 15 min)
 
@@ -84,7 +84,7 @@ scale of `net_motion`. A large systematic difference means a units, sign or came
 export CUDA_VISIBLE_DEVICES=0 TOKEN=$(openssl rand -hex 16)
 python -m flux.remote --port 8765 --token $TOKEN \
   --package so101=black-forest-labs/flux-3-action-so101 \
-  --package left=$HOME/models/so101_left_renorm --package right=$HOME/models/so101_right_renorm   # after section 4
+  --package left=$HOME/models/so101_left_renorm --package right=$HOME/models/so101_right_renorm   # A0r, section 4
 # Robot PC (LeRobot main, numpy, Pillow)
 ssh -N -L 8765:127.0.0.1:8765 user@gpu-box &
 PYTHONPATH=ws4 python -m flux.run_xlerobot --left-port /dev/ttyACM0 --right-port /dev/ttyACM1 \
@@ -97,10 +97,10 @@ Packages that point at the same weights share one loaded model (one lock, sequen
 replanning at the same time without queueing, start a second server on GPU 1 and point one arm at it. The
 runner clamps every command (per-tick step and joint limits) before sending; keep the e-stop in hand.
 
-## 4. Per-arm normalization check and re-normalized packages (option A1, 20 min)
+## 4. Re-normalized per-arm packages (A0r, 20 min)
 
 Record 5 to 10 short teleop episodes per arm in LeRobot degrees mode (section 5), then compare our ranges
-with `~/so101_quantiles.json`:
+with the package's (`ws4/flux/checkpoint_facts.md`):
 
 ```bash
 python - <<'EOF'
@@ -116,8 +116,8 @@ for arm, repo in (("left", "ORG/xlerobot_left_calib"), ("right", "ORG/xlerobot_r
 EOF
 ```
 
-`renormalize_package` resolves the Hub id through the HF cache and symlinks the 14 GB weights. Serve `so101`
-(package quantiles, A0) and `left` / `right` (our quantiles, A1) side by side and compare on the same scene.
+`renormalize_package` resolves the Hub id through the HF cache and symlinks the 14 GB weights. Serve `left` /
+`right` (our quantiles, A0r) and `so101` (package quantiles, A0) side by side and compare on the same scene.
 Delta quantiles from 5 to 10 episodes are noisy; once task demos exist, recompute from them.
 
 ## 5. Recording XLeRobot demos (robot PC, LeRobot main)
@@ -146,7 +146,7 @@ Measure first: start each run, read the step time after about 50 microsteps in t
 so the run ends by 06:00. Checkpoints land every `save_freq` microsteps; evaluate raw and EMA.
 
 **GPU 1: per-arm task LoRA (option A).** Pool left and right demos into one 6-D dataset or train one adapter
-per arm. Base = the package (A0) or a re-normalized package (A1):
+per arm. Base = a re-normalized package (A0r, recommended) or the package as is (A0):
 
 ```bash
 cd $WS4_ROOT/lerobot && export CUDA_VISIBLE_DEVICES=1

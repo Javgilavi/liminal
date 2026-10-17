@@ -229,3 +229,118 @@ def test_bimanual_base_from_so101_package(tiny_package, tmp_path):
     for _ in range(3):
         runner.step()
     assert np.isfinite(np.stack(robot.sent)).all()
+
+
+SO101_REPO = "black-forest-labs/flux-3-action-so101"
+SO101_REV = "0713a7af6768562e618e81d534372c6795d41b2e"  # files identical to c9e13b2 pinned in BFL's docs
+
+
+def _cached_so101_dir():
+    from huggingface_hub import try_to_load_from_cache
+
+    names = [
+        "config.json",
+        "policy_preprocessor.json",
+        "policy_postprocessor.json",
+        "policy_preprocessor_step_3_flux3_observation_history_normalizer.safetensors",
+        "policy_preprocessor_step_4_flux3_action_target_normalizer.safetensors",
+        "policy_postprocessor_step_0_flux3_action_history_unnormalizer.safetensors",
+    ]
+    paths = [try_to_load_from_cache(SO101_REPO, n, revision=SO101_REV) for n in names]
+    if not all(isinstance(p, str) for p in paths):
+        pytest.skip("real SO-101 package files not in the HF cache (gated; see GPU_RUNBOOK.md section 1)")
+    from pathlib import Path
+
+    return Path(paths[0]).parent
+
+
+def test_real_so101_package_contract_and_quantiles():
+    """The released package's config and processors, without weights: contract and normalization facts."""
+    from flux.backends import contract_from_flux3_config
+    from flux.contract import SO101_CONTRACT
+    from flux.package_tools import read_history_quantiles
+    from lerobot.configs.policies import PreTrainedConfig
+    from lerobot.policies.flux3.processor_flux3 import make_flux3_pre_post_processors_from_pretrained
+
+    path = _cached_so101_dir()
+    cfg = PreTrainedConfig.from_pretrained(path)
+    contract = contract_from_flux3_config(cfg, SO101_CONTRACT.name)
+    assert contract == SO101_CONTRACT
+    assert (cfg.sampler, cfg.num_inference_steps, cfg.guidance_scale, cfg.guidance_scale_action) == (
+        "euler",
+        4,
+        3.0,
+        None,
+    )
+    assert cfg.video_vae_id.endswith("@62878e2925e59b7a89ec14463ce89932624c490d")
+    pre, _ = make_flux3_pre_post_processors_from_pretrained(
+        cfg, str(path), preprocessor_overrides={"device_processor": {"device": "cpu"}},
+        postprocessor_overrides={"device_processor": {"device": "cpu"}},
+    )  # fmt: skip
+    q = read_history_quantiles(pre)
+    # Exactly the per-dataset bounds of VoicAndrei/so100_kitchen in BFL's corpus file
+    # (flux-action@830f1ce:configs/so101/community_corpus.json:316): legacy degrees, lift 85..184.
+    np.testing.assert_allclose(q["state"]["q01"], [-92.021, 84.814, 61.436, -23.994, -124.541, 0.46], atol=1e-3)
+    np.testing.assert_allclose(q["state"]["q99"], [54.141, 184.219, 178.857, 80.596, 60.205, 53.575], atol=1e-3)
+    np.testing.assert_allclose(q["action"]["q99"][-1], 54.163, atol=1e-3)
+
+
+def test_runner_matches_sync_loop_with_real_so101_config_and_processors(tmp_path):
+    """Real config (8 ticks, 2 snapshots, 42 / 32 actions) and real processors around a tiny random DiT."""
+    import dataclasses
+
+    from flux.package_tools import read_history_quantiles
+    from lerobot.configs.policies import PreTrainedConfig
+    from lerobot.policies.flux3.processor_flux3 import make_flux3_pre_post_processors_from_pretrained
+
+    path = _cached_so101_dir()
+    real = PreTrainedConfig.from_pretrained(path)
+
+    def processors():
+        return make_flux3_pre_post_processors_from_pretrained(
+            real, str(path), preprocessor_overrides={"device_processor": {"device": "cpu"}},
+            postprocessor_overrides={"device_processor": {"device": "cpu"}},
+        )  # fmt: skip
+
+    pre, post = processors()
+    cfg = dataclasses.replace(
+        real, dit_config=TINY_DIT, dtype=torch.float32, device="cpu", video_vae_id=None,
+        normalization_stats=read_history_quantiles(pre),
+    )  # fmt: skip
+    torch.manual_seed(0)
+    policy = Flux3Policy(cfg)
+    with torch.no_grad():
+        for p in policy.dit.final_layer.parameters():
+            p.normal_(0, 0.05)
+    backend = LeRobotFlux3Backend(policy, pre, post, name="real-config")
+    n_ticks = 34  # replans at ticks 0 and 32
+
+    class RealUnitsRobot(ReplayRobot):
+        def __init__(self):
+            super().__init__(n_ticks, seed=3)
+            self.images = np.random.default_rng(3).integers(0, 255, (n_ticks, 3, 256, 256, 3), dtype=np.uint8)
+            self.states[:, :6] += np.array([-20.0, 130.0, 120.0, 30.0, -30.0, 0.0])  # inside the package's ranges
+            self.states[:, 5] = 20.0
+
+    robot = RealUnitsRobot()
+    runner = DualArmRunner(robot, [per_arm_target("left", "real")], {"real": backend}, SafetyGuard(WIDE))
+    runner.start("left", "pick up the red box")
+    for _ in range(n_ticks):
+        runner.step()
+    ours = np.stack(robot.sent)[:, :6]
+
+    ref_pre, ref_post = processors()
+    ref_robot = RealUnitsRobot()
+    reference = []
+    for _ in range(n_ticks):
+        obs = ref_robot.get_observation()
+        batch = {
+            OBS_STATE: torch.as_tensor(obs[OBS_STATE][:6], dtype=torch.float32)[None],
+            SO101_SCENE: torch.from_numpy(obs[IMG_HEAD]).permute(2, 0, 1)[None],
+            SO101_WRIST: torch.from_numpy(obs[IMG_LEFT_WRIST]).permute(2, 0, 1)[None],
+            "task": ["pick up the red box"],
+        }
+        reference.append(ref_post(policy.select_action(ref_pre(batch)))[0].double().numpy())
+        ref_robot.send_action(np.zeros(12))
+    policy.reset()
+    np.testing.assert_allclose(ours, np.stack(reference), rtol=1e-4, atol=1e-3)
