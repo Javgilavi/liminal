@@ -26,7 +26,13 @@ section gets this lower.
 
 Measured on the pod:
 - `nvidia-smi` reports 32,623 MiB.
-- `runpodctl` and a pod-scoped `RUNPOD_API_KEY` are present, so `idle_stop.sh` can stop the pod.
+- `runpodctl` 1.14.15 and a pod-scoped `RUNPOD_API_KEY` are present. This version uses `runpodctl stop pod <id>`;
+  the docs' `pod stop` belongs to a newer CLI, and `idle_stop.sh` now detects which one is installed.
+  - With the pod's key, `get pod` and the REST API return Unauthorized/403.
+  - `stop pod <non-existent id>` passes authorization ("does not exist"), so self-stop is expected to work.
+  - The first version of the watchdog used the wrong syntax and failed at 13:16 UTC. It was re-armed fixed at
+    13:24 UTC.
+- The server token is read from `/workspace/flux_token` (`--token-file`), so it never appears in `ps`.
 - Pod environment variables reach non-interactive SSH only after `source /etc/rp_environment`.
 - Updating a pod's env through the API restarts its container: `/root` is wiped and the SSH port changes;
   `/workspace` survives.
@@ -40,9 +46,43 @@ Measured on the pod:
 
 ### Measured on the pod (SO-101 package, BF16, RTX PRO 4500 32 GB, text encoder on the CPU)
 
-| Run | Median per chunk | p90 | Peak VRAM | Notes |
+10 runs each, 3 warm-up passes so every prompt is already encoded. Each model load took about 6.1 to 6.5 min
+from the network volume.
+
+| Run | Median per chunk | p90 | Peak VRAM | Arm moving (sync loop, 1.07 s chunks) |
 |---|---|---|---|---|
-| default guidance, 2 warm-up passes | 1.46 s | 17.3 s | 23.6 GiB | load 6.4 min from the network volume; the p90 is one first-time CPU encode of a third prompt that the 2 warm-ups did not cover |
+| default (guidance 3) | 1.461 s | 1.466 s | 23.63 GiB | 42% |
+| guidance 1.0 (video and action) | 0.758 s | 0.762 s | 23.63 GiB | 59% |
+| `compile_model=true` | 1.222 s | 1.225 s | 23.63 GiB | 47% |
+| guidance 1.0 + `compile_model=true` | 0.629 s | 0.638 s | 23.63 GiB | 63% |
+
+- The same default run with only 2 warm-up passes had a 17.3 s p90. That was one first-time CPU encode of a
+  prompt the warm-ups had not covered, which is why the server now pre-encodes its prompts.
+- `compile_model` adds roughly 2 min of compilation to startup.
+- **VRAM:** the 23.63 GiB peaks above include the load-time peak (Qwen briefly on the GPU before moving to the
+  CPU). After the move the policy holds 15.3 GiB, and peaks at 15.8 GiB per chunk.
+- **Imagination** (`imagine.run_imagine bench`, default guidance, 5 reps, decoding on the same GPU, Qwen on the
+  CPU):
+
+  | Mode | Per chunk |
+  |---|---|
+  | stock predict | 1.45 s |
+  | imagination without decode | 1.46 s |
+  | synchronous decode | 1.69 s |
+  | decode only (41 frames) | 0.23 s |
+  | background decode on the same GPU | 1.67 s median (1.46 s best) |
+  | best of 2 with decode | 3.27 s |
+
+  Peak 17.6 GiB, so the 32 GB card has about 14 GiB to spare for imagination.
+- **End to end from the laptop** (Oscar's home connection, SSH tunnel to EU-RO-1, 2026-10-17 12:58 UTC):
+  - round trip 1.78 s median (max 1.93 s) = server 1.47 s + network and JPEG encoding 0.31 s;
+  - request 312 KB per chunk;
+  - response 42 x 6 commands.
+
+  Upload speed at the venue decides the 0.31 s; `RemoteBackend(quality=...)` lowers it.
+- **Server start to READY:** about 9 min (6.4 min load, then 6 prompts at about 15 s each, the first 34 s).
+- Guidance 1.0 changes the sampling. Check motion quality on the robot against guidance 3 (same prompt and
+  scene) before serving with it (`flux/GPU_RUNBOOK.md` §2).
 
 - **Pause math:** LeRobot's synchronous loop, and our per-arm runner, start the next inference only once the
   32-action queue is empty. So the arm stands still for the whole inference after each 1.07 s chunk, and at
@@ -52,6 +92,53 @@ Measured on the pod:
   S1 to S6. Edit the file so it matches the runner's strings exactly.
 - **Memory:** Qwen stays on the CPU (added automatically on GPUs under 40 GB): 23.6 + 8.3 GiB would not fit
   in 31.9 GiB.
+
+## Live deployment 2: single-arm SO-101 pod (2026-10-17, 16:18 CEST)
+
+Dedicated to single-arm SO-101 work (the red arm, zero-shot "stack the cups"). It is a separate pod with its
+own volume, so the 4500 pod above stays free for the XLeRobot work.
+
+| What | Value |
+|---|---|
+| Network volume | `so101-inference`, id `u1ffu7k5f9`, 100 GB, EU-CZ-1 (about $0.23 per day until deleted) |
+| Pod | `so101-flux-serve`, id `k4p4f8hgs0kroz`; 1x RTX PRO 6000 96 GB, EU-CZ-1, $2.49/h |
+| SSH | `ssh root@213.192.6.98 -p 40093 -i ~/.ssh/id_ed25519_osrdvs` (since 14:07 UTC; the port changes on every container restart) |
+| Tunnel for the robot | `ssh -N -L 8765:127.0.0.1:8765 root@213.192.6.98 -p 40093`, then `RemoteBackend("http://127.0.0.1:8765", "so101", token=...)` |
+| Token | `/workspace/flux_token` on the pod (root only); read it over SSH into an env var, never into argv |
+| Serving | package `so101` = `black-forest-labs/flux-3-action-so101`, `guidance_scale=1.0`, `guidance_scale_action=1.0`, `compile_model=true`, text encoder on the GPU |
+| Prompts | 9 pre-encoded from `/workspace/prompts.txt`: "stack the cups", "put the left cup into the right cup", "stack the white paper cups", then S1 to S6 |
+| Watchdog | `idle_stop.sh 20`, armed 14:15:50 UTC |
+
+Measured on the pod (UTC):
+- Bootstrap on the fresh volume, weights included, finished at 14:15.
+- Server start to READY: 2.5 min (14:15:50 to 14:18:19). The model loaded in 1.9 min, then the prompt
+  warm-up took 37 s: 31.4 s for the first prompt, which includes `compile_model`, and 0.36 s for each of the
+  other 8.
+- GPU memory with everything resident (Qwen on the GPU): 27,175 MiB of 96 GB.
+- **End to end from the laptop** (Oscar's home connection, SSH tunnel to EU-CZ-1, "stack the cups",
+  7 timed runs after 1 warm-up):
+  - round trip 0.479 s median (max 0.510 s) = server 0.333 s + network and JPEG encoding 0.145 s;
+  - request 312 KB per chunk; response 42 x 6 commands.
+- **Arm moving** (sync loop, 1.07 s chunks): 69% of the time at the 0.48 s round trip, up from 42% on the
+  4500 pod at default guidance.
+- Guidance 1.0 still needs the motion-quality check on the robot against guidance 3 (`flux/GPU_RUNBOOK.md`
+  §2). To serve guidance 3 instead, restart the server without the two guidance overrides.
+
+## Costs and receipts (event budget about USD 100, any provider; keep every invoice)
+
+| Resource | Id | Where | Rate | Created (UTC) | Purpose |
+|---|---|---|---|---|---|
+| Pod `ws4-flux-inference` | `4inbmv6d4xb876` | EU-RO-1, RTX PRO 4500 32 GB | $0.72/h | 2026-10-17 11:07 | XLeRobot: TTT, bimanual and robot tests |
+| Volume `ws4-inference` | `6j5vbwvfu8` | EU-RO-1, 100 GB | $0.07/GB/month (about $0.23/day) | 2026-10-17 11:07 | weights + envs for the 4500 pod |
+| Pod `so101-flux-serve` (created as `ws4-flux-serve-6000`) | `k4p4f8hgs0kroz` | EU-CZ-1, RTX PRO 6000 96 GB | $2.49/h | 2026-10-17 14:07 | single-arm SO-101 serving (zero-shot "stack the cups", teammate single-arm runs) |
+| Volume `so101-inference` (created as `ws4-serve-cz`) | `u1ffu7k5f9` | EU-CZ-1, 100 GB | about $0.23/day | 2026-10-17 14:07 | weights + envs for the single-arm pod |
+
+- Spend reported by RunPod's billing API at 14:10 UTC (it lags about 1 h): $1.47.
+- Both pods run `idle_stop.sh` (20 min of idle GPU, then stop). A stopped pod bills only its volume.
+- **Receipts:** RunPod bills prepaid credits, so the invoices are the credit purchases. Download them from the
+  console, Billing → Recent transactions → Receipt / Invoice (Oscar's account; the agent does not download or
+  pay anything). Usage per day per resource is in Billing → Billing explorer, or the MCP `list-billing`.
+- After the hackathon: terminate both pods and delete both volumes (volumes bill until deleted).
 
 ## Paying nothing while idle (from docs.runpod.io, read 2026-10-17)
 

@@ -19,6 +19,7 @@ import dataclasses
 import hmac
 import io
 import json
+import os
 import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -227,7 +228,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--token", default=None)
+    parser.add_argument("--token", default=None, help="prefer --token-file or $FLUX_TOKEN: argv is visible in ps")
+    parser.add_argument("--token-file", default=None, help="file holding the shared token")
     parser.add_argument("--text-encoder-on-cpu", action="store_true")
     parser.add_argument("--override", action="append", default=[], metavar="KEY=JSON", help="Flux3Config field")
     args = parser.parse_args(argv)
@@ -246,7 +248,11 @@ def main(argv: list[str] | None = None) -> None:
             )
         backends[name] = loaded[key]
         print(f"{name}: {checkpoint} on {key[1]} -> {loaded[key].contract}")
-    server = make_server(backends, args.host, args.port, args.token)
+    token = args.token or os.environ.get("FLUX_TOKEN")
+    if args.token_file:
+        with open(args.token_file) as f:
+            token = f.read().strip()
+    server = make_server(backends, args.host, args.port, token)
     print(f"serving {sorted(backends)} on http://{args.host}:{args.port}")
     server.serve_forever()
 

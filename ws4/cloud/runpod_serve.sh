@@ -29,7 +29,7 @@ IDLE_MIN="${IDLE_MIN:-20}"
 LOGS=/workspace/logs
 mkdir -p "$LOGS"
 
-if pgrep -f "python -m flux.remote" >/dev/null; then
+if pgrep -f "^python -m flux.remote" >/dev/null; then  # anchored: never match a shell whose command line mentions it
   echo "policy server already running"
   exit 0
 fi
@@ -38,7 +38,6 @@ fi
 if [ ! -s /workspace/flux_token ]; then
   (umask 077 && openssl rand -hex 16 > /workspace/flux_token)
 fi
-TOKEN=$(cat /workspace/flux_token)
 
 # shellcheck disable=SC1091
 source "$WS4_ROOT/lerobot/.venv/bin/activate"
@@ -61,7 +60,7 @@ if [ "$IDLE_MIN" != 0 ]; then
 fi
 echo "starting flux.remote with ${args[*]} (log: $LOGS/flux_remote.log)"
 # shellcheck disable=SC2086
-python -m flux.remote --host 127.0.0.1 --port 8765 --token "$TOKEN" "${args[@]}" ${EXTRA_ARGS:-} \
+python -m flux.remote --host 127.0.0.1 --port 8765 --token-file /workspace/flux_token "${args[@]}" ${EXTRA_ARGS:-} \
   >> "$LOGS/flux_remote.log" 2>&1 &
 server=$!
 

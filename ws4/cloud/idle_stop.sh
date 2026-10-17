@@ -7,7 +7,7 @@
 # "Busy" = GPU utilization above BUSY_PCT (default 5) in any sample. The policy server runs one inference per
 # action chunk (about one per second while the robot moves), so a robot session keeps the GPU busy and an idle
 # server reads 0%. The clock starts at launch, which gives the robot IDLE_MIN minutes to connect.
-# Needs `runpodctl` authenticated inside the Pod (UNVERIFIED on our template: run `runpodctl pod list` once).
+# Needs the pod's own RUNPOD_API_KEY in the environment (source /etc/rp_environment in non-interactive shells).
 # Test knobs: IDLE_SEC overrides IDLE_MIN, POLL_SEC (default 30), NVIDIA_SMI / RUNPODCTL point at fakes.
 set -uo pipefail
 
@@ -20,6 +20,17 @@ POD_ID="${RUNPOD_POD_ID:-}"
 
 log() { printf '%s idle_stop: %s\n' "$(date +%H:%M:%S)" "$*"; }
 
+# runpodctl 1.x (what RunPod images ship, e.g. 1.14.15) has `stop pod <id>`; the newer CLI in docs.runpod.io
+# has `pod stop <id>`. On 1.14.15 the pod's own RUNPOD_API_KEY passes authorization for `stop pod` (probed with a
+# non-existent id: "Attempted to stop pod that does not exist"), while `get pod` and the REST API return 403.
+stop_pod() {
+  if "$RUNPODCTL" stop pod --help >/dev/null 2>&1; then
+    "$RUNPODCTL" stop pod "$POD_ID"
+  else
+    "$RUNPODCTL" pod stop "$POD_ID"
+  fi
+}
+
 [ -n "$POD_ID" ] || { log "RUNPOD_POD_ID is not set: not on a RunPod pod, nothing to stop"; exit 1; }
 last_busy=$(date +%s)
 log "stopping pod $POD_ID after ${IDLE_SEC}s with GPU utilization <= ${BUSY_PCT}%"
@@ -31,10 +42,10 @@ while true; do
   fi
   if [ $(( now - last_busy )) -ge "$IDLE_SEC" ]; then
     log "idle for $(( now - last_busy ))s, stopping pod $POD_ID"
-    if "$RUNPODCTL" pod stop "$POD_ID"; then
+    if stop_pod; then
       exit 0
     fi
-    log "WARNING: '$RUNPODCTL pod stop' failed; stop the pod from the console or the RunPod MCP"
+    log "WARNING: stopping the pod failed; stop it from the console or the RunPod MCP"
     last_busy=$now   # retry after another idle period instead of hammering the API
   fi
   sleep "$POLL_SEC"
