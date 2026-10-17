@@ -21,7 +21,25 @@ station:
   notes: >-
     Only the robot's LEFT arm is used; the right arm stays parked and must not get any step. On the table: a cardboard
     box with a slot that holds the red pen upright, and a mat next to it. Every FLUX step starts from the home pose
-    (the executor moves the arm there first), so do not add home steps between FLUX steps yourself.
+    (the executor moves the arm there first), so do not add home steps between FLUX steps yourself. When the operator
+    says they reset the pen by hand between repetitions, put one operator_reset step between consecutive
+    put_pen_in_slot steps (none after the last one) instead of take_pen_out.
+  # Success checks, tuned on the head frames of the VR datasets (orchestrator/verify_eval.py; research/orchestrator.md
+  # "Success checks on real frames"): this scene description replaces the generic verifier prompt. The full 640x480
+  # head frame is sent: a table crop (verify_crop: [x0, y0, x1, y1] fractions, verify_max_side) let a pen hovering
+  # above the slot pass and was slower, so it stays off.
+  verify_scene: >-
+    You check the state of a tabletop scene in an image from a robot's head camera, which looks down at the table at
+    an angle from behind the robot. On the table: a black mat on the left and an open white cardboard box on the right
+    (its lid stands open behind it). In the box: a yellow utility knife lying flat at the front, a green marker
+    standing upright in a holder, and, immediately LEFT of the green marker, the red pen's slot: a small white
+    rectangular holder. The red pen has a red cap, a red end and a black body. Green robot arms may be in view and may
+    touch, hold or hide the pen; a person may be in the background. Because the camera looks down at an angle, a pen
+    standing in a holder and a pen lying on the mat pointing toward the camera both look like a vertical stripe in the
+    image: decide by WHERE the pen is (in the white holder inside the box, or on the black mat or the table outside
+    the box), not by how vertical it looks. Answer done=true only if the condition holds in this image; if the pen
+    cannot be found or its position is ambiguous, answer done=false with low confidence. Give one sentence saying
+    where the red pen is.
 
 defaults:
   timeout_s: 45
@@ -38,6 +56,11 @@ skills:
     arms: [left]
     description: "Pick up the red pen from the mat and put it upright into its slot in the cardboard box."
     success_check: "The red pen is standing in its slot in the cardboard box."
+    verify_hint: >-
+      Done: the red pen's lower end is in the white holder immediately left of the green marker, inside the box, so it
+      stands next to the green marker as the marker does; the gripper may still touch the pen. Not done: the pen is on
+      the mat or the table, anywhere else in the box (including right of the green marker), or held in the air above
+      the box; or the white holder is empty.
     start_pose: home
     keywords: ["put the pen in", "put the red pen in", "pen in the box", "pen in its slot", "put it back", "put it in",
                "insert"]
@@ -48,8 +71,23 @@ skills:
     arms: [left]
     description: "Pull the red pen out of its slot in the box and lay it on the mat."
     success_check: "The red pen is lying on the mat, outside the box."
+    verify_hint: >-
+      Done: the red pen is on the black mat or the table outside the box, in any orientation, and the gripper is not
+      holding it up in the air. Not done: the pen is in its holder or anywhere inside the box, or held up by the
+      gripper.
     start_pose: home
     keywords: ["take it out", "take the pen out", "take the red pen out", "out of the box", "out of its slot", "remove"]
+
+  # The operator acts, the arm waits at home; the operator presses Done in the HMI (not counted as an intervention).
+  operator_reset:
+    kind: operator
+    arms: [left]
+    description: "The arm waits at the home pose while the operator puts the red pen back on the mat by hand."
+    instruction: "Take the red pen out of its slot and lay it on the mat."
+    start_pose: home
+    timeout_s: 600
+    max_attempts: 1
+    keywords: ["i reset", "reset it", "reset the pen", "resets", "by hand"]
 
   # Scripted primitives: never FLUX.
   hold:

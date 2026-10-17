@@ -38,7 +38,8 @@ lid check takes 1.7 s and was correct. Request shapes were also checked against 
 through a mock transport. Details in "Claude: measured latency and cost" and "Claude API: docs and SDK".
 
 **Not verified:** FLUX driving a whole orchestrated task (the pod measurement exercised the runner and policy server
-with both arms, not a plan); nothing on the real robot; Claude's checks on real camera frames (only sim renders so far). The skill vocabulary is a placeholder (the
+with both arms, not a plan); nothing on the real robot. Claude's checks on real camera frames: measured offline on
+recorded Haller frames ("Success checks on real frames"). The skill vocabulary is a placeholder (the
 recording protocol's S1 to S5) until the demo task is final.
 
 **Next 3 steps:**
@@ -91,11 +92,71 @@ recording protocol's S1 to S5) until the demo task is final.
   the load freeze stops the policy but not the ramp (`tests/test_haller.py`, 19 tests, `read_arm_joints` faked). Live Claude plan for "put the pen in the box, take it out, put it back, and
   repeat the whole cycle twice": 14.2 s, USD 0.030, 8 steps, left arm only, pen states consistent (it inserted a
   take-out between cycles) and a final `home`.
-- **Not verified**: anything on the real arm (VR recording holds it tonight), the policy server on the RTX PRO 6000 pod
-  for this run, and Haiku's checks on real head frames: the pen in its slot is a small detail in a 640x480 frame. In
-  the observe dry run, look at a few checks; if Haiku misjudges, add `--verifier-wrist` (the wrist frame goes in too)
-  or switch these two skills to `claude-sonnet-5-5` in `skills.yaml`.
+- **Not verified**: anything on the real arm (VR recording holds it tonight) and the policy server on the RTX PRO 6000
+  pod for this run. Haiku's checks were measured OFFLINE on 282 recorded head frames ("Success checks on real
+  frames" below: 97.1% / 98.2%, no false pass); live frames are uncompressed and the LoRA's motions may differ from the
+  VR demos, so look at a few checks in the observe dry run.
 - **Run command**: `orchestrator/README.md`, "Sunday demo".
+
+## Success checks on real frames (2026-10-17 night, offline, Haiku 5.5)
+
+**Result.** The check as first configured (generic verifier prompt plus the skill's sentence) almost never passes a
+real "pen in its slot" frame: **2 of 107** true cases passed (accuracy 62%). With the tuned station prompt now in
+`skills.yaml` it is **97.1%** for the put check and **98.2%** for the take check, with **no false pass** on 171 + 107
+negatives, including 52 frames where the pen is still carried in the gripper. Held-out episodes: 97.8% and 99.1%.
+Median latency 1.3 s and 1.2 s, about USD 0.00018 per check.
+
+**Data.** Read-only snapshots of `ws4/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box` (104 episodes) and
+`ws4/haller_take_the_red_pen_out_of_its_slot` (11), head camera, as recorded (H.264 640x480, same mast camera and
+orientation as the live run). Per episode: the first and the last frame, plus the 50% frame of 52 put episodes (checked
+by eye: pen in the gripper in the air, slot empty). Truth: put start = pen on the mat, put end = pen in its slot, take
+start = in the slot, take end = on the mat; the review.json rejects by their note, every frame checked by eye. Two
+labels disagree with the data and were set from the frames: rejects 15 and 16 ("ends with the pen on the mat, head
+frame at save") end, in the video, with the pen standing in its slot (scored as edge cases), and take episode 10
+already starts with the pen on the mat. Edge cases scored apart: a hand in the box (43), the pen in its slot but never
+released (61), 15 and 16. Prompt tuning used only even episodes (dev); odd episodes are the held-out test.
+
+Confusion counts at the shipped threshold (confidence >= 0.7), all frames (held-out odd episodes in brackets):
+
+| Check | Variant | TP | FP | TN | FN | Accuracy | Median / p90 latency | USD per check |
+|-------|---------|----|----|----|----|----------|----------------------|---------------|
+| put: "standing in its slot" | generic prompt (before) | 2 (1) | 0 (0) | 171 (83) | 105 (53) | 62.2% (61.3%) | 1.20 / 1.74 s | 0.00012 |
+| put | **station prompt (shipped)** | 99 (51) | 0 (0) | 171 (83) | 8 (3) | **97.1% (97.8%)** | 1.29 / 2.46 s | 0.00018 |
+| take: "lying on the mat, outside the box" | generic prompt (before) | 96 (45) | 0 (0) | 107 (54) | 22 (12) | 90.2% (89.2%) | 1.07 / 1.45 s | 0.00012 |
+| take | **station prompt (shipped)** | 114 (56) | 0 (0) | 107 (54) | 4 (1) | **98.2% (99.1%)** | 1.15 / 1.73 s | 0.00016 |
+
+Why the generic check failed, from Haiku's own observations: the head camera looks down at an angle, so a pen standing
+in its slot and a pen lying on the mat pointing at the camera both look like a vertical stripe ("appears to be lying
+horizontally rather than standing", "standing upright on the mat, not lying flat"), and at the end of a put the gripper
+still touches the pen ("held by the gripper rather than clearly seated"). The station prompt (`station.verify_scene`)
+describes the scene (mat, box, knife, green marker, the white slot immediately LEFT of the green marker), tells the
+model to judge by WHERE the pen is, not by how vertical it looks, and each skill's `verify_hint` lists what counts as
+done and not done (the gripper may still touch the pen; a pen right of the green marker or held above the box is not
+in its slot). Edge frames: 15, 16, 43 pass the put check (pen in its slot), 61 (still gripped) stays below threshold,
+and 100 (pen standing next to the slot) never passes the put check, the hard negative it is meant to be.
+
+Variants measured (same frames, `verify_eval.py`; full table in `research/verify_eval_pen_2026-10-17.json`):
+- a table crop upscaled to 896 px: no better overall (put 96.0%), slower (median 1.7 s), and it passed one frame of
+  the pen hovering just above the slot at 0.7. Not shipped (`station.verify_crop` stays unset).
+- adding the wrist frame: put 96.8%, take 98.7%, one false pass on a hovering frame. Not shipped.
+- effort medium instead of low: no gain, 0.5 s slower.
+- threshold 0.6: recovers most misses (Haiku says 0.6 when the gripper touches the pen) but lets the two hovering
+  frames pass (put_021, put_028 at 50%). Kept at 0.7: a missed pass only means one more check 2 chunks later; a false
+  pass stops FLUX before the pen is in.
+Not measured: Sonnet 5.5 (cost), live (uncompressed) frames, frames from the LoRA's own motions. Cost of the whole
+study: USD 0.65 for 3,896 checks.
+
+**Two consequences for the chain run, both handled in the code now:**
+- A check can pass while the gripper still holds the pen in its slot. The ramp to the start pose of the NEXT step now
+  opens the gripper in place first and only then moves the arm (`PrimitiveBackend(release_first=True)` on the Haller),
+  so the arm never drags the pen out of its slot.
+- The take-out dataset is not robot take-outs: in episodes 0 to 8 the arm retracts and a person's hand takes the pen
+  out; only episode 9 is a robot take-out, episode 10 has no motion. A LoRA trained on it has one robot demo of that
+  skill. Hence the second chain: N x put-in with an `operator_reset` step (the arm waits at home, Oscar resets the pen
+  and presses Done; planned, not an intervention).
+
+Re-run: `cd ws4 && python -m orchestrator.verify_eval --snapshot <dir> --variants live --split test` (copy the datasets'
+`meta/`, `review.json` and `videos/` to `<dir>` first; about USD 0.05 per variant on the test split).
 
 ## Architecture
 

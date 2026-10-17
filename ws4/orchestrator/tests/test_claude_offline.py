@@ -156,3 +156,23 @@ def test_image_tokens_follow_the_patch_formula():
     assert image_tokens(640, 480) == 23 * 18 == 414
     assert image_tokens(1000, 1000) == 1296  # vision docs table
     assert image_tokens(200, 200) == 64
+
+
+def test_verify_eval_measures_exactly_what_the_live_verifier_sends():
+    """verify_eval's tuned variant and ClaudeVerifier build the same request from skills.yaml (no drift)."""
+    from orchestrator.plan import Step
+    from orchestrator.skills import DEFAULT_VOCABULARY, load_vocabulary
+    from orchestrator.verifier import HEAD, ClaudeVerifier
+    from orchestrator.verify_eval import CHECKS, VARIANTS, Sample
+
+    vocab = load_vocabulary(DEFAULT_VOCABULARY)
+    frame = np.random.default_rng(0).integers(0, 255, (480, 640, 3), dtype=np.uint8)
+    live = ClaudeVerifier(llm=None, station=vocab.station)
+    tuned = VARIANTS["live"]
+    assert live.system == tuned.system == vocab.station.verify_scene
+    for check, skill_name in (("put", "put_pen_in_slot"), ("take", "take_pen_out")):
+        skill = vocab[skill_name]
+        assert skill.success_check == CHECKS[check]
+        step = Step("s", "left", skill_name, success_check=skill.success_check)
+        sample = Sample("x", frame, None, {check: True})
+        assert live.content(step, {HEAD: frame}, skill) == tuned.content(check, sample)

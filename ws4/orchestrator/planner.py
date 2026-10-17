@@ -56,7 +56,7 @@ class StubPlanner:
     def _clause_skills(self, clause: str) -> list[Skill]:
         found: list[tuple[int, Skill]] = []
         for skill in self.vocab.skills.values():
-            if not skill.is_flux:
+            if skill.kind not in ("flux", "operator"):
                 continue
             hits = [clause.find(k) for k in skill.keywords if k in clause]
             if hits:
@@ -76,6 +76,8 @@ class StubPlanner:
         clauses = [c.strip() for c in re.split(r"\bthen\b|\band then\b|;|,|\.(?:\s|$)", text) if c.strip()]
         stages = [[s for s in self._clause_skills(c) if s.name not in done_skills] for c in clauses]
         stages = [s for s in stages if s] * repeat
+        while stages and all(s.kind == "operator" for s in stages[-1]):
+            stages.pop()  # "..., I reset it each time": a reset only between repetitions, not after the last one
         if not stages:
             return PlanResult(None, [f"no vocabulary skill matches the goal {goal!r}"], 1, self.name)
         used: set[str] = set(done)
@@ -141,8 +143,9 @@ each gripper. In the head camera image the left arm is on the image's left side.
 Each arm runs one skill at a time. FLUX skills are executed by a learned visuomotor policy that is conditioned on the \
 skill's exact text prompt; the policy does not stop by itself, so every FLUX step needs a success_check: one short, \
 concrete sentence a vision model can verify from the head camera image alone (objects, places, open or closed). \
-Primitive skills are scripted. You choose skills only from the vocabulary below; you never write motor commands or \
-new prompts.
+Primitive skills are scripted; operator skills are done by a person while the arm waits, and the person confirms \
+when they are done (they need no success_check). You choose skills only from the vocabulary below; you never write \
+motor commands or new prompts.
 
 How the plan runs: a step starts as soon as every step in its depends_on is done and its arm is free. Steps on \
 different arms with no dependency between them run at the same time, which saves time, so put independent work on \

@@ -250,7 +250,8 @@ class Session:
         arms = self.vocab.station.arms_available if self.rig is not None else ARMS
         home = self.vocab.station.home_pose
         prim = PrimitiveBackend(home=None if home is None else np.array(home),
-                                joint_step=cfg.home_speed if self.rig is not None else 2.0)
+                                joint_step=cfg.home_speed if self.rig is not None else 2.0,
+                                release_first=self.rig is not None)
         for arm in arms:
             name = f"prim_{arm}"
             self.backends[name] = prim
@@ -343,7 +344,7 @@ class Session:
             return SimTruthVerifier(self.sim)
         if kind == "claude":
             return ClaudeVerifier(self.llm, use_wrist=self.cfg.verifier_wrist, effort=self.cfg.verifier_effort,
-                                  haiku_thinking=self.cfg.verifier_thinking)
+                                  haiku_thinking=self.cfg.verifier_thinking, station=self.vocab.station)
         if kind == "shadow":
             if self.sim is None:
                 raise ValueError("verifier=shadow compares Claude with sim ground truth; it needs the sim")
@@ -358,7 +359,8 @@ class Session:
 
             return ShadowVerifier(SimTruthVerifier(self.sim),
                                   ClaudeVerifier(self.llm, self.cfg.verifier_wrist, self.cfg.verifier_effort,
-                                                 haiku_thinking=self.cfg.verifier_thinking), report)
+                                                 haiku_thinking=self.cfg.verifier_thinking,
+                                                 station=self.vocab.station), report)
         if kind == "manual":
             return ManualVerifier()
         raise ValueError(f"unknown verifier {kind!r}")
@@ -518,6 +520,10 @@ class Session:
     def override(self, step_id: str, done: bool) -> None:
         if self.executor is not None:
             self.executor.override(step_id, done)
+
+    def confirm(self, step_id: str) -> None:
+        if self.executor is not None:
+            self.executor.confirm(step_id)
 
     def reset_scene(self, seed: int | None = None, lid_on_box: bool | None = None) -> str:
         if self.sim is None:

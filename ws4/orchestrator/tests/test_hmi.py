@@ -43,6 +43,9 @@ class FakeSession:
     def override(self, step, done):
         self.calls.append(("override", step, done))
 
+    def confirm(self, step):
+        self.calls.append(("confirm", step))
+
     def reset_scene(self, seed, lid):
         self.calls.append(("reset", seed, lid))
         return "ok"
@@ -98,6 +101,8 @@ def test_estop_and_controls(hmi):
     assert request(port, "POST", "/api/approve", {"version": 1}, POST_HEADERS)[0] == 200
     assert request(port, "POST", "/api/override", {"step": "a", "done": True}, POST_HEADERS)[0] == 200
     assert ("override", "a", True) in session.calls
+    assert request(port, "POST", "/api/confirm", {"step": "reset"}, POST_HEADERS)[0] == 200
+    assert ("confirm", "reset") in session.calls
     assert request(port, "POST", "/api/plan", {"goal": ""}, POST_HEADERS)[0] == 400
 
 
@@ -120,5 +125,6 @@ def test_server_refuses_non_local_bind(vocab):
 
 def test_page_has_spacebar_estop():
     page = PAGE.read_text()
+    assert "/api/confirm" in page  # the Done button of operator steps
     assert 'e.code !== "Space"' in page or "Space" in page
     assert "/api/estop" in page

@@ -20,7 +20,7 @@ import numpy as np
 from .claude import ClaudeJSON, ClaudeRefused, ClaudeUnavailable, image_block
 from .cost import BudgetExceeded
 from .plan import Step
-from .skills import Skill
+from .skills import Skill, Station
 
 HEAD = "observation.images.head"
 WRIST = {"left": "observation.images.left_wrist", "right": "observation.images.right_wrist"}
@@ -88,20 +88,29 @@ class ClaudeVerifier:
     fast = False
 
     def __init__(self, llm: ClaudeJSON, use_wrist: bool = False, effort: str = "low", max_side: int = 640,
-                 haiku_thinking: str = "adaptive"):
+                 haiku_thinking: str = "adaptive", station: Station | None = None):
         self.llm = llm
+        self.station = station or Station()
+        self.system = self.station.verify_scene or VERIFY_SYSTEM
         self.use_wrist = use_wrist
         self.effort = effort
         self.max_side = max_side
         # Haiku 5.5 accepts thinking "disabled" at effort <= high (api/errors docs); Sonnet 5.5 and Opus 5.5 do not.
         self.haiku_thinking = haiku_thinking
 
-    def content(self, step: Step, obs: dict) -> list[dict]:
-        content: list[dict] = [{"type": "text", "text": "Head camera:"}, image_block(obs[HEAD], self.max_side)]
+    def content(self, step: Step, obs: dict, skill: Skill | None = None) -> list[dict]:
+        crop = self.station.verify_crop
+        if crop is None:
+            content: list[dict] = [{"type": "text", "text": "Head camera:"}, image_block(obs[HEAD], self.max_side)]
+        else:  # the table region, upscaled: the pen in its slot spans only a few dozen pixels in the full frame
+            side = self.station.verify_max_side
+            content = [{"type": "text", "text": "Head camera (crop of the table):"},
+                       image_block(upscale(crop_frac(obs[HEAD], crop), side), side)]
         if self.use_wrist and WRIST[step.arm] in obs:
             content += [{"type": "text", "text": f"{step.arm} gripper camera:"},
                         image_block(obs[WRIST[step.arm]], self.max_side)]
-        content.append({"type": "text", "text": f"Condition to check: {step.success_check}"})
+        hint = f" {skill.verify_hint}" if skill is not None and skill.verify_hint else ""
+        content.append({"type": "text", "text": f"Condition to check: {step.success_check}{hint}"})
         return content
 
     def check(self, step: Step, skill: Skill, obs: dict) -> Verdict:
@@ -110,8 +119,8 @@ class ClaudeVerifier:
         spent0 = self.llm.meter.total_usd
         thinking = {"type": self.haiku_thinking} if model == "claude-haiku-5-5" else None
         try:
-            data, _ = self.llm.call(purpose="verify", model=model, system=VERIFY_SYSTEM,
-                                    messages=[{"role": "user", "content": self.content(step, obs)}],
+            data, _ = self.llm.call(purpose="verify", model=model, system=self.system,
+                                    messages=[{"role": "user", "content": self.content(step, obs, skill)}],
                                     schema=VERIFY_SCHEMA, effort=self.effort, max_tokens=4000, cache_system=False,
                                     thinking=thinking)
         except (BudgetExceeded, ClaudeRefused, ClaudeUnavailable) as exc:
@@ -123,6 +132,22 @@ class ClaudeVerifier:
         conf = float(np.clip(float(data.get("confidence", 0.0)), 0.0, 1.0))
         return Verdict(bool(data.get("done")), conf, str(data.get("observation", "")), model,
                        time.perf_counter() - start, self.llm.meter.total_usd - spent0)
+
+
+def crop_frac(img: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:
+    h, w = img.shape[:2]
+    x0, y0, x1, y1 = box
+    return img[round(y0 * h): round(y1 * h), round(x0 * w): round(x1 * w)]
+
+
+def upscale(img: np.ndarray, max_side: int) -> np.ndarray:
+    from PIL import Image
+
+    pil = Image.fromarray(np.asarray(img).astype(np.uint8))
+    scale = max_side / max(pil.size)
+    if scale > 1:
+        pil = pil.resize((round(pil.size[0] * scale), round(pil.size[1] * scale)), Image.LANCZOS)
+    return np.asarray(pil)
 
 
 class ShadowVerifier:

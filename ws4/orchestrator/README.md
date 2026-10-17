@@ -23,7 +23,9 @@ the ramp (nothing is sent). Before the ramp it reads the parked arm's pose on `/
 reaches toward that arm): if another process holds that port (someone may be driving the arm), or the read fails and
 no pose younger than 180 s was read before, the e-stop latches with the reason, the arm holds at home and FLUX does not
 start (nor the ramp); fix it, then **Release** and **Resume**. `--no-other-arm` skips the read for deliberate tests only and is
-written into every attempt's notes (`other_arm=...`). Each step ends on a Claude Haiku 5.5 check of the head frame.
+written into every attempt's notes (`other_arm=...`). Each step ends on a Claude Haiku 5.5 check of the head frame,
+with the station prompt tuned on 282 recorded Haller frames (put 97.1%, take 98.2%, no false pass; research doc,
+"Success checks on real frames"; re-run with `python -m orchestrator.verify_eval`).
 
 ```bash
 # 0. One process per arm: stop the haller HMI and the VR recorder first (this must print nothing).
@@ -38,9 +40,36 @@ cd ws4 && python -m orchestrator hmi --open --env haller --planner claude --pack
     --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token" \
     --condition zero_shot --variant A0 --checkpoint black-forest-labs/flux-3-action-so101@0713a7a --layout L1 \
     --operator oscar
-# 3b. With the LoRA: same command with the package name the pod serves it under and its HF revision, e.g.
-#     --package <lora-package> --condition post_training --variant lora_A --checkpoint <hf-repo>@<rev>
 ```
+
+### Chain run with the LoRA
+
+The pod serves the LoRA under its own package name next to `so101` (the name comes from whoever starts the server
+on the pod; the server's `GET /packages` lists them, with the token header as for every request). Only
+`--package` and the logging fields change; the token, tunnel and arm are the same:
+
+```bash
+cd ws4 && python -m orchestrator hmi --open --env haller --planner claude --package <lora-package> \
+    --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token" \
+    --condition post_training --variant lora_A --checkpoint <hf-repo>@<rev> --layout L1 --operator oscar
+```
+
+Goals to type (the planner turns them into a chain; the stub planner, `--planner stub`, does the same offline):
+
+| Goal | Plan |
+|------|------|
+| `put the pen in, take it out, put it back` | put_pen_in_slot, take_pen_out, put_pen_in_slot |
+| `put the pen in its slot 5 times, I reset it each time` | put_pen_in_slot, then 4 x (operator_reset, put_pen_in_slot) |
+
+`operator_reset`: the arm ramps home (gripper opened first), the step card shows **Done: Take the red pen out of its
+slot and lay it on the mat**; Oscar resets the pen and presses it (headless `run`: Enter in the terminal). It is planned
+work, not an intervention, so a chain with only resets still counts as a success without interventions. Prefer the
+reset chain unless the LoRA saw robot take-outs: the recorded take-out dataset has ONE robot take-out in 11 episodes
+(episodes 0 to 8 are the arm retracting while a hand takes the pen out; research/orchestrator.md).
+
+Tested end to end without hardware (`tests/test_haller.py::test_lora_*`): flux.remote's real HTTP server on localhost
+with a fake policy under a LoRA package name and a token, the fake arm, both chains, per-attempt trial lines with
+`post_training` / `lora_A` / the checkpoint.
 
 Then in the HMI, type the goal, for example `put the pen in the box, take it out, put it back` (or `... 3 times`),
 press **Plan**, check the lane, **Approve and run**. **E-STOP** (button or spacebar) latches the runner and freezes the
@@ -134,6 +163,7 @@ ORCH_LIVE=1 python -m pytest orchestrator/tests/test_claude_live.py -q -s       
 | `claude.py`, `cost.py` | One structured-output call with refusal fallbacks (doc URLs inline); token and cost ledger with a session budget guard |
 | `live_check.py`, `requirements.txt` | One live call per Claude feature with latency and cost; pinned dependencies |
 | `verifier.py` | `ClaudeVerifier` (Haiku 5.5 or Sonnet 5.5 per skill), `SimTruthVerifier`, `ShadowVerifier`, `ManualVerifier` |
+| `verify_eval.py` | offline accuracy, latency and cost of the success checks on recorded LeRobot frames (confusion matrix per variant) |
 | `executor.py` | DAG scheduler and control loop: concurrency, verification cadence, timeouts, retries, replans, e-stop, make-way parking |
 | `gate.py` | Inter-arm collision gate (chunk truncation, tick-level e-stop) on `kinematics/mj_collision.py` |
 | `primitives.py` | Scripted `home`, `open_gripper`, `close_gripper` behind the FLUX backend interface; `hold` needs no backend |

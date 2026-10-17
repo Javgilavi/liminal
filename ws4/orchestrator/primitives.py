@@ -19,10 +19,14 @@ GRIPPER_CLOSED = 0.0
 class PrimitiveBackend:
     contract = SO101_CONTRACT
 
-    def __init__(self, home: np.ndarray | None = None, joint_step: float = 2.0, gripper_step: float = 5.0):
+    def __init__(self, home: np.ndarray | None = None, joint_step: float = 2.0, gripper_step: float = 5.0,
+                 release_first: bool = False):
         self.home = np.asarray(HOME_DEG if home is None else home, dtype=float)
         self.joint_step = joint_step
         self.gripper_step = gripper_step
+        # ``home`` opens the gripper in place before the arm moves: a FLUX step can end (its check passed) with the
+        # pen still gripped in its slot, and moving while the gripper opens would drag the pen out (Haller)
+        self.release_first = release_first
 
     def goal(self, task: str, anchor: np.ndarray) -> np.ndarray:
         goal = np.asarray(anchor, dtype=float).copy()
@@ -49,6 +53,9 @@ class PrimitiveBackend:
         limit = np.r_[np.full(5, self.joint_step), self.gripper_step]
         frames, cur = [], anchor
         for _ in range(self.contract.chunk_size):
-            cur = cur + np.clip(goal - cur, -limit, limit)
+            step = np.clip(goal - cur, -limit, limit)
+            if self.release_first and request.task == "home" and goal[5] > cur[5] + 1e-6:
+                step[:5] = 0.0  # gripper first, arm still
+            cur = cur + step
             frames.append(cur)
         return PolicyResponse(np.asarray(frames), 0.0, {"backend": "primitive", "task": request.task})

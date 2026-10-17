@@ -70,7 +70,7 @@ class StepRun:
             "max_attempts": s.max_attempts, "status": self.status, "attempt": self.attempt,
             "elapsed_s": round(max(0.0, elapsed), 1), "timeout_s": self.skill.timeout_s, "chunks": self.chunks,
             "reason": self.reason, "phase": self.phase, "plan_version": self.plan_version,
-            "verifying": self.verifying is not None,
+            "verifying": self.verifying is not None, "instruction": self.skill.instruction,
             "last_verdict": self.verdicts[-1].as_dict() if self.verdicts else None,
         }
 
@@ -177,6 +177,10 @@ class Executor:
 
     def override(self, step_id: str, done: bool) -> None:
         self._push("override", (step_id, done))
+
+    def confirm(self, step_id: str) -> None:
+        """The operator finished an operator step (e.g. reset the pen by hand): planned, not an intervention."""
+        self._push("confirm", step_id)
 
     def approve_replan(self, plan: Plan) -> None:
         self._push("replan", plan)
@@ -336,6 +340,10 @@ class Executor:
                 self._finish("aborted", str(arg))
             elif cmd == "override":
                 self._override(*arg)
+            elif cmd == "confirm" and self.state == "running":
+                run = self.runs.get(arg)
+                if run is not None and run.status == "running" and run.skill.kind == "operator" and not run.homing:
+                    self._complete(run, "operator confirmed")
             elif cmd == "replan" and self.state == "awaiting_replan":
                 self._replace_plan(arg)
                 self.state = "running"
@@ -398,8 +406,8 @@ class Executor:
                 self.events.add("error", f"{step.id}: not started: {block}")
                 self.estop(block)  # the arm holds where it is; Resume retries this attempt
                 return
-        home = self.home_target(step.arm) if (self.home_target and skill.is_flux and skill.start_pose == "home") \
-            else None
+        home = self.home_target(step.arm) if (self.home_target and skill.kind in ("flux", "operator")
+                                              and skill.start_pose == "home") else None
         if home is not None:
             # Every FLUX step starts where its demonstrations started: ramp there through the same guard first.
             self._ramp(run, True)
@@ -415,6 +423,10 @@ class Executor:
 
         step, skill = run.step, run.skill
         run.t_start, run.chunks, run.verify_at, run.phase = self.t, 0, skill.verify_every_chunks, ""
+        if skill.kind == "operator":  # the arm holds where it is (home) until the operator presses Done
+            run.target, run.phase = None, "waiting for the operator"
+            self.events.add("warn", f"{step.id}: OPERATOR: {skill.instruction} Then press Done.", step=step.id)
+            return
         target = self.resolve_target(step, skill)
         backend = self.backends.get(target)
         if skill.name == "home":  # a scripted ramp too
@@ -479,6 +491,11 @@ class Executor:
                     limit = self.vocab["home"].timeout_s if "home" in self.vocab else 30.0
                     if self.t - run.t_home > limit:
                         self._fail_attempt(run, f"did not reach the start pose within {limit:.0f} s", retry=False)
+                continue
+            if skill.kind == "operator":
+                if self.t - run.t_start > skill.timeout_s:
+                    self._fail_attempt(run, f"the operator did not confirm within {skill.timeout_s:.0f} s",
+                                       retry=False)
                 continue
             if report.status.get(run.target) == "replanned":
                 run.chunks += 1

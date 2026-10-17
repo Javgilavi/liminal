@@ -96,6 +96,9 @@ def make_server(session: Any, host: str = "127.0.0.1", port: int = 8080) -> Thre
             if path == "/api/approve":
                 msg = session.approve(int(body.get("version", -1)))
                 return self._json(200 if msg == "ok" else 409, {"ok": msg == "ok", "message": msg})
+            if path == "/api/confirm":
+                session.confirm(str(body.get("step", "")))
+                return self._json(200, {"ok": True})
             if path == "/api/override":
                 session.override(str(body.get("step", "")), bool(body.get("done")))
                 return self._json(200, {"ok": True})

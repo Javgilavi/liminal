@@ -137,6 +137,7 @@
   .card .bar { height: 6px; background: var(--panel2); border-radius: 6px; margin-top: 7px; overflow: hidden; }
   .card .bar > div { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--blue), var(--teal)); }
   .ov { display: flex; gap: 6px; margin-top: 8px; } .ov button { padding: 3px 10px; font-size: 11px; border-radius: 8px; }
+  .ov button.confirm { padding: 7px 14px; font-size: 13px; font-weight: 700; color: #fff; background: var(--green); border-color: var(--green); }
   .kind-primitive .p { color: var(--teal); }
   .kind-hold { background: repeating-linear-gradient(135deg, #fff, #fff 8px, var(--panel2) 8px, var(--panel2) 16px); }
   .banner { padding: 11px 14px; border-radius: 14px; margin-bottom: 12px; font-weight: 600; }
@@ -286,6 +287,7 @@ function card(st, isRun) {
   let html = `<div class="card ${status} ${kind} arm-${esc(st.arm)}"><div class="t"><span>${esc(st.id)}</span><span class="st">${esc(status)}${st.attempt ? " " + st.attempt + "/" + st.max_attempts : ""}</span></div>`;
   if (st.skill === "hold") html += `<div class="p">holds until <b>${esc((st.hold_until || []).join(", "))}</b> are done</div>`;
   else if (st.kind === "primitive") html += `<div class="p">scripted: <b>${esc(st.skill)}</b></div>`;
+  else if (st.kind === "operator") html += `<div class="p">operator: <b>${esc(st.instruction || st.skill)}</b></div>`;
   else html += `<div class="p"><b>FLUX</b> "${esc(st.prompt || "")}"</div>`;
   if (st.success_check) html += `<div class="c">check: ${esc(st.success_check)}</div>`;
   if (st.depends_on && st.depends_on.length) html += `<div class="c">after ${esc(st.depends_on.join(", "))}</div>`;
@@ -298,6 +300,8 @@ function card(st, isRun) {
     html += `<div class="v ${v.done ? "" : "no"}">${v.done ? "&#10003;" : "&#8230;"} ${esc(v.source)} (${(v.confidence ?? 0).toFixed(2)}): ${esc(v.observation)}</div>`;
   }
   if (isRun && st.reason && status !== "done") html += `<div class="c err">${esc(st.reason)}</div>`;
+  if (isRun && st.kind === "operator" && status === "running" && st.phase === "waiting for the operator")
+    html += `<div class="ov"><button class="confirm" onclick="post('/api/confirm',{step:'${esc(st.id)}'})">Done: ${esc(st.instruction || "continue")}</button></div>`;
   if (isRun && status !== "done" && S.run && !TERMINAL.includes(S.run.state))
     html += `<div class="ov"><button onclick="post('/api/override',{step:'${esc(st.id)}',done:true})">mark done</button><button onclick="post('/api/override',{step:'${esc(st.id)}',done:false})">mark failed</button></div>`;
   return html + "</div>";

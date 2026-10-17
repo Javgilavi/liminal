@@ -15,6 +15,7 @@ import sys
 import threading
 import webbrowser
 from pathlib import Path
+from typing import Any
 
 from . import WS4  # noqa: F401  (sets sys.path for flux, sim, kinematics)
 
@@ -172,6 +173,23 @@ def cmd_plan(a: argparse.Namespace) -> int:
     return 0 if proposal.result.ok else 1
 
 
+def _confirm_operator_steps(session: Any) -> None:
+    """Headless runs: an operator step (e.g. resetting the pen by hand) is confirmed with Enter in this terminal; the
+    HMI shows a Done button instead."""
+    import time
+
+    asked: set[tuple[str, int]] = set()
+    while True:
+        ex = session.executor
+        for st in (ex.snapshot()["steps"] if ex is not None else []):
+            key = (st["id"], st["attempt"])
+            if st["kind"] == "operator" and st["phase"] == "waiting for the operator" and key not in asked:
+                asked.add(key)
+                input(f"\nOPERATOR ({st['id']}): {st['instruction']} Press Enter when done. ")
+                session.confirm(st["id"])
+        time.sleep(0.2)
+
+
 def cmd_run(a: argparse.Namespace) -> int:
     from .session import Session
 
@@ -188,6 +206,8 @@ def cmd_run(a: argparse.Namespace) -> int:
     if not a.yes and input("\nApprove and run this plan? [y/N] ").strip().lower() != "y":
         print("not approved")
         return 1
+    if any(session.vocab[s.skill].kind == "operator" for s in proposal.result.plan.steps):
+        threading.Thread(target=_confirm_operator_steps, args=(session,), daemon=True).start()
     try:
         result = session.execute(proposal.result.plan)
     except KeyboardInterrupt:

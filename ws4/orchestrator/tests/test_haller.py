@@ -474,3 +474,109 @@ def test_load_freeze_stops_the_policy_not_the_ramp(tmp_path):
         assert out["r"].status == "aborted"
     finally:
         s.close()
+
+
+def test_home_opens_the_gripper_before_the_arm_moves():
+    """A check can pass while the pen is still gripped in its slot: release in place, then ramp (Haller)."""
+    from flux.backends import PolicyRequest
+    from orchestrator.primitives import PrimitiveBackend
+
+    prim = PrimitiveBackend(home=np.array([0, 0, 0, 0, 0, 100.0]), joint_step=1.0, release_first=True)
+    anchor = np.array([10.0, 20.0, 30.0, 40.0, 0.0, 10.0])
+    req = PolicyRequest("home", np.zeros((8, 6)), np.tile(anchor, (8, 1)), {}, (), target="left:prim")
+    frames = prim.predict(req).commands
+    opening = frames[:, 5] < 100.0
+    assert np.allclose(frames[opening][:, :5], anchor[:5])  # arm still while the gripper opens
+    assert frames[-1][5] == 100.0 and frames[-1][0] < anchor[0]  # then the arm moves
+    plain = PrimitiveBackend(home=np.array([0, 0, 0, 0, 0, 100.0]), joint_step=1.0).predict(req).commands
+    assert plain[0][0] < anchor[0]  # the default (sim) moves both at once
+
+
+# ---------------------------------------------------------------------------------------------- LoRA chain run
+LORA_PKG = "so101_pen_lora"
+
+
+@pytest.fixture
+def lora_server(tmp_path):
+    """flux.remote's real HTTP server on localhost with a fake policy under a LoRA package name, token-protected."""
+    from flux.backends import FakeBackend
+    from flux.contract import SO101_CONTRACT
+    from flux.remote import make_server
+
+    backend = FakeBackend(SO101_CONTRACT, velocity=0.0, delay_s=0.01)
+    server = make_server({LORA_PKG: backend}, "127.0.0.1", 0, token="test-token")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    token = tmp_path / "flux_token"
+    token.write_text("test-token\n")
+    yield f"http://127.0.0.1:{server.server_address[1]}", str(token), backend
+    server.shutdown()
+    server.server_close()
+
+
+def lora_session(tmp_path, server, token):
+    cfg = SessionConfig(env="haller", robot="fake", policy="remote", server=server, token_file=token, package=LORA_PKG,
+                        planner="stub", verifier="manual", realtime=False, task="pen_chain",
+                        vocabulary=short_vocab(tmp_path, timeout=3.0), max_run_s=120,
+                        condition="post_training", variant="lora_A", checkpoint="ws4/so101-pen-lora@test",
+                        trial_log=str(tmp_path / "trials.jsonl"), runs_dir=str(tmp_path / "runs"))
+    s = Session(cfg)
+    s.verifier = PassOnAttempt()
+    return s
+
+
+def test_lora_chain_put_take_put_over_the_policy_server(tmp_path, lora_server):
+    server, token, backend = lora_server
+    s = lora_session(tmp_path, server, token)
+    try:
+        assert sorted(s.target_backend) == ["left:prim", f"left:{LORA_PKG}"]
+        plan = s.plan("put the pen in, take it out, put it back").result.plan
+        result = s.execute(plan)
+        assert result.status == "succeeded" and (result.steps_done, result.steps_total) == (3, 3)
+        tasks = [r.task for r in backend.requests]
+        assert tasks[:2] == [PUT, TAKE]  # warm-up: every FLUX prompt once before the run
+        assert PUT in tasks[2:] and TAKE in tasks[2:]
+        trials = load_trial_log().load(tmp_path / "trials.jsonl")
+        attempts = [t for t in trials if t.task != "pen_chain"]
+        assert [t.task for t in attempts] == ["put_pen_in_slot", "take_pen_out", "put_pen_in_slot"]
+        assert all(t.condition == "post_training" and t.variant == "lora_A"
+                   and t.checkpoint == "ws4/so101-pen-lora@test" for t in trials)
+        (chain,) = [t for t in trials if t.task == "pen_chain"]
+        assert chain.success and chain.steps_done == 3 and chain.interventions == 0
+    finally:
+        s.close()
+
+
+def test_lora_cycles_with_operator_reset(tmp_path, lora_server):
+    """N cycles of put-in; the operator resets the pen by hand and presses Done (not an intervention)."""
+    server, token, backend = lora_server
+    s = lora_session(tmp_path, server, token)
+    try:
+        plan = s.plan("put the pen in its slot 3 times, I reset it each time").result.plan
+        assert [st.skill for st in plan.steps] == ["put_pen_in_slot", "operator_reset"] * 2 + ["put_pen_in_slot"]
+        confirmed = []
+
+        def operator():
+            deadline = time.time() + 60
+            while len(confirmed) < 2 and time.time() < deadline:
+                snap = s.executor.snapshot() if s.executor is not None else {"steps": []}
+                for st in snap["steps"]:
+                    if st["kind"] == "operator" and st["phase"] == "waiting for the operator" \
+                            and st["id"] not in confirmed:
+                        assert np.abs(s.rig.robot.joints() - [0, 0, 0, 0, 0, 100]).max() <= 3.0  # arm at home
+                        confirmed.append(st["id"])
+                        s.confirm(st["id"])
+                time.sleep(0.01)
+
+        helper = threading.Thread(target=operator)
+        helper.start()
+        result = s.execute(plan)
+        helper.join(timeout=10)
+        assert result.status == "succeeded" and result.interventions == 0 and len(confirmed) == 2
+        trials = load_trial_log().load(tmp_path / "trials.jsonl")
+        assert [t.task for t in trials if t.task != "pen_chain"] == ["put_pen_in_slot"] * 3
+        (chain,) = [t for t in trials if t.task == "pen_chain"]
+        assert chain.success and chain.steps_done == chain.steps_total == 5
+        assert any("OPERATOR: Take the red pen out" in e["msg"] for e in s.events.recent())
+    finally:
+        s.close()

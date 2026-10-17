@@ -1,0 +1,1782 @@
+{
+ "note": "orchestrator/verify_eval.py on head frames of the 2026-10-17 VR pen datasets; confusion counts at a confidence threshold of 0.7 unless swept; dev = even episodes (prompt tuning), test = odd (held out). Rows with per-frame verdicts are in the run JSONs under orchestrator/runs/ (not committed).",
+ "runs": {
+  "eval_current_scene": {
+   "time": "2026-10-17T21:45:21",
+   "samples": 230,
+   "total_usd": 0.1172,
+   "variants": {
+    "current": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": false,
+      "hints": false
+     },
+     "checks": {
+      "put": {
+       "n": 226,
+       "tp": 2,
+       "fp": 0,
+       "tn": 119,
+       "fn": 105,
+       "accuracy": 0.5354,
+       "precision": 1.0,
+       "recall": 0.0187,
+       "latency_s": {
+        "median": 1.24,
+        "p90": 1.62,
+        "max": 2.65
+       },
+       "usd_per_check": 0.000124
+      },
+      "take": {
+       "n": 225,
+       "tp": 96,
+       "fp": 0,
+       "tn": 107,
+       "fn": 22,
+       "accuracy": 0.9022,
+       "precision": 1.0,
+       "recall": 0.8136,
+       "latency_s": {
+        "median": 1.2,
+        "p90": 1.66,
+        "max": 2.79
+       },
+       "usd_per_check": 0.000117
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.6,
+        "observation": "The red pen is lying in the open white cardboard box near the green robot gripper, with its tip touching the box floor and its body tilted, not clearly standing upright in a slot."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.35,
+        "observation": "A red-tipped pen appears in the white box near the center, but the green robot arm partially occludes the view and it is unclear whether it is standing upright in a slot rather than lying or held by the gripper."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.3,
+        "observation": "A red marker lies horizontally inside the open cardboard box beside a green marker and a yellow box cutter, not standing upright in a slot, and the robot arm partially occludes the area."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.35,
+        "observation": "A red-capped pen is held in the green gripper above the open box rather than standing in a slot, and the box's compartments are partly occluded by the arm, so the condition is not clearly met."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is still inside the white box, lying among the other pens and the yellow cutter, not on the mat outside the box."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is visible inside the white tray/box, standing upright near the yellow ruler, not lying outside on the mat."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is still inside the white box, lying in the tray beside the green pen and yellow cutter, not on the mat outside the box."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.8,
+        "observation": "A red-tipped pen is visible inside the open white box near the green gripper, not lying on the mat outside the box, so the condition does not hold."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is standing upright inside the open white box, not lying on the mat outside it."
+       }
+      ]
+     }
+    },
+    "scene": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": false,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 226,
+       "tp": 95,
+       "fp": 1,
+       "tn": 118,
+       "fn": 12,
+       "accuracy": 0.9425,
+       "precision": 0.9896,
+       "recall": 0.8879,
+       "latency_s": {
+        "median": 1.17,
+        "p90": 1.58,
+        "max": 3.25
+       },
+       "usd_per_check": 0.000136
+      },
+      "take": {
+       "n": 225,
+       "tp": 88,
+       "fp": 0,
+       "tn": 107,
+       "fn": 30,
+       "accuracy": 0.8667,
+       "precision": 1.0,
+       "recall": 0.7458,
+       "latency_s": {
+        "median": 1.15,
+        "p90": 1.59,
+        "max": 2.77
+       },
+       "usd_per_check": 0.000133
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_015_end",
+        "done": true,
+        "confidence": 0.8,
+        "observation": "The red pen stands upright in its white slot inside the box, just left of the green marker, with its red body and black cap visible."
+       },
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.8,
+        "observation": "The red pen stands upright in its white slot inside the cardboard box, just left of the green marker, though a green robot arm partly overlaps the area."
+       },
+       {
+        "id": "put_043_end",
+        "done": true,
+        "confidence": 0.9,
+        "observation": "The red pen stands upright in its white slot inside the cardboard box, just left of the green marker, with the yellow knife lying in front."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The red pen is partly held by the green robot gripper above the box near the slot, so its exact seating in the white holder is ambiguous and cannot be clearly confirmed as standing upright in the slot."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is still standing upright in its white holder inside the open box, not lying on the black mat outside the box."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is still standing upright in its white slot inside the open box, not lying on the mat outside the box."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is still standing upright in its white holder inside the open box, not lying on the mat outside the box."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is still standing upright inside the white box, held by the green gripper near its slot, not lying on the black mat outside the box."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is still standing upright inside the white box in its holder next to the green marker, not lying on the mat outside the box."
+       }
+      ]
+     }
+    }
+   }
+  },
+  "eval_dev_scene2": {
+   "time": "2026-10-17T21:49:00",
+   "samples": 116,
+   "total_usd": 0.1778,
+   "variants": {
+    "scene2": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": false,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 115,
+       "tp": 48,
+       "fp": 0,
+       "tn": 62,
+       "fn": 5,
+       "accuracy": 0.9565,
+       "precision": 1.0,
+       "recall": 0.9057,
+       "latency_s": {
+        "median": 1.26,
+        "p90": 2.6,
+        "max": 4.89
+       },
+       "usd_per_check": 0.000173
+      },
+      "take": {
+       "n": 114,
+       "tp": 59,
+       "fp": 0,
+       "tn": 53,
+       "fn": 2,
+       "accuracy": 0.9825,
+       "precision": 1.0,
+       "recall": 0.9672,
+       "latency_s": {
+        "median": 1.28,
+        "p90": 2.11,
+        "max": 5.25
+       },
+       "usd_per_check": 0.000157
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The red pen appears to stand upright in the white holder inside the open box, immediately left of the green marker, with a green robot gripper touching its upper part."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is still inside the open white box, standing upright in its white holder just left of the green marker, so it is not lying on the black mat outside the box."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is standing upright in the white holder inside the open box at the right of the green marker's position, not lying on the black mat outside the box, so the condition is not met."
+       }
+      ]
+     }
+    },
+    "scene2_crop": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": [
+       0.08,
+       0.2,
+       0.92,
+       0.82
+      ],
+      "max_side": 896,
+      "wrist": false,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 115,
+       "tp": 52,
+       "fp": 0,
+       "tn": 62,
+       "fn": 1,
+       "accuracy": 0.9913,
+       "precision": 1.0,
+       "recall": 0.9811,
+       "latency_s": {
+        "median": 1.63,
+        "p90": 2.48,
+        "max": 3.77
+       },
+       "usd_per_check": 0.000213
+      },
+      "take": {
+       "n": 114,
+       "tp": 59,
+       "fp": 0,
+       "tn": 53,
+       "fn": 2,
+       "accuracy": 0.9825,
+       "precision": 1.0,
+       "recall": 0.9672,
+       "latency_s": {
+        "median": 1.22,
+        "p90": 1.72,
+        "max": 3.55
+       },
+       "usd_per_check": 0.000169
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.72,
+        "observation": "The red pen stands upright inside the open white box, its black body and red end in the white holder just left of the green marker, with the green gripper arm above it and the yellow knife lying at the front."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen (red cap and red end with black body) is standing upright inside the white holder in the open box, immediately left of the green marker, so it is not on the black mat or outside the box."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.93,
+        "observation": "The red pen is standing upright inside the open white cardboard box, in the slot immediately left of the green marker, so it is not on the mat outside the box."
+       }
+      ]
+     }
+    },
+    "scene2_wrist": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": true,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 115,
+       "tp": 51,
+       "fp": 0,
+       "tn": 62,
+       "fn": 2,
+       "accuracy": 0.9826,
+       "precision": 1.0,
+       "recall": 0.9623,
+       "latency_s": {
+        "median": 1.25,
+        "p90": 1.61,
+        "max": 2.89
+       },
+       "usd_per_check": 0.0002
+      },
+      "take": {
+       "n": 114,
+       "tp": 59,
+       "fp": 0,
+       "tn": 53,
+       "fn": 2,
+       "accuracy": 0.9825,
+       "precision": 1.0,
+       "recall": 0.9672,
+       "latency_s": {
+        "median": 1.27,
+        "p90": 1.76,
+        "max": 3.67
+       },
+       "usd_per_check": 0.0002
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.8,
+        "observation": "The red pen stands upright in the white holder inside the open box, immediately left of the green marker, with the gripper touching its upper body."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is still inside the open white cardboard box, standing in its white holder immediately left of the green marker, with the gripper positioned around it, so it is not on the black mat or table outside the box."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is standing upright in the open white box at the right of the green marker, sitting in its slot rather than on the black mat or table outside the box, so the condition is not met."
+       }
+      ]
+     }
+    },
+    "scene2_medium": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "medium",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": false,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 115,
+       "tp": 48,
+       "fp": 0,
+       "tn": 62,
+       "fn": 5,
+       "accuracy": 0.9565,
+       "precision": 1.0,
+       "recall": 0.9057,
+       "latency_s": {
+        "median": 1.78,
+        "p90": 2.83,
+        "max": 4.62
+       },
+       "usd_per_check": 0.000212
+      },
+      "take": {
+       "n": 114,
+       "tp": 59,
+       "fp": 0,
+       "tn": 53,
+       "fn": 2,
+       "accuracy": 0.9825,
+       "precision": 1.0,
+       "recall": 0.9672,
+       "latency_s": {
+        "median": 1.73,
+        "p90": 2.54,
+        "max": 4.03
+       },
+       "usd_per_check": 0.000209
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.8,
+        "observation": "The red pen, with its red cap and black body, stands upright in the white holder inside the box immediately left of the green marker, while the green gripper touches its top."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is standing upright in its white holder inside the open cardboard box, just left of the green marker, not lying on the black mat or table outside the box."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is standing upright inside the open white cardboard box, in its holder beside the green marker, not lying on the black mat or table outside the box."
+       }
+      ]
+     }
+    }
+   }
+  },
+  "eval_final": {
+   "time": "2026-10-17T21:55:22",
+   "samples": 282,
+   "total_usd": 0.3499,
+   "variants": {
+    "current": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": false,
+      "hints": false
+     },
+     "checks": {
+      "put": {
+       "n": 278,
+       "tp": 2,
+       "fp": 0,
+       "tn": 171,
+       "fn": 105,
+       "accuracy": 0.6223,
+       "precision": 1.0,
+       "recall": 0.0187,
+       "latency_s": {
+        "median": 1.2,
+        "p90": 1.74,
+        "max": 4.99
+       },
+       "usd_per_check": 0.000124
+      },
+      "take": {
+       "n": 225,
+       "tp": 96,
+       "fp": 0,
+       "tn": 107,
+       "fn": 22,
+       "accuracy": 0.9022,
+       "precision": 1.0,
+       "recall": 0.8136,
+       "latency_s": {
+        "median": 1.07,
+        "p90": 1.45,
+        "max": 2.7
+       },
+       "usd_per_check": 0.000117
+      }
+     },
+     "sweep": {
+      "put": {
+       "all": {
+        "0.5": {
+         "n": 278,
+         "tp": 5,
+         "fp": 0,
+         "tn": 171,
+         "fn": 102,
+         "accuracy": 0.6331
+        },
+        "0.6": {
+         "n": 278,
+         "tp": 5,
+         "fp": 0,
+         "tn": 171,
+         "fn": 102,
+         "accuracy": 0.6331
+        },
+        "0.7": {
+         "n": 278,
+         "tp": 2,
+         "fp": 0,
+         "tn": 171,
+         "fn": 105,
+         "accuracy": 0.6223
+        },
+        "0.8": {
+         "n": 278,
+         "tp": 1,
+         "fp": 0,
+         "tn": 171,
+         "fn": 106,
+         "accuracy": 0.6187
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 141,
+         "tp": 3,
+         "fp": 0,
+         "tn": 88,
+         "fn": 50,
+         "accuracy": 0.6454
+        },
+        "0.6": {
+         "n": 141,
+         "tp": 3,
+         "fp": 0,
+         "tn": 88,
+         "fn": 50,
+         "accuracy": 0.6454
+        },
+        "0.7": {
+         "n": 141,
+         "tp": 1,
+         "fp": 0,
+         "tn": 88,
+         "fn": 52,
+         "accuracy": 0.6312
+        },
+        "0.8": {
+         "n": 141,
+         "tp": 1,
+         "fp": 0,
+         "tn": 88,
+         "fn": 52,
+         "accuracy": 0.6312
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 137,
+         "tp": 2,
+         "fp": 0,
+         "tn": 83,
+         "fn": 52,
+         "accuracy": 0.6204
+        },
+        "0.6": {
+         "n": 137,
+         "tp": 2,
+         "fp": 0,
+         "tn": 83,
+         "fn": 52,
+         "accuracy": 0.6204
+        },
+        "0.7": {
+         "n": 137,
+         "tp": 1,
+         "fp": 0,
+         "tn": 83,
+         "fn": 53,
+         "accuracy": 0.6131
+        },
+        "0.8": {
+         "n": 137,
+         "tp": 0,
+         "fp": 0,
+         "tn": 83,
+         "fn": 54,
+         "accuracy": 0.6058
+        }
+       }
+      },
+      "take": {
+       "all": {
+        "0.5": {
+         "n": 225,
+         "tp": 97,
+         "fp": 0,
+         "tn": 107,
+         "fn": 21,
+         "accuracy": 0.9067
+        },
+        "0.6": {
+         "n": 225,
+         "tp": 96,
+         "fp": 0,
+         "tn": 107,
+         "fn": 22,
+         "accuracy": 0.9022
+        },
+        "0.7": {
+         "n": 225,
+         "tp": 96,
+         "fp": 0,
+         "tn": 107,
+         "fn": 22,
+         "accuracy": 0.9022
+        },
+        "0.8": {
+         "n": 225,
+         "tp": 96,
+         "fp": 0,
+         "tn": 107,
+         "fn": 22,
+         "accuracy": 0.9022
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 114,
+         "tp": 52,
+         "fp": 0,
+         "tn": 53,
+         "fn": 9,
+         "accuracy": 0.9211
+        },
+        "0.6": {
+         "n": 114,
+         "tp": 51,
+         "fp": 0,
+         "tn": 53,
+         "fn": 10,
+         "accuracy": 0.9123
+        },
+        "0.7": {
+         "n": 114,
+         "tp": 51,
+         "fp": 0,
+         "tn": 53,
+         "fn": 10,
+         "accuracy": 0.9123
+        },
+        "0.8": {
+         "n": 114,
+         "tp": 51,
+         "fp": 0,
+         "tn": 53,
+         "fn": 10,
+         "accuracy": 0.9123
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 111,
+         "tp": 45,
+         "fp": 0,
+         "tn": 54,
+         "fn": 12,
+         "accuracy": 0.8919
+        },
+        "0.6": {
+         "n": 111,
+         "tp": 45,
+         "fp": 0,
+         "tn": 54,
+         "fn": 12,
+         "accuracy": 0.8919
+        },
+        "0.7": {
+         "n": 111,
+         "tp": 45,
+         "fp": 0,
+         "tn": 54,
+         "fn": 12,
+         "accuracy": 0.8919
+        },
+        "0.8": {
+         "n": 111,
+         "tp": 45,
+         "fp": 0,
+         "tn": 54,
+         "fn": 12,
+         "accuracy": 0.8919
+        }
+       }
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.35,
+        "observation": "The red-capped pen lies in the white cardboard box near the green gripper, but the view is partly occluded by the robot arm, so I cannot confirm it is standing upright in a slot."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.35,
+        "observation": "A red-and-black pen lies near the box area but the green gripper arm occludes part of the scene, and it is unclear whether the pen is standing upright in a slot inside the box rather than resting on the box's surface."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The red pen lies horizontally-ish inside the white cardboard box next to the green pen and yellow cutter, and the robot arm is partly occluding the area, so it is not clearly standing in a slot."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.3,
+        "observation": "A red-tipped pen appears to be held by the left robot gripper above the open box, and the box contains a blue/silver pen and a yellow ruler, but the red pen is not clearly standing in a slot in the box."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red-capped pen is lying inside the white open box among the other tools, not on the mat outside it."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is visible inside the white tray/box, standing upright near the yellow ruler, not lying on the mat outside the box."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is still inside the white box, lying beside the green pen and yellow cutter, not on the mat outside the box."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.8,
+        "observation": "A red-capped pen is visible inside the open white box near the green gripper, and no red pen is seen lying on the mat outside the box."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.85,
+        "observation": "The red pen is still inside the white box tray, standing beside the green and silver pens, not lying on the mat outside the box."
+       }
+      ]
+     }
+    },
+    "scene2": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": false,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 278,
+       "tp": 99,
+       "fp": 0,
+       "tn": 171,
+       "fn": 8,
+       "accuracy": 0.9712,
+       "precision": 1.0,
+       "recall": 0.9252,
+       "latency_s": {
+        "median": 1.29,
+        "p90": 2.46,
+        "max": 3.99
+       },
+       "usd_per_check": 0.000179
+      },
+      "take": {
+       "n": 225,
+       "tp": 114,
+       "fp": 0,
+       "tn": 107,
+       "fn": 4,
+       "accuracy": 0.9822,
+       "precision": 1.0,
+       "recall": 0.9661,
+       "latency_s": {
+        "median": 1.15,
+        "p90": 1.73,
+        "max": 3.68
+       },
+       "usd_per_check": 0.000156
+      }
+     },
+     "sweep": {
+      "put": {
+       "all": {
+        "0.5": {
+         "n": 278,
+         "tp": 106,
+         "fp": 2,
+         "tn": 169,
+         "fn": 1,
+         "accuracy": 0.9892
+        },
+        "0.6": {
+         "n": 278,
+         "tp": 105,
+         "fp": 2,
+         "tn": 169,
+         "fn": 2,
+         "accuracy": 0.9856
+        },
+        "0.7": {
+         "n": 278,
+         "tp": 99,
+         "fp": 0,
+         "tn": 171,
+         "fn": 8,
+         "accuracy": 0.9712
+        },
+        "0.8": {
+         "n": 278,
+         "tp": 77,
+         "fp": 0,
+         "tn": 171,
+         "fn": 30,
+         "accuracy": 0.8921
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 141,
+         "tp": 53,
+         "fp": 1,
+         "tn": 87,
+         "fn": 0,
+         "accuracy": 0.9929
+        },
+        "0.6": {
+         "n": 141,
+         "tp": 52,
+         "fp": 1,
+         "tn": 87,
+         "fn": 1,
+         "accuracy": 0.9858
+        },
+        "0.7": {
+         "n": 141,
+         "tp": 48,
+         "fp": 0,
+         "tn": 88,
+         "fn": 5,
+         "accuracy": 0.9645
+        },
+        "0.8": {
+         "n": 141,
+         "tp": 38,
+         "fp": 0,
+         "tn": 88,
+         "fn": 15,
+         "accuracy": 0.8936
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 137,
+         "tp": 53,
+         "fp": 1,
+         "tn": 82,
+         "fn": 1,
+         "accuracy": 0.9854
+        },
+        "0.6": {
+         "n": 137,
+         "tp": 53,
+         "fp": 1,
+         "tn": 82,
+         "fn": 1,
+         "accuracy": 0.9854
+        },
+        "0.7": {
+         "n": 137,
+         "tp": 51,
+         "fp": 0,
+         "tn": 83,
+         "fn": 3,
+         "accuracy": 0.9781
+        },
+        "0.8": {
+         "n": 137,
+         "tp": 39,
+         "fp": 0,
+         "tn": 83,
+         "fn": 15,
+         "accuracy": 0.8905
+        }
+       }
+      },
+      "take": {
+       "all": {
+        "0.5": {
+         "n": 225,
+         "tp": 116,
+         "fp": 0,
+         "tn": 107,
+         "fn": 2,
+         "accuracy": 0.9911
+        },
+        "0.6": {
+         "n": 225,
+         "tp": 116,
+         "fp": 0,
+         "tn": 107,
+         "fn": 2,
+         "accuracy": 0.9911
+        },
+        "0.7": {
+         "n": 225,
+         "tp": 114,
+         "fp": 0,
+         "tn": 107,
+         "fn": 4,
+         "accuracy": 0.9822
+        },
+        "0.8": {
+         "n": 225,
+         "tp": 112,
+         "fp": 0,
+         "tn": 107,
+         "fn": 6,
+         "accuracy": 0.9733
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 114,
+         "tp": 60,
+         "fp": 0,
+         "tn": 53,
+         "fn": 1,
+         "accuracy": 0.9912
+        },
+        "0.6": {
+         "n": 114,
+         "tp": 60,
+         "fp": 0,
+         "tn": 53,
+         "fn": 1,
+         "accuracy": 0.9912
+        },
+        "0.7": {
+         "n": 114,
+         "tp": 58,
+         "fp": 0,
+         "tn": 53,
+         "fn": 3,
+         "accuracy": 0.9737
+        },
+        "0.8": {
+         "n": 114,
+         "tp": 56,
+         "fp": 0,
+         "tn": 53,
+         "fn": 5,
+         "accuracy": 0.9561
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        },
+        "0.6": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        },
+        "0.7": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        },
+        "0.8": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        }
+       }
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_015_end",
+        "done": true,
+        "confidence": 0.8,
+        "observation": "The red pen, with its red end and black body, appears standing upright in the white holder inside the box, immediately left of the green marker, with a green robot gripper touching its upper part."
+       },
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.7,
+        "observation": "The red pen appears standing upright in the white holder inside the open box, immediately left of the green marker, with the green robot gripper touching its upper part."
+       },
+       {
+        "id": "put_043_end",
+        "done": true,
+        "confidence": 0.85,
+        "observation": "The red-capped pen stands upright in the white holder inside the open box, immediately left of the green marker, with the yellow knife lying at the front, and the green robot arm is only touching the box area near it."
+       },
+       {
+        "id": "put_061_end",
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The red pen appears to be held by the green gripper with its lower end inside the white box, just left of the green marker, which is where its slot is, though the gripper obscures the exact seating."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is standing upright in the white holder inside the open box, immediately left of the green marker, not lying on the black mat or outside the box, so the condition is not met."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is standing upright in the white holder inside the open box, to the left of the green marker, so it is not lying on the mat outside the box."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is standing upright in the white holder inside the open box, immediately left of the green marker, so it is not lying on the mat outside the box."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.85,
+        "observation": "The red pen appears to be standing in the white holder inside the box, held or partly hidden by the green gripper arm near the marker, not lying on the black mat outside the box, so the condition is not met."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.93,
+        "observation": "The red pen is standing upright in the white holder inside the open box at the right of the green marker, not lying on the black mat outside the box, so the condition is not met."
+       }
+      ]
+     }
+    },
+    "scene2_crop": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": [
+       0.08,
+       0.2,
+       0.92,
+       0.82
+      ],
+      "max_side": 896,
+      "wrist": false,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 278,
+       "tp": 97,
+       "fp": 1,
+       "tn": 170,
+       "fn": 10,
+       "accuracy": 0.9604,
+       "precision": 0.9898,
+       "recall": 0.9065,
+       "latency_s": {
+        "median": 1.71,
+        "p90": 2.68,
+        "max": 4.72
+       },
+       "usd_per_check": 0.000214
+      },
+      "take": {
+       "n": 225,
+       "tp": 114,
+       "fp": 0,
+       "tn": 107,
+       "fn": 4,
+       "accuracy": 0.9822,
+       "precision": 1.0,
+       "recall": 0.9661,
+       "latency_s": {
+        "median": 1.17,
+        "p90": 1.65,
+        "max": 3.83
+       },
+       "usd_per_check": 0.000171
+      }
+     },
+     "sweep": {
+      "put": {
+       "all": {
+        "0.5": {
+         "n": 278,
+         "tp": 104,
+         "fp": 2,
+         "tn": 169,
+         "fn": 3,
+         "accuracy": 0.982
+        },
+        "0.6": {
+         "n": 278,
+         "tp": 104,
+         "fp": 2,
+         "tn": 169,
+         "fn": 3,
+         "accuracy": 0.982
+        },
+        "0.7": {
+         "n": 278,
+         "tp": 97,
+         "fp": 1,
+         "tn": 170,
+         "fn": 10,
+         "accuracy": 0.9604
+        },
+        "0.8": {
+         "n": 278,
+         "tp": 66,
+         "fp": 0,
+         "tn": 171,
+         "fn": 41,
+         "accuracy": 0.8525
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 141,
+         "tp": 52,
+         "fp": 1,
+         "tn": 87,
+         "fn": 1,
+         "accuracy": 0.9858
+        },
+        "0.6": {
+         "n": 141,
+         "tp": 52,
+         "fp": 1,
+         "tn": 87,
+         "fn": 1,
+         "accuracy": 0.9858
+        },
+        "0.7": {
+         "n": 141,
+         "tp": 49,
+         "fp": 1,
+         "tn": 87,
+         "fn": 4,
+         "accuracy": 0.9645
+        },
+        "0.8": {
+         "n": 141,
+         "tp": 36,
+         "fp": 0,
+         "tn": 88,
+         "fn": 17,
+         "accuracy": 0.8794
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 137,
+         "tp": 52,
+         "fp": 1,
+         "tn": 82,
+         "fn": 2,
+         "accuracy": 0.9781
+        },
+        "0.6": {
+         "n": 137,
+         "tp": 52,
+         "fp": 1,
+         "tn": 82,
+         "fn": 2,
+         "accuracy": 0.9781
+        },
+        "0.7": {
+         "n": 137,
+         "tp": 48,
+         "fp": 0,
+         "tn": 83,
+         "fn": 6,
+         "accuracy": 0.9562
+        },
+        "0.8": {
+         "n": 137,
+         "tp": 30,
+         "fp": 0,
+         "tn": 83,
+         "fn": 24,
+         "accuracy": 0.8248
+        }
+       }
+      },
+      "take": {
+       "all": {
+        "0.5": {
+         "n": 225,
+         "tp": 115,
+         "fp": 0,
+         "tn": 107,
+         "fn": 3,
+         "accuracy": 0.9867
+        },
+        "0.6": {
+         "n": 225,
+         "tp": 115,
+         "fp": 0,
+         "tn": 107,
+         "fn": 3,
+         "accuracy": 0.9867
+        },
+        "0.7": {
+         "n": 225,
+         "tp": 114,
+         "fp": 0,
+         "tn": 107,
+         "fn": 4,
+         "accuracy": 0.9822
+        },
+        "0.8": {
+         "n": 225,
+         "tp": 113,
+         "fp": 0,
+         "tn": 107,
+         "fn": 5,
+         "accuracy": 0.9778
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 114,
+         "tp": 60,
+         "fp": 0,
+         "tn": 53,
+         "fn": 1,
+         "accuracy": 0.9912
+        },
+        "0.6": {
+         "n": 114,
+         "tp": 60,
+         "fp": 0,
+         "tn": 53,
+         "fn": 1,
+         "accuracy": 0.9912
+        },
+        "0.7": {
+         "n": 114,
+         "tp": 59,
+         "fp": 0,
+         "tn": 53,
+         "fn": 2,
+         "accuracy": 0.9825
+        },
+        "0.8": {
+         "n": 114,
+         "tp": 58,
+         "fp": 0,
+         "tn": 53,
+         "fn": 3,
+         "accuracy": 0.9737
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 111,
+         "tp": 55,
+         "fp": 0,
+         "tn": 54,
+         "fn": 2,
+         "accuracy": 0.982
+        },
+        "0.6": {
+         "n": 111,
+         "tp": 55,
+         "fp": 0,
+         "tn": 54,
+         "fn": 2,
+         "accuracy": 0.982
+        },
+        "0.7": {
+         "n": 111,
+         "tp": 55,
+         "fp": 0,
+         "tn": 54,
+         "fn": 2,
+         "accuracy": 0.982
+        },
+        "0.8": {
+         "n": 111,
+         "tp": 55,
+         "fp": 0,
+         "tn": 54,
+         "fn": 2,
+         "accuracy": 0.982
+        }
+       }
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_015_end",
+        "done": true,
+        "confidence": 0.72,
+        "observation": "The red pen stands upright inside the cardboard box with its red end at the bottom, immediately left of the green marker, with the green gripper holding its upper part."
+       },
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.7,
+        "observation": "The red pen stands upright inside the open white box, with its red-ended lower part sitting in the white holder immediately left of the green marker, and the green gripper arm is above it without lifting it out."
+       },
+       {
+        "id": "put_043_end",
+        "done": true,
+        "confidence": 0.85,
+        "observation": "The red pen stands upright inside the open white cardboard box in the white holder immediately left of the green marker, with its lower end seated in the holder next to the marker, and a green gripper arm is near the top of the box."
+       },
+       {
+        "id": "put_061_end",
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The red pen stands upright inside the cardboard box, with its red lower end sitting in the white holder immediately left of the green marker, while the green gripper holds its upper part."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen (red cap and red end with black body) is standing inside the open white box, held by the green gripper in the white holder area immediately left of the green marker, so it is not lying on the black mat outside the box."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.93,
+        "observation": "The red pen (red cap and red end with black body) is standing upright inside the open white box, in the holder left of the green marker, so it is not lying on the mat outside the box."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is standing upright inside the open white cardboard box, in the white holder immediately left of the green marker and above the yellow utility knife, so it is not on the mat outside the box."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.85,
+        "observation": "The red pen is standing upright inside the open white box in its holder, just left of the green marker, not lying on the black mat or table outside the box, so the condition is not met."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is standing upright inside the open white box, in the slot immediately left of the green marker, so it is not lying on the black mat outside the box."
+       }
+      ]
+     }
+    },
+    "scene2_wrist": {
+     "variant": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "thinking": "adaptive",
+      "crop": null,
+      "max_side": 640,
+      "wrist": true,
+      "hints": true
+     },
+     "checks": {
+      "put": {
+       "n": 278,
+       "tp": 99,
+       "fp": 1,
+       "tn": 170,
+       "fn": 8,
+       "accuracy": 0.9676,
+       "precision": 0.99,
+       "recall": 0.9252,
+       "latency_s": {
+        "median": 1.23,
+        "p90": 1.65,
+        "max": 2.97
+       },
+       "usd_per_check": 0.000198
+      },
+      "take": {
+       "n": 225,
+       "tp": 115,
+       "fp": 0,
+       "tn": 107,
+       "fn": 3,
+       "accuracy": 0.9867,
+       "precision": 1.0,
+       "recall": 0.9746,
+       "latency_s": {
+        "median": 1.15,
+        "p90": 1.65,
+        "max": 3.91
+       },
+       "usd_per_check": 0.000199
+      }
+     },
+     "sweep": {
+      "put": {
+       "all": {
+        "0.5": {
+         "n": 278,
+         "tp": 100,
+         "fp": 1,
+         "tn": 170,
+         "fn": 7,
+         "accuracy": 0.9712
+        },
+        "0.6": {
+         "n": 278,
+         "tp": 100,
+         "fp": 1,
+         "tn": 170,
+         "fn": 7,
+         "accuracy": 0.9712
+        },
+        "0.7": {
+         "n": 278,
+         "tp": 99,
+         "fp": 1,
+         "tn": 170,
+         "fn": 8,
+         "accuracy": 0.9676
+        },
+        "0.8": {
+         "n": 278,
+         "tp": 98,
+         "fp": 1,
+         "tn": 170,
+         "fn": 9,
+         "accuracy": 0.964
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 141,
+         "tp": 51,
+         "fp": 0,
+         "tn": 88,
+         "fn": 2,
+         "accuracy": 0.9858
+        },
+        "0.6": {
+         "n": 141,
+         "tp": 51,
+         "fp": 0,
+         "tn": 88,
+         "fn": 2,
+         "accuracy": 0.9858
+        },
+        "0.7": {
+         "n": 141,
+         "tp": 50,
+         "fp": 0,
+         "tn": 88,
+         "fn": 3,
+         "accuracy": 0.9787
+        },
+        "0.8": {
+         "n": 141,
+         "tp": 49,
+         "fp": 0,
+         "tn": 88,
+         "fn": 4,
+         "accuracy": 0.9716
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 137,
+         "tp": 49,
+         "fp": 1,
+         "tn": 82,
+         "fn": 5,
+         "accuracy": 0.9562
+        },
+        "0.6": {
+         "n": 137,
+         "tp": 49,
+         "fp": 1,
+         "tn": 82,
+         "fn": 5,
+         "accuracy": 0.9562
+        },
+        "0.7": {
+         "n": 137,
+         "tp": 49,
+         "fp": 1,
+         "tn": 82,
+         "fn": 5,
+         "accuracy": 0.9562
+        },
+        "0.8": {
+         "n": 137,
+         "tp": 49,
+         "fp": 1,
+         "tn": 82,
+         "fn": 5,
+         "accuracy": 0.9562
+        }
+       }
+      },
+      "take": {
+       "all": {
+        "0.5": {
+         "n": 225,
+         "tp": 116,
+         "fp": 0,
+         "tn": 107,
+         "fn": 2,
+         "accuracy": 0.9911
+        },
+        "0.6": {
+         "n": 225,
+         "tp": 116,
+         "fp": 0,
+         "tn": 107,
+         "fn": 2,
+         "accuracy": 0.9911
+        },
+        "0.7": {
+         "n": 225,
+         "tp": 115,
+         "fp": 0,
+         "tn": 107,
+         "fn": 3,
+         "accuracy": 0.9867
+        },
+        "0.8": {
+         "n": 225,
+         "tp": 111,
+         "fp": 0,
+         "tn": 107,
+         "fn": 7,
+         "accuracy": 0.9689
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 114,
+         "tp": 60,
+         "fp": 0,
+         "tn": 53,
+         "fn": 1,
+         "accuracy": 0.9912
+        },
+        "0.6": {
+         "n": 114,
+         "tp": 60,
+         "fp": 0,
+         "tn": 53,
+         "fn": 1,
+         "accuracy": 0.9912
+        },
+        "0.7": {
+         "n": 114,
+         "tp": 59,
+         "fp": 0,
+         "tn": 53,
+         "fn": 2,
+         "accuracy": 0.9825
+        },
+        "0.8": {
+         "n": 114,
+         "tp": 55,
+         "fp": 0,
+         "tn": 53,
+         "fn": 6,
+         "accuracy": 0.9474
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        },
+        "0.6": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        },
+        "0.7": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        },
+        "0.8": {
+         "n": 111,
+         "tp": 56,
+         "fp": 0,
+         "tn": 54,
+         "fn": 1,
+         "accuracy": 0.991
+        }
+       }
+      }
+     },
+     "edge": {
+      "put": [
+       {
+        "id": "put_015_end",
+        "done": true,
+        "confidence": 0.85,
+        "observation": "The red pen stands upright in the white holder inside the open box, immediately left of the green marker, with the gripper touching its upper body."
+       },
+       {
+        "id": "put_016_end",
+        "done": true,
+        "confidence": 0.8,
+        "observation": "The red pen stands upright inside the white holder in the cardboard box, immediately left of the green marker, with the gripper touching its upper body."
+       },
+       {
+        "id": "put_043_end",
+        "done": true,
+        "confidence": 0.9,
+        "observation": "The red pen stands upright inside the white holder in the open cardboard box, immediately left of the green marker, with the gripper touching it."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.55,
+        "observation": "The red pen is held in the green gripper above the box, its tip in the white box area near the green marker, but it is not clearly seated in the white holder left of the green marker, so the condition is not confirmed."
+       }
+      ],
+      "take": [
+       {
+        "id": "put_015_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is still inside the open white box, standing in its white holder left of the green marker, not lying on the black mat or table outside the box."
+       },
+       {
+        "id": "put_016_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is still inside the open white cardboard box, standing in its white holder immediately left of the green marker, and the gripper is positioned at it rather than having moved it onto the black mat."
+       },
+       {
+        "id": "put_043_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is standing upright in the white holder inside the open box, immediately left of the green marker, so it is not on the mat outside the box."
+       },
+       {
+        "id": "put_061_end",
+        "done": false,
+        "confidence": 0.9,
+        "observation": "The red pen is held by the green gripper inside the open white cardboard box, right next to the green marker, not lying on the black mat or table outside the box, so the condition is not met."
+       },
+       {
+        "id": "put_100_end",
+        "done": false,
+        "confidence": 0.95,
+        "observation": "The red pen is still inside the open white cardboard box, standing upright in its slot to the right of the green marker, not on the black mat or table outside the box."
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}
