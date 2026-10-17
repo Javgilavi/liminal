@@ -3,8 +3,10 @@
     python ws4/ttt/train_progress.py --data ws4/.cache/ttt/sim --features frame \\
         --memories none lastk gru ttt --out ws4/ttt/results/progress_sim_frame.json --save-dir ws4/.cache/ttt/models
 
-Splits episodes 80/20 by a hash of their name (stable across runs), trains each memory type with the same
-network, budget and seed, and reports on the held-out episodes:
+``--data`` takes one or more directories of episode directories (e.g. the run-to-end ``sim`` set plus the
+check-ended sets written by ``flux_sim_closed_loop.py --stand-in-stops-on-check``); they are pooled. Splits
+episodes 80/20 by a hash of their name (stable across runs), trains each memory type with the same network,
+budget and seed, and reports on the held-out episodes:
 
 * ``stage_acc``: the plan step the model puts first, using the known plan (``features.stage_posterior``);
 * ``stage_acc_repeat``: the same on re-plans whose skill already ran earlier in the episode (aliased stages);
@@ -44,13 +46,16 @@ def is_test(name: str, frac: float = 0.2) -> bool:
 
 
 def load_sequences(
-    data: Path, source: str, skills: list[str] | None = None, flux_subset: bool = False, flux_parts=None
+    data: Path | list[Path], source: str, skills: list[str] | None = None, flux_subset: bool = False, flux_parts=None
 ) -> tuple[list[Sequence], list[str]]:
-    dirs = sorted(p.parent for p in data.glob("*/episode.json") if (p.parent / "frames.npz").exists())
+    roots = [data] if isinstance(data, Path) else list(data)
+    dirs = sorted(
+        {p.parent for root in roots for p in root.glob("*/episode.json") if (p.parent / "frames.npz").exists()}
+    )
     if source != "frame" or flux_subset:
         dirs = [d for d in dirs if (d / "features_flux.npz").exists()]
     if not dirs:
-        raise FileNotFoundError(f"no episodes with {source} features under {data}")
+        raise FileNotFoundError(f"no episodes with {source} features under {[str(r) for r in roots]}")
     if skills is None:
         found = set()
         for d in dirs:
@@ -213,7 +218,9 @@ def main(argv: list[str] | None = None) -> dict:
 
     throttle()  # shares the laptop with 30 Hz robot loops
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--data", type=Path, default=Path(__file__).resolve().parents[1] / ".cache" / "ttt" / "sim")
+    ap.add_argument(
+        "--data", type=Path, nargs="+", default=[Path(__file__).resolve().parents[1] / ".cache" / "ttt" / "sim"]
+    )
     ap.add_argument("--features", default="frame", choices=["frame", "flux", "flux+frame"])
     ap.add_argument("--flux-subset", action="store_true", help="only episodes that have FLUX features (any source)")
     ap.add_argument("--flux-parts", nargs="+", default=None, help='FLUX taps to keep, e.g. "27:imagined"')
@@ -238,6 +245,7 @@ def main(argv: list[str] | None = None) -> dict:
         flush=True,
     )
     results = {
+        "data": [str(d) for d in args.data],
         "features": args.features,
         "skills": skills,
         "n_train": len(train),

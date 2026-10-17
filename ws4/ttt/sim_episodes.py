@@ -1,6 +1,6 @@
 """Labelled multi-stage sim episodes for the P2 progress memory.
 
-Runs plans of the demo task's skills (``ws4/orchestrator/skills.yaml``: put_apple_in_box, put_block_in_box,
+Runs plans of the demo task's skills (``ws4/orchestrator/skills_sim_pack_box.yaml``: put_apple_in_box, put_block_in_box,
 open_lid, close_lid) in the orchestrator's pack-box scene with its scripted stand-ins for FLUX
 (``ws4/orchestrator/sim_backend.py``: ``PackBoxSim``, ``ScriptedSimBackend``), all used read-only. The executor
 here is deliberately minimal and sequential: one step at a time, one chunk of 42 commands per re-plan of which 32
@@ -87,9 +87,12 @@ def _import_orchestrator():
     from flux.backends import PolicyRequest
     from flux.contract import arm_slice
     from orchestrator.sim_backend import PackBoxSim, ScriptedSimBackend, SimSkillError
-    from orchestrator.skills import load_vocabulary
+    from orchestrator.skills import SIM_VOCABULARY, load_vocabulary
 
-    return PolicyRequest, arm_slice, PackBoxSim, ScriptedSimBackend, SimSkillError, load_vocabulary
+    def load_sim_vocabulary():  # the pack-box skills (skills.yaml holds the real robot's demo task)
+        return load_vocabulary(SIM_VOCABULARY)
+
+    return PolicyRequest, arm_slice, PackBoxSim, ScriptedSimBackend, SimSkillError, load_sim_vocabulary
 
 
 def generate_episode(task: str, seed: int, out_dir: Path, max_chunks: int = 14, max_attempts: int = 2) -> dict:

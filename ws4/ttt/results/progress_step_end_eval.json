@@ -1,0 +1,1756 @@
+{
+ "held_out_only": true,
+ "sets": {
+  "run_to_end_sim": {
+   "pattern": ".cache/ttt/sim",
+   "episodes": 43
+  },
+  "run_to_end_loop": {
+   "pattern": ".cache/ttt/sim_stepend/runend/*",
+   "episodes": 16
+  },
+  "check_ended": {
+   "pattern": ".cache/ttt/sim_stepend/check/*",
+   "episodes": 49
+  }
+ },
+ "models": {
+  "progress_frame_gru_s0.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.9951816160118606,
+     "stage_acc_repeat": 0.9985119047619048,
+     "occurrence_acc": 0.9992587101556709,
+     "skill_acc": 0.992216456634544,
+     "progress_mae": 0.0033803325900994986,
+     "stage_progress_mae": 0.01406510679301093,
+     "done_auroc": 0.9988857465763237,
+     "done_f1": 0.9869565217391304
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.003097655379557788,
+     "stage_progress_mae": 0.012390621518231152,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 0.9984567901234568,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9922839506172839,
+     "progress_mae": 0.0021767757801225357,
+     "stage_progress_mae": 0.01166129987849758,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 0.9965277777777778,
+     "stage_acc_repeat": 0.9953703703703703,
+     "occurrence_acc": 0.9965277777777778,
+     "skill_acc": 0.9930555555555556,
+     "progress_mae": 0.0026201004040760593,
+     "stage_progress_mae": 0.014249188776442743,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9920948616600791,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9920948616600791,
+     "progress_mae": 0.008121126674848314,
+     "stage_progress_mae": 0.03038743065627967,
+     "done_auroc": 0.9792060491493384,
+     "done_f1": 0.875
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.9904420549581839,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9904420549581839,
+     "progress_mae": 0.003531976195142676,
+     "stage_progress_mae": 0.011633912129040042,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9921875,
+     "stage_acc_repeat": 0.9924242424242424,
+     "occurrence_acc": 0.99609375,
+     "skill_acc": 0.9921875,
+     "progress_mae": 0.0058023655535490845,
+     "stage_progress_mae": 0.01884980383485127,
+     "done_auroc": 0.9971509971509972,
+     "done_f1": 0.9774436090225563
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9861111111111112,
+     "progress_mae": 0.005136157774088829,
+     "stage_progress_mae": 0.010272315548177657,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.0035323615263089594,
+     "stage_progress_mae": 0.014129446105235838,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 0.9791666666666666,
+     "stage_acc_repeat": 0.9722222222222222,
+     "occurrence_acc": 0.9791666666666666,
+     "skill_acc": 1.0,
+     "progress_mae": 0.012476775833798673,
+     "stage_progress_mae": 0.018719294034139623,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.007033583950529562,
+     "stage_progress_mae": 0.021100751851588682,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.985663082437276,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.996415770609319,
+     "skill_acc": 0.985663082437276,
+     "progress_mae": 0.004670599149379908,
+     "stage_progress_mae": 0.02331591310881491,
+     "done_auroc": 0.9934640522875817,
+     "done_f1": 0.9387755102040817
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.30694864048338366,
+     "stage_acc_repeat": 0.018944519621109608,
+     "occurrence_acc": 0.5534743202416919,
+     "skill_acc": 0.43746223564954684,
+     "progress_mae": 0.24407472968381477,
+     "stage_progress_mae": 0.29779308528260806,
+     "done_auroc": 0.6989482290168308,
+     "done_f1": 0.058091286307053944
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 0.5384615384615384,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.5384615384615384,
+     "progress_mae": 0.2169774131881973,
+     "stage_progress_mae": 0.23324355403611244,
+     "done_auroc": 0.6540909090909091,
+     "done_f1": 0.0
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 0.2916666666666667,
+     "stage_acc_repeat": 0.0,
+     "occurrence_acc": 0.5416666666666666,
+     "skill_acc": 0.4772727272727273,
+     "progress_mae": 0.3113861090247281,
+     "stage_progress_mae": 0.27926143080453386,
+     "done_auroc": 0.6601239669421488,
+     "done_f1": 0.0
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 0.2,
+     "stage_acc_repeat": 0.0,
+     "occurrence_acc": 0.37142857142857144,
+     "skill_acc": 0.4785714285714286,
+     "progress_mae": 0.36064405751913153,
+     "stage_progress_mae": 0.31253483270998467,
+     "done_auroc": 0.7658045977011494,
+     "done_f1": 0.0
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 0.15217391304347827,
+     "stage_acc_repeat": 0.0,
+     "occurrence_acc": 0.2826086956521739,
+     "skill_acc": 0.42391304347826086,
+     "progress_mae": 0.38708730739913577,
+     "stage_progress_mae": 0.31349346628832614,
+     "done_auroc": 0.7425986842105263,
+     "done_f1": 0.0
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.37462235649546827,
+     "stage_acc_repeat": 0.175,
+     "occurrence_acc": 0.7583081570996979,
+     "skill_acc": 0.37462235649546827,
+     "progress_mae": 0.3007508389123684,
+     "stage_progress_mae": 0.35035032720630543,
+     "done_auroc": 0.6896907216494845,
+     "done_f1": 0.0
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.2793696275071633,
+     "stage_acc_repeat": 0.0,
+     "occurrence_acc": 0.4498567335243553,
+     "skill_acc": 0.4269340974212034,
+     "progress_mae": 0.15455580675691516,
+     "stage_progress_mae": 0.2868748461352633,
+     "done_auroc": 0.7240964789824724,
+     "done_f1": 0.14432989690721648
+    }
+   }
+  },
+  "progress_frame_ttt_s0.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.9773906597479615,
+     "stage_acc_repeat": 0.9665178571428571,
+     "occurrence_acc": 0.9788732394366197,
+     "skill_acc": 0.9896219421793921,
+     "progress_mae": 0.010333633058355303,
+     "stage_progress_mae": 0.025977362904506734,
+     "done_auroc": 0.9969154635382675,
+     "done_f1": 0.982532751091703
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.005299091429151304,
+     "stage_progress_mae": 0.021196365716605214,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 0.9861111111111112,
+     "stage_acc_repeat": 0.9791666666666666,
+     "occurrence_acc": 0.970679012345679,
+     "skill_acc": 0.9891975308641975,
+     "progress_mae": 0.008312234284377953,
+     "stage_progress_mae": 0.02228678382622699,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 0.9375,
+     "stage_acc_repeat": 0.9166666666666666,
+     "occurrence_acc": 0.9375,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.01869923295995519,
+     "stage_progress_mae": 0.025594173965348292,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9881422924901185,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9881422924901185,
+     "progress_mae": 0.014503267272643797,
+     "stage_progress_mae": 0.04702366010509793,
+     "done_auroc": 0.9667296786389414,
+     "done_f1": 0.8444444444444444
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.984468339307049,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.997610513739546,
+     "skill_acc": 0.984468339307049,
+     "progress_mae": 0.007191013454550208,
+     "stage_progress_mae": 0.024930053227189115,
+     "done_auroc": 1.0,
+     "done_f1": 0.993103448275862
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9674479166666666,
+     "stage_acc_repeat": 0.9204545454545454,
+     "occurrence_acc": 0.9713541666666666,
+     "skill_acc": 0.9921875,
+     "progress_mae": 0.014317652511141274,
+     "stage_progress_mae": 0.031163206019983448,
+     "done_auroc": 0.9951869118535785,
+     "done_f1": 0.9624060150375939
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9861111111111112,
+     "progress_mae": 0.009650603718033982,
+     "stage_progress_mae": 0.01930120743606796,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.0056807283666148135,
+     "stage_progress_mae": 0.022722913466459247,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 0.78125,
+     "stage_acc_repeat": 0.7083333333333334,
+     "occurrence_acc": 0.78125,
+     "skill_acc": 1.0,
+     "progress_mae": 0.05721311431427297,
+     "stage_progress_mae": 0.02553137114088133,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.014728529018932558,
+     "stage_progress_mae": 0.04418558705679767,
+     "done_auroc": 0.9985754985754985,
+     "done_f1": 0.9166666666666666
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.985663082437276,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.996415770609319,
+     "skill_acc": 0.985663082437276,
+     "progress_mae": 0.006516037981560936,
+     "stage_progress_mae": 0.035949475062862765,
+     "done_auroc": 0.9882352941176471,
+     "done_f1": 0.9387755102040817
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.3661631419939577,
+     "stage_acc_repeat": 0.05142083897158322,
+     "occurrence_acc": 0.5722054380664653,
+     "skill_acc": 0.47492447129909365,
+     "progress_mae": 0.22064900451836883,
+     "stage_progress_mae": 0.2642951737938431,
+     "done_auroc": 0.5905346758627472,
+     "done_f1": 0.034334763948497854
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 0.5384615384615384,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.5384615384615384,
+     "progress_mae": 0.23113116119203486,
+     "stage_progress_mae": 0.2514582537776633,
+     "done_auroc": 0.5963636363636363,
+     "done_f1": 0.0
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 0.2916666666666667,
+     "stage_acc_repeat": 0.0,
+     "occurrence_acc": 0.5568181818181818,
+     "skill_acc": 0.4734848484848485,
+     "progress_mae": 0.3054994662422392,
+     "stage_progress_mae": 0.2879799681585479,
+     "done_auroc": 0.5010330578512396,
+     "done_f1": 0.0
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 0.2,
+     "stage_acc_repeat": 0.0,
+     "occurrence_acc": 0.37142857142857144,
+     "skill_acc": 0.4642857142857143,
+     "progress_mae": 0.33339771625130904,
+     "stage_progress_mae": 0.31687981431284434,
+     "done_auroc": 0.4504310344827586,
+     "done_f1": 0.0
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 0.15217391304347827,
+     "stage_acc_repeat": 0.0,
+     "occurrence_acc": 0.29347826086956524,
+     "skill_acc": 0.41304347826086957,
+     "progress_mae": 0.3010922373246938,
+     "stage_progress_mae": 0.3392707708624302,
+     "done_auroc": 0.4761513157894737,
+     "done_f1": 0.0
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.5347432024169184,
+     "stage_acc_repeat": 0.1125,
+     "occurrence_acc": 0.7583081570996979,
+     "skill_acc": 0.5287009063444109,
+     "progress_mae": 0.2364111242185044,
+     "stage_progress_mae": 0.22433807088640842,
+     "done_auroc": 0.5457903780068728,
+     "done_f1": 0.0
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.3438395415472779,
+     "stage_acc_repeat": 0.07552083333333333,
+     "occurrence_acc": 0.4871060171919771,
+     "skill_acc": 0.4484240687679083,
+     "progress_mae": 0.14591252752092357,
+     "stage_progress_mae": 0.25624676455202655,
+     "done_auroc": 0.6753528773072747,
+     "done_f1": 0.0898876404494382
+    }
+   }
+  },
+  "progress_frame_stepmix_gru_s0.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.9944403261675315,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9996293550778355,
+     "skill_acc": 0.9903632320237212,
+     "progress_mae": 0.006049101674651124,
+     "stage_progress_mae": 0.0273092718993196,
+     "done_auroc": 0.9993615151016711,
+     "done_f1": 0.9517819706498952
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.006283056879813857,
+     "stage_progress_mae": 0.025132227519255437,
+     "done_auroc": 1.0,
+     "done_f1": 0.9552238805970149
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9922839506172839,
+     "progress_mae": 0.0033609359217737387,
+     "stage_progress_mae": 0.020165615530642427,
+     "done_auroc": 1.0,
+     "done_f1": 0.9818181818181818
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9930555555555556,
+     "progress_mae": 0.002616144943944904,
+     "stage_progress_mae": 0.02092915955155924,
+     "done_auroc": 1.0,
+     "done_f1": 0.9795918367346939
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9762845849802372,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9762845849802372,
+     "progress_mae": 0.02027335477345239,
+     "stage_progress_mae": 0.06594469747564646,
+     "done_auroc": 0.9882797731568999,
+     "done_f1": 0.84
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.989247311827957,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.998805256869773,
+     "skill_acc": 0.989247311827957,
+     "progress_mae": 0.006085827662670383,
+     "stage_progress_mae": 0.02655091635612572,
+     "done_auroc": 0.9999455337690631,
+     "done_f1": 0.9473684210526315
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9908854166666666,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9986979166666666,
+     "skill_acc": 0.98828125,
+     "progress_mae": 0.011005992731766402,
+     "stage_progress_mae": 0.03931392396321467,
+     "done_auroc": 0.9990934990934991,
+     "done_f1": 0.9361702127659575
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9861111111111112,
+     "progress_mae": 0.01981036641283851,
+     "stage_progress_mae": 0.03962073282567702,
+     "done_auroc": 1.0,
+     "done_f1": 0.9230769230769231
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.007892667555702225,
+     "stage_progress_mae": 0.0315706702228089,
+     "done_auroc": 1.0,
+     "done_f1": 0.9142857142857143
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.004165754464517046,
+     "stage_progress_mae": 0.033326035716136376,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 0.9844961240310077,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9844961240310077,
+     "progress_mae": 0.021148303963058036,
+     "stage_progress_mae": 0.061671451873878846,
+     "done_auroc": 0.9907407407407407,
+     "done_f1": 0.8888888888888888
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.982078853046595,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.996415770609319,
+     "skill_acc": 0.982078853046595,
+     "progress_mae": 0.008540574285839686,
+     "stage_progress_mae": 0.0362864352582127,
+     "done_auroc": 1.0,
+     "done_f1": 0.9795918367346939
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.9806646525679759,
+     "stage_acc_repeat": 0.9837618403247632,
+     "occurrence_acc": 0.9939577039274925,
+     "skill_acc": 0.9746223564954682,
+     "progress_mae": 0.014727922546989724,
+     "stage_progress_mae": 0.05032655788392921,
+     "done_auroc": 0.9966836326977219,
+     "done_f1": 0.9043062200956937
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9615384615384616,
+     "progress_mae": 0.029059131865015516,
+     "stage_progress_mae": 0.058118263730031025,
+     "done_auroc": 1.0,
+     "done_f1": 0.9473684210526315
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 0.9962121212121212,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9772727272727273,
+     "progress_mae": 0.011715913759614026,
+     "stage_progress_mae": 0.044104994148519865,
+     "done_auroc": 1.0,
+     "done_f1": 0.9
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9857142857142858,
+     "progress_mae": 0.005296337787318993,
+     "stage_progress_mae": 0.031778026723913964,
+     "done_auroc": 1.0,
+     "done_f1": 0.9565217391304348
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.004092528567695136,
+     "stage_progress_mae": 0.03274022854156107,
+     "done_auroc": 1.0,
+     "done_f1": 0.967741935483871
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.9788519637462235,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9788519637462235,
+     "progress_mae": 0.02054287510862427,
+     "stage_progress_mae": 0.0585255965989663,
+     "done_auroc": 0.9984536082474227,
+     "done_f1": 0.8918918918918919
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.9656160458452722,
+     "stage_acc_repeat": 0.96875,
+     "occurrence_acc": 0.9856733524355301,
+     "skill_acc": 0.9684813753581661,
+     "progress_mae": 0.013733999800674255,
+     "stage_progress_mae": 0.05337874400624665,
+     "done_auroc": 0.991313789359392,
+     "done_f1": 0.87248322147651
+    }
+   }
+  },
+  "progress_frame_stepmix_gru_s1.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.9951816160118606,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9907338769458859,
+     "progress_mae": 0.005849358470653418,
+     "stage_progress_mae": 0.026705701892144166,
+     "done_auroc": 0.9991351271044798,
+     "done_f1": 0.9559748427672956
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.006300609080628618,
+     "stage_progress_mae": 0.025202436322514482,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9891975308641975,
+     "progress_mae": 0.0034439025578678027,
+     "stage_progress_mae": 0.020663415347206802,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.0027927638026354817,
+     "stage_progress_mae": 0.022342110421083847,
+     "done_auroc": 1.0,
+     "done_f1": 0.9696969696969697
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9841897233201581,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9841897233201581,
+     "progress_mae": 0.017664469581653783,
+     "stage_progress_mae": 0.05849342877590749,
+     "done_auroc": 0.9892249527410208,
+     "done_f1": 0.88
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.989247311827957,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.989247311827957,
+     "progress_mae": 0.0060367307704740185,
+     "stage_progress_mae": 0.025467696450801075,
+     "done_auroc": 0.9999636891793755,
+     "done_f1": 0.9473684210526315
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9934895833333334,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9908854166666666,
+     "progress_mae": 0.010285130323428648,
+     "stage_progress_mae": 0.03808087324263004,
+     "done_auroc": 0.9995467495467496,
+     "done_f1": 0.9295774647887324
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9861111111111112,
+     "progress_mae": 0.018661586151770083,
+     "stage_progress_mae": 0.03732317230354016,
+     "done_auroc": 1.0,
+     "done_f1": 0.9230769230769231
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.008267161946960972,
+     "stage_progress_mae": 0.03306864778784389,
+     "done_auroc": 1.0,
+     "done_f1": 0.9142857142857143
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.004002852206257617,
+     "stage_progress_mae": 0.03202281765006096,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 0.9844961240310077,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9844961240310077,
+     "progress_mae": 0.019396566401071437,
+     "stage_progress_mae": 0.05926939449729678,
+     "done_auroc": 0.9943019943019943,
+     "done_f1": 0.8888888888888888
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.989247311827957,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.989247311827957,
+     "progress_mae": 0.007461003276381013,
+     "stage_progress_mae": 0.03401333148624307,
+     "done_auroc": 1.0,
+     "done_f1": 0.96
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.9836858006042296,
+     "stage_acc_repeat": 0.9837618403247632,
+     "occurrence_acc": 0.9939577039274925,
+     "skill_acc": 0.9770392749244713,
+     "progress_mae": 0.013200075741101472,
+     "stage_progress_mae": 0.04817347485566704,
+     "done_auroc": 0.996932590762119,
+     "done_f1": 0.9090909090909091
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9692307692307692,
+     "progress_mae": 0.03235067909351876,
+     "stage_progress_mae": 0.0647013581870375,
+     "done_auroc": 1.0,
+     "done_f1": 0.8571428571428571
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9810606060606061,
+     "progress_mae": 0.009808389759463201,
+     "stage_progress_mae": 0.0392335590378528,
+     "done_auroc": 1.0,
+     "done_f1": 0.926829268292683
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9857142857142858,
+     "progress_mae": 0.005674490736671965,
+     "stage_progress_mae": 0.03404694442003177,
+     "done_auroc": 1.0,
+     "done_f1": 0.9787234042553191
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.004724797406266327,
+     "stage_progress_mae": 0.037798379250130604,
+     "done_auroc": 1.0,
+     "done_f1": 0.9333333333333333
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.9848942598187311,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9848942598187311,
+     "progress_mae": 0.01674100005076786,
+     "stage_progress_mae": 0.05153580667936353,
+     "done_auroc": 0.9992268041237113,
+     "done_f1": 0.9333333333333333
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.9684813753581661,
+     "stage_acc_repeat": 0.96875,
+     "occurrence_acc": 0.9856733524355301,
+     "skill_acc": 0.9684813753581661,
+     "progress_mae": 0.011863525919129614,
+     "stage_progress_mae": 0.0510829364113684,
+     "done_auroc": 0.991585233441911,
+     "done_f1": 0.87248322147651
+    }
+   }
+  },
+  "progress_frame_stepmix_gru_s2.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.9948109710896961,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9996293550778355,
+     "skill_acc": 0.9911045218680504,
+     "progress_mae": 0.006096758087445999,
+     "stage_progress_mae": 0.027497529756968137,
+     "done_auroc": 0.9992996121336892,
+     "done_f1": 0.9497907949790795
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.006843746450815362,
+     "stage_progress_mae": 0.02737498580326145,
+     "done_auroc": 1.0,
+     "done_f1": 0.9696969696969697
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9938271604938271,
+     "progress_mae": 0.003192475523664877,
+     "stage_progress_mae": 0.019154853141989267,
+     "done_auroc": 1.0,
+     "done_f1": 0.9818181818181818
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9930555555555556,
+     "progress_mae": 0.0026721928882546256,
+     "stage_progress_mae": 0.02137754310603702,
+     "done_auroc": 1.0,
+     "done_f1": 0.9795918367346939
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9802371541501976,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9802371541501976,
+     "progress_mae": 0.02043224998224063,
+     "stage_progress_mae": 0.0663187413717688,
+     "done_auroc": 0.9886578449905482,
+     "done_f1": 0.8235294117647058
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.989247311827957,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.998805256869773,
+     "skill_acc": 0.989247311827957,
+     "progress_mae": 0.006026031295507552,
+     "stage_progress_mae": 0.02648971266870223,
+     "done_auroc": 0.9999818445896878,
+     "done_f1": 0.9411764705882353
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9895833333333334,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9986979166666666,
+     "skill_acc": 0.9856770833333334,
+     "progress_mae": 0.010494618832439365,
+     "stage_progress_mae": 0.03690098364426172,
+     "done_auroc": 0.9991366658033325,
+     "done_f1": 0.9064748201438849
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9861111111111112,
+     "progress_mae": 0.02121406376708664,
+     "stage_progress_mae": 0.04242812753417327,
+     "done_auroc": 1.0,
+     "done_f1": 0.9230769230769231
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9895833333333334,
+     "progress_mae": 0.007168930668520295,
+     "stage_progress_mae": 0.02867572267408118,
+     "done_auroc": 1.0,
+     "done_f1": 0.9142857142857143
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.0032806682825501057,
+     "stage_progress_mae": 0.02624534626040086,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 0.9844961240310077,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9844961240310077,
+     "progress_mae": 0.017644404278636304,
+     "stage_progress_mae": 0.0537218227828047,
+     "done_auroc": 0.9964387464387464,
+     "done_f1": 0.8461538461538461
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.978494623655914,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.996415770609319,
+     "skill_acc": 0.978494623655914,
+     "progress_mae": 0.009193360848238009,
+     "stage_progress_mae": 0.03702409721479801,
+     "done_auroc": 0.9988562091503268,
+     "done_f1": 0.9166666666666666
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.9818731117824774,
+     "stage_acc_repeat": 0.9837618403247632,
+     "occurrence_acc": 0.9951661631419939,
+     "skill_acc": 0.9770392749244713,
+     "progress_mae": 0.014018939725521724,
+     "stage_progress_mae": 0.05149089940808202,
+     "done_auroc": 0.9973075646368901,
+     "done_f1": 0.9121140142517815
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9692307692307692,
+     "progress_mae": 0.029244065838367334,
+     "stage_progress_mae": 0.05848813167673467,
+     "done_auroc": 1.0,
+     "done_f1": 0.8888888888888888
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9924242424242424,
+     "progress_mae": 0.010308752883683664,
+     "stage_progress_mae": 0.04123501153473464,
+     "done_auroc": 1.0,
+     "done_f1": 0.9397590361445783
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.005052584888155163,
+     "stage_progress_mae": 0.030315509328930994,
+     "done_auroc": 1.0,
+     "done_f1": 0.9787234042553191
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 0.9782608695652174,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9782608695652174,
+     "progress_mae": 0.007424737869720536,
+     "stage_progress_mae": 0.05276098174882388,
+     "done_auroc": 1.0,
+     "done_f1": 0.967741935483871
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.9848942598187311,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9848942598187311,
+     "progress_mae": 0.017421500128419067,
+     "stage_progress_mae": 0.056680571061179144,
+     "done_auroc": 0.9975085910652921,
+     "done_f1": 0.9333333333333333
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.9670487106017192,
+     "stage_acc_repeat": 0.96875,
+     "occurrence_acc": 0.9885386819484241,
+     "skill_acc": 0.9641833810888252,
+     "progress_mae": 0.013640618359019323,
+     "stage_progress_mae": 0.05568551247713159,
+     "done_auroc": 0.9932332868000621,
+     "done_f1": 0.8590604026845637
+    }
+   }
+  },
+  "progress_frame_stepmix_ttt_s0.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.9877687175685693,
+     "stage_acc_repeat": 0.9880952380952381,
+     "occurrence_acc": 0.9918458117123795,
+     "skill_acc": 0.9911045218680504,
+     "progress_mae": 0.009508415048666173,
+     "stage_progress_mae": 0.03607108692795397,
+     "done_auroc": 0.9972886500023876,
+     "done_f1": 0.9517819706498952
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.007746377344119537,
+     "stage_progress_mae": 0.03098550937647815,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 0.9984567901234568,
+     "stage_acc_repeat": 0.9976851851851852,
+     "occurrence_acc": 0.9891975308641975,
+     "skill_acc": 0.9953703703703703,
+     "progress_mae": 0.00553567969421179,
+     "stage_progress_mae": 0.030127658412184323,
+     "done_auroc": 1.0,
+     "done_f1": 0.9818181818181818
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 0.9739583333333334,
+     "stage_acc_repeat": 0.9652777777777778,
+     "occurrence_acc": 0.9739583333333334,
+     "skill_acc": 0.9965277777777778,
+     "progress_mae": 0.010485916252036985,
+     "stage_progress_mae": 0.03217863199151234,
+     "done_auroc": 1.0,
+     "done_f1": 0.9795918367346939
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9683794466403162,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9683794466403162,
+     "progress_mae": 0.026158192426797074,
+     "stage_progress_mae": 0.07019509157273641,
+     "done_auroc": 0.9620037807183365,
+     "done_f1": 0.8235294117647058
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.989247311827957,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.989247311827957,
+     "progress_mae": 0.007687053780355109,
+     "stage_progress_mae": 0.03536963451008763,
+     "done_auroc": 0.999872912127814,
+     "done_f1": 0.96
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9557291666666666,
+     "stage_acc_repeat": 0.9015151515151515,
+     "occurrence_acc": 0.9661458333333334,
+     "skill_acc": 0.9869791666666666,
+     "progress_mae": 0.020899264953196082,
+     "stage_progress_mae": 0.04327611534049932,
+     "done_auroc": 0.9996330829664163,
+     "done_f1": 0.8904109589041096
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9861111111111112,
+     "progress_mae": 0.02076657417405489,
+     "stage_progress_mae": 0.041533148348109776,
+     "done_auroc": 1.0,
+     "done_f1": 0.9230769230769231
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.008534962019426955,
+     "stage_progress_mae": 0.034139848077707806,
+     "done_auroc": 1.0,
+     "done_f1": 0.8888888888888888
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 0.7291666666666666,
+     "stage_acc_repeat": 0.6388888888888888,
+     "occurrence_acc": 0.7291666666666666,
+     "skill_acc": 1.0,
+     "progress_mae": 0.07046792436984248,
+     "stage_progress_mae": 0.03048355206292691,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 0.9767441860465116,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9767441860465116,
+     "progress_mae": 0.02434238683917906,
+     "stage_progress_mae": 0.05608001552796785,
+     "done_auroc": 0.9992877492877493,
+     "done_f1": 0.8571428571428571
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.982078853046595,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.982078853046595,
+     "progress_mae": 0.010794411448149424,
+     "stage_progress_mae": 0.04849489630240444,
+     "done_auroc": 0.9990196078431373,
+     "done_f1": 0.8846153846153846
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.9848942598187311,
+     "stage_acc_repeat": 0.9918809201623816,
+     "occurrence_acc": 0.9963746223564954,
+     "skill_acc": 0.9824773413897281,
+     "progress_mae": 0.018222331278264593,
+     "stage_progress_mae": 0.06312019738397698,
+     "done_auroc": 0.9988412692558305,
+     "done_f1": 0.9370629370629371
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9615384615384616,
+     "progress_mae": 0.035346127768266955,
+     "stage_progress_mae": 0.0706922555365339,
+     "done_auroc": 1.0,
+     "done_f1": 0.9473684210526315
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9886363636363636,
+     "progress_mae": 0.014875488848904078,
+     "stage_progress_mae": 0.05950195539561631,
+     "done_auroc": 1.0,
+     "done_f1": 0.9397590361445783
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9928571428571429,
+     "progress_mae": 0.009352186775722785,
+     "stage_progress_mae": 0.05611312065433669,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.008550568469507604,
+     "stage_progress_mae": 0.06840454775606082,
+     "done_auroc": 1.0,
+     "done_f1": 0.967741935483871
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.9788519637462235,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9969788519637462,
+     "skill_acc": 0.9788519637462235,
+     "progress_mae": 0.02458623107298771,
+     "stage_progress_mae": 0.06966979765883341,
+     "done_auroc": 0.9992268041237113,
+     "done_f1": 0.9333333333333333
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.9742120343839542,
+     "stage_acc_repeat": 0.984375,
+     "occurrence_acc": 0.9928366762177651,
+     "skill_acc": 0.9813753581661891,
+     "progress_mae": 0.016335002387661463,
+     "stage_progress_mae": 0.06068145976511634,
+     "done_auroc": 0.9963355048859935,
+     "done_f1": 0.9090909090909091
+    }
+   }
+  },
+  "progress_frame_stepmix_ttt_s1.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.980355819125278,
+     "stage_acc_repeat": 0.9732142857142857,
+     "occurrence_acc": 0.985544848035582,
+     "skill_acc": 0.9881393624907339,
+     "progress_mae": 0.011694488304523236,
+     "stage_progress_mae": 0.03860594066563201,
+     "done_auroc": 0.9993119927272855,
+     "done_f1": 0.9372384937238494
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.008392056468639768,
+     "stage_progress_mae": 0.03356822587455908,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9953703703703703,
+     "skill_acc": 0.9907407407407407,
+     "progress_mae": 0.005054235272133463,
+     "stage_progress_mae": 0.030325411632800774,
+     "done_auroc": 1.0,
+     "done_f1": 0.9642857142857143
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 0.9375,
+     "stage_acc_repeat": 0.9166666666666666,
+     "occurrence_acc": 0.9409722222222222,
+     "skill_acc": 0.9878472222222222,
+     "progress_mae": 0.019408839299406584,
+     "stage_progress_mae": 0.03542950710214899,
+     "done_auroc": 1.0,
+     "done_f1": 0.96
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9683794466403162,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9683794466403162,
+     "progress_mae": 0.0276276822597795,
+     "stage_progress_mae": 0.07471116525069163,
+     "done_auroc": 0.987523629489603,
+     "done_f1": 0.8
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.989247311827957,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.997610513739546,
+     "skill_acc": 0.989247311827957,
+     "progress_mae": 0.008225496125592752,
+     "stage_progress_mae": 0.03860028858151351,
+     "done_auroc": 0.9994734931009441,
+     "done_f1": 0.9459459459459459
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9583333333333334,
+     "stage_acc_repeat": 0.8977272727272727,
+     "occurrence_acc": 0.9635416666666666,
+     "skill_acc": 0.9895833333333334,
+     "progress_mae": 0.02221940885776505,
+     "stage_progress_mae": 0.051230114864476727,
+     "done_auroc": 0.9987481654148321,
+     "done_f1": 0.8936170212765957
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9722222222222222,
+     "progress_mae": 0.020263925102816185,
+     "stage_progress_mae": 0.04052785020563237,
+     "done_auroc": 1.0,
+     "done_f1": 0.9230769230769231
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.00998502300497147,
+     "stage_progress_mae": 0.03994009201988588,
+     "done_auroc": 1.0,
+     "done_f1": 0.9142857142857143
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 0.71875,
+     "stage_acc_repeat": 0.625,
+     "occurrence_acc": 0.71875,
+     "skill_acc": 1.0,
+     "progress_mae": 0.07289345231510307,
+     "stage_progress_mae": 0.047257455096673846,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 0.9922480620155039,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 0.9922480620155039,
+     "skill_acc": 0.9922480620155039,
+     "progress_mae": 0.02764634670968148,
+     "stage_progress_mae": 0.08121036170828722,
+     "done_auroc": 0.9935897435897436,
+     "done_f1": 0.8
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.985663082437276,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.985663082437276,
+     "progress_mae": 0.011197952797876203,
+     "stage_progress_mae": 0.04926656983385221,
+     "done_auroc": 0.9990196078431373,
+     "done_f1": 0.9019607843137255
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.9776435045317221,
+     "stage_acc_repeat": 0.9769959404600812,
+     "occurrence_acc": 0.9945619335347432,
+     "skill_acc": 0.9836858006042296,
+     "progress_mae": 0.021640377457332268,
+     "stage_progress_mae": 0.0643613684424523,
+     "done_auroc": 0.9963117323793015,
+     "done_f1": 0.9270588235294117
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9692307692307692,
+     "progress_mae": 0.03150245170138817,
+     "stage_progress_mae": 0.06300490340277634,
+     "done_auroc": 1.0,
+     "done_f1": 0.9473684210526315
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9962121212121212,
+     "progress_mae": 0.013645563334924114,
+     "stage_progress_mae": 0.05458225333969645,
+     "done_auroc": 1.0,
+     "done_f1": 0.9523809523809523
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9928571428571429,
+     "skill_acc": 1.0,
+     "progress_mae": 0.008769414958794065,
+     "stage_progress_mae": 0.052616489752764374,
+     "done_auroc": 1.0,
+     "done_f1": 0.9787234042553191
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 1.0,
+     "progress_mae": 0.006684448143167129,
+     "stage_progress_mae": 0.05347558514533702,
+     "done_auroc": 1.0,
+     "done_f1": 1.0
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.9818731117824774,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9788519637462235,
+     "progress_mae": 0.02428880795534852,
+     "stage_progress_mae": 0.07270597572543733,
+     "done_auroc": 0.9926975945017182,
+     "done_f1": 0.9041095890410958
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.9555873925501432,
+     "stage_acc_repeat": 0.9557291666666666,
+     "occurrence_acc": 0.9885386819484241,
+     "skill_acc": 0.9785100286532952,
+     "progress_mae": 0.02612434741212259,
+     "stage_progress_mae": 0.06814609181137536,
+     "done_auroc": 0.9926322320459128,
+     "done_f1": 0.8874172185430463
+    }
+   }
+  },
+  "progress_frame_stepmix_ttt_s2.pt": {
+   "run_to_end_sim": {
+    "all": {
+     "n": 2698,
+     "stage_acc": 0.9918458117123795,
+     "stage_acc_repeat": 0.9947916666666666,
+     "occurrence_acc": 0.9970348406226834,
+     "skill_acc": 0.9903632320237212,
+     "progress_mae": 0.008521905561431675,
+     "stage_progress_mae": 0.03548147183588134,
+     "done_auroc": 0.999538380724477,
+     "done_f1": 0.9554140127388535
+    },
+    "lid_cycles_2": {
+     "n": 384,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9921875,
+     "progress_mae": 0.0076659034489744565,
+     "stage_progress_mae": 0.030663613795897823,
+     "done_auroc": 1.0,
+     "done_f1": 0.9696969696969697
+    },
+    "lid_cycles_3": {
+     "n": 648,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9922839506172839,
+     "progress_mae": 0.004848901413826481,
+     "stage_progress_mae": 0.029093408482958886,
+     "done_auroc": 1.0,
+     "done_f1": 0.9818181818181818
+    },
+    "lid_cycles_4": {
+     "n": 576,
+     "stage_acc": 0.9878472222222222,
+     "stage_acc_repeat": 0.9837962962962963,
+     "occurrence_acc": 0.9878472222222222,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.007059767956821749,
+     "stage_progress_mae": 0.03245899089098977,
+     "done_auroc": 1.0,
+     "done_f1": 0.9795918367346939
+    },
+    "pack": {
+     "n": 253,
+     "stage_acc": 0.9802371541501976,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 0.9960474308300395,
+     "skill_acc": 0.9802371541501976,
+     "progress_mae": 0.02405390392026029,
+     "stage_progress_mae": 0.0685743515042068,
+     "done_auroc": 0.9918714555765595,
+     "done_f1": 0.8235294117647058
+    },
+    "pack_lidded": {
+     "n": 837,
+     "stage_acc": 0.98805256869773,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.98805256869773,
+     "progress_mae": 0.008069584383777455,
+     "stage_progress_mae": 0.03471441449803023,
+     "done_auroc": 0.9997821350762527,
+     "done_f1": 0.958904109589041
+    }
+   },
+   "run_to_end_loop": {
+    "all": {
+     "n": 768,
+     "stage_acc": 0.9674479166666666,
+     "stage_acc_repeat": 0.9356060606060606,
+     "occurrence_acc": 0.9778645833333334,
+     "skill_acc": 0.9869791666666666,
+     "progress_mae": 0.01917629045175431,
+     "stage_progress_mae": 0.0452399883352596,
+     "done_auroc": 0.9996330829664163,
+     "done_f1": 0.9230769230769231
+    },
+    "lid_cycles_1": {
+     "n": 72,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9861111111111112,
+     "progress_mae": 0.02052618300777824,
+     "stage_progress_mae": 0.04105236601555648,
+     "done_auroc": 1.0,
+     "done_f1": 0.9230769230769231
+    },
+    "lid_cycles_2": {
+     "n": 192,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9947916666666666,
+     "progress_mae": 0.009056115231299124,
+     "stage_progress_mae": 0.03622446092519649,
+     "done_auroc": 1.0,
+     "done_f1": 0.9142857142857143
+    },
+    "lid_cycles_4": {
+     "n": 96,
+     "stage_acc": 0.8229166666666666,
+     "stage_acc_repeat": 0.7638888888888888,
+     "occurrence_acc": 0.8229166666666666,
+     "skill_acc": 1.0,
+     "progress_mae": 0.04833472343207192,
+     "stage_progress_mae": 0.034706819284341515,
+     "done_auroc": 1.0,
+     "done_f1": 0.9411764705882353
+    },
+    "pack": {
+     "n": 129,
+     "stage_acc": 0.9767441860465116,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9767441860465116,
+     "progress_mae": 0.028778140124914742,
+     "stage_progress_mae": 0.06629674493887718,
+     "done_auroc": 0.9964387464387464,
+     "done_f1": 0.8888888888888888
+    },
+    "pack_lidded": {
+     "n": 279,
+     "stage_acc": 0.982078853046595,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.982078853046595,
+     "progress_mae": 0.011319778639372542,
+     "stage_progress_mae": 0.04641329549214924,
+     "done_auroc": 0.9998366013071895,
+     "done_f1": 0.9411764705882353
+    }
+   },
+   "check_ended": {
+    "all": {
+     "n": 1655,
+     "stage_acc": 0.9818731117824774,
+     "stage_acc_repeat": 0.986468200270636,
+     "occurrence_acc": 0.9909365558912386,
+     "skill_acc": 0.980060422960725,
+     "progress_mae": 0.019141752075925493,
+     "stage_progress_mae": 0.06272442122630725,
+     "done_auroc": 0.998742915452612,
+     "done_f1": 0.9223529411764706
+    },
+    "lid_cycles_1": {
+     "n": 130,
+     "stage_acc": 0.9923076923076923,
+     "stage_acc_repeat": NaN,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9692307692307692,
+     "progress_mae": 0.033160243033906196,
+     "stage_progress_mae": 0.062082747777539894,
+     "done_auroc": 1.0,
+     "done_f1": 0.8571428571428571
+    },
+    "lid_cycles_2": {
+     "n": 264,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9886363636363636,
+     "progress_mae": 0.014694120721019293,
+     "stage_progress_mae": 0.05877648288407718,
+     "done_auroc": 1.0,
+     "done_f1": 0.926829268292683
+    },
+    "lid_cycles_3": {
+     "n": 140,
+     "stage_acc": 1.0,
+     "stage_acc_repeat": 1.0,
+     "occurrence_acc": 0.9785714285714285,
+     "skill_acc": 1.0,
+     "progress_mae": 0.009009184352242523,
+     "stage_progress_mae": 0.054055106113455126,
+     "done_auroc": 1.0,
+     "done_f1": 0.9787234042553191
+    },
+    "lid_cycles_4": {
+     "n": 92,
+     "stage_acc": 0.9782608695652174,
+     "stage_acc_repeat": 0.9696969696969697,
+     "occurrence_acc": 0.9782608695652174,
+     "skill_acc": 1.0,
+     "progress_mae": 0.012009855616724427,
+     "stage_progress_mae": 0.05507938364446213,
+     "done_auroc": 1.0,
+     "done_f1": 0.967741935483871
+    },
+    "pack": {
+     "n": 331,
+     "stage_acc": 0.9758308157099698,
+     "stage_acc_repeat": 0.9875,
+     "occurrence_acc": 1.0,
+     "skill_acc": 0.9758308157099698,
+     "progress_mae": 0.028399196735776948,
+     "stage_progress_mae": 0.0713009157747322,
+     "done_auroc": 0.9995704467353952,
+     "done_f1": 0.9473684210526315
+    },
+    "pack_lidded": {
+     "n": 698,
+     "stage_acc": 0.9727793696275072,
+     "stage_acc_repeat": 0.9817708333333334,
+     "occurrence_acc": 0.9856733524355301,
+     "skill_acc": 0.9742120343839542,
+     "progress_mae": 0.016795406268345307,
+     "stage_progress_mae": 0.06301654321554637,
+     "done_auroc": 0.9960446719404374,
+     "done_f1": 0.8961038961038961
+    }
+   }
+  }
+ },
+ "seconds": 3.0
+}

@@ -15,13 +15,20 @@ CPU-testable PyTorch prototype that goes with `ws4/research/robottt_flux.md`. St
 | `features.py` | CPU `FrameFeaturizer` (colour grids + head motion + state), FLUX-feature loading, per-re-plan targets, plan posterior |
 | `train_progress.py` | Train/evaluate the P2 memory (none, last-k, GRU, TTT) on held-out episodes; saves `ProgressMonitor` checkpoints |
 | `progress_api.py` | `ProgressMonitor.load(...)`, `.reset(plan)`, `.update(frames=..., state=...)` -> `StageEstimate` (stage, done, progress, confidence): the orchestrator interface |
+| `flux_sim_closed_loop.py` | Closed loop in sim: FLUX (remote server), the scripted stand-in or a fake policy drives the arm through `flux.dual_arm_runner`; ground-truth checks per re-plan, stand-in repair, live progress monitor, episodes in the `sim_episodes.py` layout plus `overlay.mp4` (report Sec. 11.10) |
+| `sim_block_cup.py` | Sim track: scripted "put the block in the cup" demos on the station model as a LeRobot v3.0 dataset (30 fps, left arm 6-D degrees, head 480x640 as `scene`, left wrist as `wrist`), per-frame phases in `stages_left.jsonl`, held-out solvable layouts (`--eval-seeds`) |
+| `eval_block_cup.py` | Closed loop of one served FLUX package on the cup task over the held-out layouts (`flux.dual_arm_runner`, default guard); success at the first passed check and after the policy keeps going; rollouts in the `sim_episodes.py` layout. Runs on the pod, so the token stays there |
+| `cup_stages.py` | Three-stage tracking (reach, carry, in cup) for the cup task: trains none/GRU/TTT on the demos, scores FLUX rollouts with stages from privileged block and cup poses |
+| `pod_sim_lora.sh` | Pod: A0r-sim cup package (demo quantiles), LoRA probe and run (LeRobot `lora.json`), adapter merge for `flux.remote` |
+| `lora_train_te_cpu.py` | `lerobot_train` with FLUX's frozen text encoder kept on the CPU, which lets the LoRA preset fit the 32 GB card |
+| `pod_sim_eval.sh`, `pod_job_watchdog.sh` | Pod: serve one package, run `eval_block_cup.py`, stop serving; idle stop that also counts running ws4/ttt jobs as busy |
 | `extract_flux_features.py` | GPU: FLUX 3 Action tap features at every re-plan, with the runner's exact request building |
 | `pod_job.py` | One model load for a time-boxed GPU slot: the scale check, then the feature extraction (what ran on the RunPod pod) |
 | `flux_scale_check.py` | GPU (optional): gated TTT layers in the loaded 7B model, gate-0 identity, added latency and VRAM |
 | `claude_stage_labels.py` | Stage boundaries from one Claude vision call per episode (about 20 frames, structured output), saved as `episode_claude.json`; `--eval` against sim ground truth |
 | `models/` | Trained progress checkpoints (sim frame features, GRU is the default; `*_subset21_*`: FLUX-feature models from the pod run) |
-| `results/` | Metrics JSON, the pod's scale check and extraction log, and `episode_pack_lidded-100004.mp4` / `_sheet.jpg` (an annotated training episode) |
-| `tests/` | 40 tests (2 of them run in the LeRobot CPU venv): inner gradients vs autograd, exact recall, streaming = one pass, causality, gate identity, TBPTT gradient cut, and the adapter on a tiny instance of flux-action's real DiT (packed training = streaming inference) |
+| `results/` | Metrics JSON, the pod's scale check and extraction log, `episode_pack_lidded-100004.mp4` / `_sheet.jpg` (an annotated training episode), and the FLUX-in-sim closed loop: `flux_sim_closed_loop.json` (A0 vs A0r-sim), `flux_sim_so101sim_A0r_ep0_overlay.mp4` / `_sheet.jpg`, `stats_sim_left.json` (the A0r-sim quantiles) |
+| `tests/` | 48 tests (2 of them run in the LeRobot CPU venv): inner gradients vs autograd, exact recall, streaming = one pass, causality, gate identity, TBPTT gradient cut, and the adapter on a tiny instance of flux-action's real DiT (packed training = streaming inference) |
 
 ```bash
 python -m pytest ws4/ttt/tests -q          # about 10 s on a laptop CPU

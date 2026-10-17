@@ -779,6 +779,341 @@ Reading:
   FLUX-feature checkpoints are `ws4/ttt/models/progress_flux_subset21_{gru,ttt}_s0.pt` (seeds 1 and 2 in `ws4/.cache/ttt/models`)
   (`ProgressMonitor.update(features=...)`).
 
+### 11.10 Closed loop with FLUX driving the sim arm (`ws4/ttt/flux_sim_closed_loop.py`, 17 Oct evening)
+
+**Result: FLUX 3 Action does not succeed in this sim zero-shot.** 0 of 24 steps over 12 episodes (`open_lid` and
+`close_lid`, released package A0 and sim-normalized A0r-sim, 6 episodes each). A0 curls the arm into its own joint
+limits. A0r-sim moves within normal ranges toward the scene, usually toward the apple, but never grasps the lid. The
+progress monitor tracks the stage at 0.99 when FLUX does nothing useful, and at 0.65 when A0r-sim's arm moves over
+the open box.
+
+What the script does: the shipped `flux.dual_arm_runner.DualArmRunner` (one `per_arm_target` per backend: head
+camera as `scene`, the arm's wrist camera; default `SafetyGuard`; synchronous inference, so the arm holds and no sim
+time passes while a chunk is computed) on the orchestrator's pack-box scene (`PackBoxSim`, 240x320 renders, domain
+randomization), with `flux.remote.RemoteBackend` through the SSH tunnel. Steps use the exact prompts of
+`orchestrator/skills_sim_pack_box.yaml` (the sim's pack-box vocabulary since commit 8aa718a; the prompts are
+unchanged). Before every re-plan the ground-truth check (`PackBoxSim.predicate`) runs; a FLUX
+attempt ends on a passed check or after the skill's `timeout_s` of executed motion (42 chunks for the lid skills).
+A failed step is redone by the scripted stand-in (objects are placed by hand if that fails too), so the next step
+starts from its precondition; repairs never count as FLUX successes. The frame-feature GRU monitor
+(`models/progress_frame_gru_s0.pt`) gets one `update` per re-plan with that tick's raw renders and state. Output
+per episode: the `sim_episodes.py` layout (so `features.frame_features`, `claude_stage_labels.py` and
+`train_progress.py` apply unchanged; the live and offline monitor estimates agree), per-step diagnostics (closest
+TCP approach to the target, object displacement, joint travel, guard interventions) and `overlay.mp4` (head |
+wrist, ground-truth check, monitor stage, a bar with the ground-truth step outlined and the monitor's step filled).
+
+Conditions, 6 episodes each (seeds 0 to 5) of `open_lid` then `close_lid` on the left arm:
+- **A0**: `so101` as released. Its history quantiles are one legacy-degree corpus dataset's
+  (`ws4/flux/checkpoint_facts.md`); on the real red arm A0 drove the shoulder lift up on every tick.
+- **A0r-sim**: the same weights with left-arm q01/q99 from the 208 scripted sim episodes
+  (`ws4/ttt/results/stats_sim_left.json`; state pan -66..33, lift -10..68, elbow -73..33, wrist flex 33..95,
+  roll 0..126, gripper 23..58; command deltas about ±2 to 2.5 deg per tick), built with
+  `flux.package_tools.renormalize_package` as `so101sim`.
+
+**Laptop dry runs** (`open_lid` → `close_lid`, left arm, seeds 0 to 5, `--max-chunks 20`):
+
+| Policy in the loop | Step ends | Steps passed | Monitor stage accuracy | Re-plans |
+|---|---|---|---|---|
+| scripted stand-in | at the stand-in's own end (release, clear, return home), as in all training episodes | 12/12 | **0.993** | 144 |
+| scripted stand-in | on the passed check, as the orchestrator ends steps and as FLUX would | 12/12 | **0.538** | 78 |
+
+With check-ended steps the monitor never leaves stage 1: through all of `close_lid` it reports `open_lid` with
+p = 1.00 and done = 0.00. The GRU learned the stand-in's choreography (a step ends with the arm back home), not the
+scene state. FLUX steps end on the check by construction (FLUX never stops by itself), and FLUX's motion will
+differ from the stand-in's, so the live stage accuracy with FLUX driving should be expected far below the 0.995
+held-out number. The same applies to the orchestrator on the real robot. Fix (confirmed with the stand-in, Sec.
+11.11): add training episodes whose steps end on the passed check; this script writes them in the training layout
+with `--backend scripted --stand-in-stops-on-check`.
+
+Still and drifting `FakeBackend` runs exercised the rest: repair by the stand-in, hand placement when the
+stand-in's IK fails from a bad arm pose, guard accounting (74% of ticks clipped at the ±110 deg limits for a
+lift drift of 2 deg per tick) and the video.
+
+**FLUX runs** (pod `ws4-sim-4500`, RTX PRO 4500 32 GB, `guidance_scale=1.0`, `guidance_scale_action=1.0`,
+`compile_model=true`, text encoder on the CPU; 17 Oct, 16:16 to 17:14 UTC; each FLUX attempt ran its full
+43 chunks = 46 s of motion because no check ever passed; summary in `ws4/ttt/results/flux_sim_closed_loop.json`):
+
+| | A0 (`so101`, released) | A0r-sim (`so101sim`) |
+|---|---|---|
+| `open_lid` passed | **0/6** | **0/6** |
+| `close_lid` passed | **0/6** | **0/6** |
+| Closest gripper approach to the target, median (`open_lid` / `close_lid`; start 16.8 / 26.4 cm) | 16.0 / 14.1 cm | 10.6 / 17.9 cm |
+| Target object moved (max over episodes) | 0 cm | 6.0 cm (`open_lid`, one episode: the lid was pushed, not grasped) |
+| Gripper closed within 3 cm of the target | never | never |
+| Ticks clipped by the guard, per step | 95 to 98% | 0 to 3% |
+| Joint range used | lift, elbow and wrist flex pinned at the +110 deg limit | within the sim's normal ranges |
+| Monitor stage accuracy on FLUX re-plans (`open_lid` / `close_lid`) | 0.992 (1.000 / 0.984), 516 re-plans | **0.645** (1.000 / **0.291**), 516 re-plans |
+| Monitor stage accuracy on stand-in repair re-plans | 0.946 (147) | 0.909 (132) |
+| Round trip per chunk, median (p90) | 0.84 s (1.36 s) | 0.84 s (0.88 s) |
+
+Reading:
+- **A0 fails for the reason the normalization predicts**: sim states in today's degrees mode map far outside the
+  package's legacy-degree range, and the arm curls back into its own body until the guard's limits hold it. This
+  matches A0 on the real red arm. The wrist camera then sees only the robot.
+- **A0r-sim is a different, more plausible policy that is still wrong**: no limit pinning, the gripper drops to
+  2 to 3 cm above the table, and the wrist camera keeps the **apple** centred in most frames (contact sheet:
+  `ws4/ttt/results/flux_sim_so101sim_A0r_ep0_sheet.jpg`). The prompt names the lid, but FLUX goes for the most
+  pick-like object. In `close_lid` it reaches into the open box while the lid lies parked beside the arm. With the
+  render gap, a task FLUX never saw (a loose lid with a knob) and no LoRA, this is the expected zero-shot picture.
+- **The monitor's high A0 number is not a success**: during a failed step the scene does not change, and the
+  stand-in repairs supply exactly the end-of-step motion the GRU learned. When A0r-sim's arm moves over the open box
+  during `close_lid`, the monitor falls back to `open_lid` (0.29 correct). Its "done" output stays at or below
+  0.014 on every FLUX re-plan, which is right, since FLUX never finished. FLUX success and monitor accuracy
+  therefore cannot be judged from the same runs until FLUX succeeds sometimes. The next step for this test is the
+  sim LoRA, then re-running these two steps.
+- **The retrained monitor (Sec. 11.11) holds up on the FLUX rollouts.** Offline on the same 12 episodes (frames
+  from `frames.npz`; the old GRU's offline numbers reproduce its live ones, 0.641 vs 0.645):
+
+  | Monitor | A0, FLUX re-plans | A0r-sim, FLUX re-plans (`open_lid` / `close_lid`) | A0r-sim, stand-in repair re-plans |
+  |---|---|---|---|
+  | old GRU `progress_frame_gru_s0.pt` | 0.992 | 0.641 (1.000 / 0.283) | 0.909 |
+  | new GRU `progress_frame_stepmix_gru_s0.pt` | **1.000** | **0.984** (0.981 / 0.988) | 0.742 (`open_lid` 0.576) |
+
+  Its weak spot is a different one: a stand-in repair that restarts the motion inside the same step after a failed
+  FLUX attempt. That pattern (a second attempt of a step) is absent from its training data, and it reads the
+  restarted motion as the next step. Episodes with failed-then-retried steps would fix that.
+- Video of one episode with the overlay: `ws4/ttt/results/flux_sim_so101sim_A0r_ep0_overlay.mp4` (A0r-sim, seed 0,
+  118 s, both steps with their stand-in repairs; the red monitor line marks wrong stages).
+- Laptop cost: the A0 run first did about 4 ticks/s because the overlay encoder (1280x590, nice 19) starved on a
+  loaded laptop. Now only episode 0 gets a video, and the sim renders only the ticks FLUX and the monitor read
+  (re-plan tick and 7 ticks back; `--render-every-tick` restores the old behaviour). The images are the same up
+  to GPU rasterization noise of at most 4/255 on a few pixels, and the monitor's stage estimates are identical.
+  This is 1.4x faster under load: about 2.5 min per A0r-sim episode, against 3 to 3.7 min for A0.
+
+**GPU attempts** (pod `ws4-flux-inference-2`, id `voqbbqhku7bz8v`, RTX PRO 4500 32 GB, EU-RO-1, volume
+`ws4-inference`, created by the orchestrator session at 15:44 UTC because the old 4500 pod's host had no free GPU):
+- First boot: `RUNNING` but `runtime: null`, no `ssh.direct`, the SSH proxy answered "container not found", no
+  log lines; the orchestrator stopped it.
+- One restart at 15:56:24 UTC: the same for 8 min (16 log reads of 20 to 30 s, all empty), stopped at about
+  16:04:30 UTC. Cost about $0.10. No server ever ran, nothing was built on the volume.
+- A second restart was refused at once: "There are not enough free GPUs on the host machine to start this pod". A
+  stopped pod restarts only on its own host, so a working slot needs a new pod on the volume (EU-RO-1). Global
+  secure-cloud stock at the time: RTX PRO 4500 Low on CUDA 13.0, Out on 12.8; L40S Medium; RTX PRO 6000 Out.
+- The orchestrator then created `ws4-sim-4500` (`fnxekskwlu0095`), which booted cleanly; the two dead pods are
+  terminated. On it: `so101` was READY 7 min after `runpod_serve.sh` started (16:08:42 to 16:16 UTC). The first
+  prompt took 121 s (compile with Qwen on the CPU), and the others 13 to 15 s. `so101sim` was built offline
+  (`HF_HUB_OFFLINE=1`; the quantiles read back from the saved processors match the stats file to 1e-8, weights
+  symlinked) at `/workspace/packages/so101sim_left`. It was then served alone after stopping `so101`, READY in 9 min
+  (16:51 to 17:00 UTC). The server was stopped at 17:14:40 UTC with both `idle_stop.sh` watchdogs (`IDLE_MIN=30`)
+  still armed, and the pod was handed to the sim LoRA job.
+
+To rerun (from `ws4/`; the token goes through the environment, never argv; the local port 18765 avoids the
+single-arm session's 8765 tunnel):
+
+```bash
+MUJOCO_GL=egl python ttt/flux_sim_closed_loop.py --backend scripted --episodes 2     # laptop check, no GPU
+ssh -N -L 18765:127.0.0.1:8765 -i ~/.ssh/id_ed25519_osrdvs root@IP -p PORT &
+export FLUX_TOKEN="$(ssh -i ~/.ssh/id_ed25519_osrdvs root@IP -p PORT cat /workspace/flux_token)"
+MUJOCO_GL=egl python ttt/flux_sim_closed_loop.py --backend remote --url http://127.0.0.1:18765 --package so101 --episodes 6 --no-video
+MUJOCO_GL=egl python ttt/flux_sim_closed_loop.py --backend remote --url http://127.0.0.1:18765 --package so101sim --episodes 6
+```
+
+Results go to `ws4/.cache/ttt/flux_sim/<package>/`: one directory per episode and an `index.jsonl`; the per-skill
+success over steps whose precondition held and the pooled monitor accuracy (all, FLUX re-plans, repair re-plans)
+are printed at the end.
+
+### 11.11 Monitor retrained on check-ended steps (`progress_frame_stepmix_gru_s0.pt`, 17 Oct evening)
+
+This fixes the failure in Sec. 11.10. It was trained and tested on the stand-in's motion; Sec. 11.10 also scores it
+offline on the 12 FLUX rollouts (summarized under "Reading" below).
+
+**Data.** `flux_sim_closed_loop.py --backend scripted` wrote 322 new episodes to `ws4/.cache/ttt/sim_stepend/`
+(gitignored). Scene seeds start at 2,000,000, so no scene repeats one from Sec. 11.2.
+- `check/`: 250 episodes (9,225 re-plans) whose steps end on the passed check (`--stand-in-stops-on-check`):
+  `lid_cycles_1` (the closed loop's `open_lid` → `close_lid`) 30, `lid_cycles_2/3/4` 40 / 40 / 25, `pack_lidded`
+  60, `pack` 55.
+- `runend/`: 72 episodes (4,001 re-plans) whose steps run to the stand-in's end, through the same closed-loop code
+  (10 to 17 per family).
+
+Every lid-cycle step passes when steps end on the check. In `pack_lidded` and `pack`, the stand-in often cannot do
+the next lid step from where a check-ended step leaves the arm: 174 of 525 steps failed on the first attempt. The
+stand-in's repair fixed 9 of them, and the other 165 ended with the lid placed by hand. The labels stay correct
+(the failed attempt still counts as that step), but those episodes have lids that teleport between steps. Nine `pack`
+episodes crashed and wrote nothing: the stand-in's IK raised `SimSkillError` on the first `close_lid` (right arm)
+attempt, and the script then caught that error only in the repair path. For that reason `pack` ran as one-episode
+jobs. (Fixed since: such an attempt now counts as a failed attempt with 0 chunks, followed by the repair.)
+
+**Training.** The network, budget (600 steps) and hash split are those of Sec. 11.5. Training pools the run-to-end
+`sim` set with both new sets: 422 training episodes (20,757 re-plans) and 108 held out. `train_progress.py --data`
+now takes several directories. The new `eval_progress.py` scores saved checkpoints on the held-out episodes of each
+set, per task family.
+
+```bash
+cd ws4   # nice 19 and at most 4 threads (ttt/throttle.py)
+python ttt/train_progress.py --data .cache/ttt/sim .cache/ttt/sim_stepend/check/*/ .cache/ttt/sim_stepend/runend/*/ \
+    --memories gru ttt --seeds 0 1 2 --tag _stepmix --save-dir .cache/ttt/models --out ttt/results/progress_stepmix_train.json
+python ttt/eval_progress.py --models ttt/models/progress_frame_{gru,ttt}_s0.pt .cache/ttt/models/progress_frame_stepmix_*_s?.pt \
+    --set run_to_end_sim=.cache/ttt/sim --set run_to_end_loop='.cache/ttt/sim_stepend/runend/*' \
+    --set check_ended='.cache/ttt/sim_stepend/check/*' --out ttt/results/progress_step_end_eval.json
+```
+
+**Results.** Stage accuracy on held-out episodes. For the new models: mean ± std over 3 seeds (the saved
+checkpoints are seed 0). Raw numbers are in `ws4/ttt/results/progress_step_end_eval.json`.
+
+| Model | Run to end, `sim_episodes.py` (43 eps, 2,698 re-plans) | Run to end, closed loop (16 eps, 768) | Check-ended, closed loop (49 eps, 1,655) | Check-ended, repeated stages only |
+|---|---|---|---|---|
+| old GRU `progress_frame_gru_s0.pt` | 0.995 | 0.992 | **0.307** | 0.019 |
+| old TTT `progress_frame_ttt_s0.pt` | 0.977 | 0.967 | 0.366 | 0.051 |
+| **new GRU** `progress_frame_stepmix_gru_s0.pt` | 0.995 ± 0.000 | 0.991 ± 0.002 | **0.982 ± 0.001** | 0.984 |
+| new TTT `progress_frame_stepmix_ttt_s0.pt` | 0.987 ± 0.005 | 0.961 ± 0.005 | 0.981 ± 0.003 | 0.985 |
+
+| Check-ended family (held-out re-plans) | old GRU | new GRU |
+|---|---|---|
+| `lid_cycles_1`: `open_lid`, `close_lid` (130) | 0.538 | 1.000 |
+| `lid_cycles_2` (264) | 0.292 | 0.999 |
+| `lid_cycles_3` (140) | 0.200 | 1.000 |
+| `lid_cycles_4` (92) | 0.152 | 0.993 |
+| `pack_lidded` (698) | 0.279 | 0.967 |
+| `pack` (331) | 0.375 | 0.983 |
+
+Live in the closed loop, under the dry-run condition of Sec. 11.10 (seeds 0 to 5,
+`ws4/ttt/results/progress_step_end_live.json`): the old GRU reproduces 0.538 (check-ended, 78 re-plans) and 0.993
+(run to end, 144). The new GRU scores 1.000 on both.
+
+Reading:
+- The old monitors fail on check-ended steps exactly where memory matters: on repeated stages they score 0.02. They
+  counted stages by the stand-in's return-home motion. On check-ended steps, progress MAE was 0.244 and done AUROC
+  0.70 (F1 0.06); the new GRU gets 0.014 and 0.997 (F1 0.91).
+- The mix fixes this without costing run-to-end stage accuracy. One shift: on run-to-end steps, done F1 at the 0.5
+  threshold drops (0.987 → 0.953 on `sim`, 0.977 → 0.924 in the closed loop) while AUROC stays at 0.999. The
+  ranking holds; only the best threshold moved.
+- The GRU stays the default. TTT matches it on check-ended steps but is weaker on run-to-end `lid_cycles_4` in the
+  closed loop (0.76 ± 0.05).
+- Training and test here use the stand-in's motion only. On the 12 FLUX rollouts of Sec. 11.10 (offline, same
+  frames), the new GRU tracks FLUX re-plans at 1.000 (A0) and 0.984 (A0r-sim; old GRU 0.641). Its weak spot is
+  the stand-in repairs that restart the motion inside the same step after a failed FLUX attempt: 0.742 on A0r-sim
+  (`open_lid` repairs 0.576; old GRU 0.909) and 0.891 on A0 (old GRU 0.946). Almost no training episode has a step
+  that fails and then starts over (9 stand-in repairs in the check-ended set), so episodes with a failed-then-retried
+  step are the next data to add.
+- Use `ttt/models/progress_frame_stepmix_gru_s0.pt` for the closed loop (`--monitor`; `DEFAULT_MONITOR` in
+  `flux_sim_closed_loop.py` still points at the old checkpoint) and for the orchestrator. `ws4/.gitignore`
+  excludes `ttt/models/*.pt`, so the checkpoint exists only on the laptop.
+
+### 11.12 Sim track: "put the block in the cup" (`sim_block_cup.py`, `eval_block_cup.py`, `cup_stages.py`, 17 Oct evening)
+
+**Status (19:05 UTC): demos, the A0 closed loop and stage tracking are done; the LoRA is training (ETA about 20:57
+UTC); A0r-sim and LoRA-sim evaluations follow on the same pod.** Nothing here shows FLUX solving the task in sim yet.
+
+**Task and contract.** One skill on the left arm, mirroring the real track (ws4/PLAN.md): the same per-arm FLUX
+contract (30 fps, task-arm 6-D state and action in LeRobot degrees, gripper 0..100), `scene` = head D455 render
+480x640, `wrist` = left wrist render, task string exactly "put the block in the cup". As in the real demos, the arm
+starts at the haller home `[0, 0, 0, 0, 0, 100]` (in the sim: upright, gripper open, TCP 32 cm above the table) and
+an episode ends with the block released and the gripper lifted clear. Scene: the station model with a red cube and
+a cup (`ttt/scenes/block_cup.xml`, derived from `ws4/sim/scenes/grasp_test.xml`), domain randomization on, cube and
+cup regions narrowed so the cup stays at least 170 px inside the head image. Ground truth (`block_in_cup`): block
+centre within 3.25 cm of the cup axis, below the rim, cup upright.
+
+**Demos.** A scripted IK expert (reach, descend, grasp, lift, carry, lower, release, retreat; jittered waypoints, 2
+to 3 deg per tick) wrote 60 episodes as a LeRobot v3.0 dataset (`local/sim_block_cup_left`, h264, 15,578 frames,
+213 to 340 per episode, mean 8.7 s) plus per-frame phases (`stages_left.jsonl`). Of 137 layouts, 65 were out of IK
+reach for the left arm and skipped, 12 ran but missed (a dropped block or a knocked cup) and were discarded, and 60
+succeeded. It loads in LeRobot main on the pod with the expected keys and shapes. Held-out evaluation layouts: 20
+that the expert solves, seeds from 9,000,000 (`results/block_cup_eval_seeds_left.json`, start pose recorded),
+disjoint from the demo seeds. A first set (v1) started from the sim's `HOME_DEG` and ended back there; it was replaced
+when the real track fixed its start pose (`ws4/.cache/ttt/block_cup_v1_envhome/`).
+
+**Closed loop.** `eval_block_cup.py` runs on the pod itself (MuJoCo 3.8.1 as on the laptop, EGL; pod renders match
+the laptop's to JPEG noise), against `flux.remote` on 127.0.0.1, so the bearer token never leaves the pod. Same
+runner as Sec. 11.10: `per_arm_target`, default `SafetyGuard`, synchronous inference, inference settings of the
+other pod runs (guidance 1/1, compiled). Budget 22 chunks (the expert needs 7 to 10). Two numbers per rollout, from
+the check at every re-plan:
+- *at check*: the check passed at some re-plan. The orchestrator ends the step there; FLUX never stops by itself.
+- *after continuing*: the policy keeps going 4 more chunks after the first pass (the expert's release and retreat
+  take about 2), then settles; the block must still be in the cup. Without a pass, the whole budget runs.
+
+| Policy (20 held-out layouts) | Success at check | Success after continuing | Furthest stage | Notes |
+|---|---|---|---|---|
+| scripted expert (demos) | 60/72 executed (83%) | 60/72 | | IK-feasible layouts only; the 20 eval layouts are ones it solves |
+| **A0** `so101` as released | **0/20** | **0/20** | reach (20/20) | cup knocked over in 8, block pushed in 2 (3 and 6 cm); closest TCP approach 3.8 to 17 cm (median 12); guard step limit on 92% of ticks; 0.66 s per chunk |
+| A0r-sim `so101sim_cup_left` (demo quantiles) | pending | pending | | |
+| LoRA-sim on the 60 demos | pending | pending | | training |
+
+A0 swings the arm down from upright and sweeps through the scene: it knocks the cup over or pushes the block, then
+pulls back, and never grasps (`results/block_cup_a0_seed9000000_3x.gif`, `_sheet.jpg`; `..._seed9000005_3x.gif`
+pushes the block). From the sim's `HOME_DEG` (v1) it had only lifted away, never touching anything (0/20, closest
+approach median 14 cm). The lid task looks the same (Sec. 11.10): A0 0/12, and the lid A0r-sim (`so101sim`, lid/pack
+quantiles) removed the guard interventions but still passed no step (0/12). The cup package uses the new demos' own
+quantiles: state pan -9..39, lift -4..83, elbow -74..36, wrist flex 0..95, roll 0..143, gripper 28..100; command
+deltas about ±1 to 2.6 deg per tick, gripper target 0..100.
+
+**Stage tracking.** `cup_stages.py`: three coarse stages that both kinds of episode can be labelled with, without
+FLUX: *reach* (block on the table), *carry* (block off the table, not in the cup), *in cup* (also the done signal).
+Demos are labelled from the scripted phases, rollouts from privileged block and cup poses. Features are the CPU
+frame features of Sec. 11.3 at every re-plan (32 frames). Training: 46 demos; test: 14 held-out demos (hash split).
+
+| Memory | Held-out demos: stage acc. (122 re-plans) | done AUROC | A0 rollouts: stage acc. (440 re-plans, truth all *reach*) | A0: re-plans called *carry* / *in cup* |
+|---|---|---|---|---|
+| none | 0.754 | 0.859 | **0.786** | 28 / 66 |
+| GRU | 0.779 | 0.840 | 0.359 | 95 / 187 |
+| TTT | **0.803** | **0.924** | 0.534 | 41 / 164 |
+
+Reading: on demos, memory helps a little (TTT +5 points over none; v1 demos, which ended with a return home, showed
++16 to 18). On A0's failed rollouts the memory models are the worst: the GRU says the block is in the cup on 43% of
+re-plans and TTT on 37%, while it never left the table. They learned the expert's timing and arm motion, not the
+block, and A0's rollouts run longer than any demo (22 re-plans against 7 to 11). A monitor that has to judge FLUX
+needs FLUX rollouts (labelled from privileged poses, cheap in sim) in its training set, or object-centric features,
+before its done signal can be trusted. This is the motion gap that Sec. 11.11 left open, now measured.
+
+Checked: `cup_stages.py train --rollouts <A0 rollouts> --tag _mixa0` adds 12 of the 20 A0 rollouts to the 46 demos
+(the other 8 held out by name hash; `results/cup_stages_train_mixa0.json`):
+
+| Memory | Held-out demos (122 re-plans) | Held-out A0 rollouts (8, truth all *reach*) |
+|---|---|---|
+| none | 0.730 | 0.994 |
+| GRU | 0.795 | 0.983 |
+| TTT | 0.803 | 0.989 |
+
+A dozen failed FLUX rollouts remove the false progress without costing demo accuracy. Not yet shown: whether this
+holds for rollouts that do make progress (the LoRA's, once evaluated), where *carry* and *in cup* must still be
+recognized.
+
+**LoRA run on the 32 GB card** (`pod_sim_lora.sh`, LeRobot `examples/flux3/lora.json`):
+- LeRobot counts `steps`, `save_freq` and `eval_steps` in microsteps (optimizer updates = steps / accumulation), so
+  the preset's 10,000 steps are 2,500 updates; at 2.2 s per microstep that is 6 h here.
+- With the frozen Qwen3-VL text encoder on the GPU, the preset runs out of memory in the video VAE encode, at batch 2
+  (step 6) and at batch 1 (step 19), with 31 GiB in use. `lora_train_te_cpu.py` keeps the encoder on the CPU (the
+  policy caches each caption's context on the GPU; a one-task dataset has two captions, the task and the dropout
+  blank). Base memory drops from 25.6 to 17.1 GiB and the preset's batch 2 × accumulation 4 fits (peak 21.5 GB).
+- DataLoader workers (spawn) each take about 3.5 min to start, one after the other, because torch imports from the
+  network volume. Two workers instead of four save 7 min per run; data loading is not the bottleneck (7 ms/step).
+- Running: 3,200 microsteps (800 updates at effective batch 8: 6,400 samples, half an epoch of LeRobot's 48 training
+  episodes, 12,521 frames; it holds out the last 12), started 18:49 UTC, 2.2 s per microstep, loss 0.22 at step 44; checkpoints every 200 updates; EMA decay 0.995 instead of 0.999 (at
+  800 updates a 0.999 shadow would still hold 45% of the initial adapter). Then `merge` (adapter folded into a plain
+  package for `flux.remote`) and the same 20-layout evaluation for A0r-sim and the LoRA.
+
+**Pods** (for `ws4/cloud/RUNPOD.md`):
+- `ws4-sim-4500` (`fnxekskwlu0095`, RTX PRO 4500, EU-RO-1, $0.72/h, volume `6j5vbwvfu8`), created 16:07 UTC by the
+  orchestrator. Stopped twice by the idle watchdog (`ws4/cloud/idle_stop.sh`: GPU utilization above 5% in a 30 s
+  sample, 30 min): at 17:40 UTC, with nothing on the GPU since 17:10 while the first probe loaded, and at 18:16 UTC,
+  after I had relaunched the same watchdog by hand during a 15 min model load (the probe's only GPU burst, about
+  20 s, fell between samples). It then could not restart ("not enough free GPUs on the host machine") and was
+  terminated at 18:26 UTC. Running time about 2 h 9 min, about $1.55.
+- `ws4-sim-4500b` (`epfpraa5z5038c`, RTX PRO 4500, EU-RO-1, $0.72/h, same volume, image and env), created 18:24:31
+  UTC with Oscar's approval, ssh.direct up within a minute. Idle stop: `ttt/pod_job_watchdog.sh 30`, which also
+  counts a running training, eval, scoring or merge job as busy.
+- The container disk resets on stop: `pod_sim_eval.sh eval` reinstalls the EGL loader. Outputs stay under
+  `/workspace/ttt/` (packages in `/workspace/ttt/packages/`).
+
+To redo it on a pod with the volume (from `/workspace`, after syncing `ws4/ttt` to `liminal/ws4/ttt`):
+
+```bash
+source /etc/rp_environment; setsid nohup bash liminal/ws4/ttt/pod_job_watchdog.sh 30 >> logs/job_watchdog.log 2>&1 &
+bash liminal/ws4/ttt/pod_sim_lora.sh package        # cup quantiles -> ttt/packages/so101sim_cup_left
+bash liminal/ws4/ttt/pod_sim_lora.sh train          # about 2 h; then: bash liminal/ws4/ttt/pod_sim_lora.sh merge
+bash liminal/ws4/ttt/pod_sim_eval.sh serve so101simcup /workspace/ttt/packages/so101sim_cup_left
+bash liminal/ws4/ttt/pod_sim_eval.sh eval so101simcup && bash liminal/ws4/ttt/pod_sim_eval.sh stop
+bash liminal/ws4/ttt/pod_sim_eval.sh serve so101simcuplora /workspace/ttt/packages/so101sim_cup_lora
+bash liminal/ws4/ttt/pod_sim_eval.sh eval so101simcuplora && bash liminal/ws4/ttt/pod_sim_eval.sh stop
+# laptop: copy /workspace/ttt/block_cup_eval/<package> back, then
+python ttt/cup_stages.py score .cache/ttt/block_cup_eval/<package>/seed* --out ttt/results/cup_stages_score_<package>.json
+```
+
+Frames and GIFs for slides (`ws4/ttt/results/`): `block_cup_demo_ep0.gif` and `block_cup_demo_ep0_sheet.jpg` (a
+scripted demo, head | wrist), `block_cup_a0_seed9000000_3x.gif` and `_sheet.jpg` (A0 knocks the cup over, with the
+ground-truth check and stage), `block_cup_a0_seed9000005_3x.gif` (A0 pushes the block). Numbers:
+`cup_stages_train.json`, `cup_stages_score_so101.json`; A0 rollouts in `ws4/.cache/ttt/block_cup_eval/so101/`
+(`index.jsonl`, `summary.json`, three `rollout.mp4`).
+
 ## 12. Sources
 
 - RoboTTT: https://arxiv.org/abs/2607.15275 (v1), https://research.nvidia.com/labs/gear/robottt/,
