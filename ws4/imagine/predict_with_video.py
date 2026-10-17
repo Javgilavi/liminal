@@ -277,11 +277,22 @@ class LatentDecoder:
         self.device = device
         self.dtype = dtype
 
+    def vae_device(self):
+        """Where the VAE's weights live. Captured latents arrive on CPU, so with ``device=None`` they must follow
+        the VAE (LeRobot's decode also queries ``torch.cuda.mem_get_info(z.device)``, video_vae.py:876-879)."""
+        import torch
+
+        module = getattr(self.vae, "module", self.vae)
+        try:
+            return next(module.parameters()).device
+        except (AttributeError, StopIteration):  # parameter-free fakes
+            return torch.device("cpu")
+
     def _prepare(self, latents):
         import torch
 
         dtype = self.dtype or torch.bfloat16
-        device = self.device if self.device is not None else latents.device
+        device = self.device if self.device is not None else self.vae_device()
         return latents.to(device=device, dtype=dtype)
 
     def decode_latents(self, latents) -> np.ndarray:

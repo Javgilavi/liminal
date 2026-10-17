@@ -21,6 +21,8 @@ def test_gpu_commands_parse_without_gpu():
     )
     assert args.policy == "black-forest-labs/flux-3-action-so101" and args.decode_device == "cuda:1"
     assert build_parser().parse_args(["bench"]).candidates == [2, 4]
+    assert build_parser().parse_args(["bench", "--text-encoder-on-cpu"]).text_encoder_on_cpu
+    assert not args.text_encoder_on_cpu
 
 
 def test_nearest_sources_finds_matching_frames():

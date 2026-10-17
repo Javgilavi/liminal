@@ -5,9 +5,10 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from ws4.imagine.fakes import FakeConfig, FakeFluxPolicy, fake_batch, sampling  # noqa: E402
+from ws4.imagine.fakes import FakeConfig, FakeFluxPolicy, FakeVideoVAE, fake_batch, sampling  # noqa: E402
 from ws4.imagine.predict_with_video import (  # noqa: E402
     Imaginer,
+    LatentDecoder,
     alternatives_batch,
     capture_solver_outputs,
     load_imagination,
@@ -138,3 +139,29 @@ def test_alternative_instructions_from_one_observation():
 def test_best_of_n_requires_a_scorer():
     with pytest.raises(ValueError):
         Imaginer(FakeFluxPolicy(), n_candidates=2)
+
+
+class DeviceSpyVAE(FakeVideoVAE):
+    """Weights on another device (``meta`` stands in for CUDA on a CPU-only laptop); records where latents land."""
+
+    def __init__(self):
+        super().__init__()
+        self.module = torch.nn.Linear(1, 1, device="meta")
+        self.seen = []
+
+    def decode(self, latents):
+        self.seen.append(latents.device.type)
+        return super().decode(torch.zeros(latents.shape, dtype=latents.dtype))
+
+
+def test_decoder_moves_cpu_latents_to_the_vae_device():
+    # Regression: captured latents are on CPU; with device=None they must follow the VAE, as LeRobot's decode
+    # calls torch.cuda.mem_get_info(z.device) and rejects CPU tensors (seen on a RunPod GPU).
+    vae = DeviceSpyVAE()
+    LatentDecoder(vae).decode_latents(torch.zeros(1, 96, 2, 2, 4))
+    LatentDecoder(vae, device="cpu").decode_latents(torch.zeros(1, 96, 2, 2, 4))
+    assert vae.seen == ["meta", "cpu"]
+    policy = FakeFluxPolicy()
+    policy.frozen.video_vae = DeviceSpyVAE()
+    (rec,) = Imaginer(policy).imagine(fake_batch())  # the default decoder, same GPU as the policy
+    assert set(policy.frozen.video_vae.seen) == {"meta"} and rec.frames.shape[0] == 41

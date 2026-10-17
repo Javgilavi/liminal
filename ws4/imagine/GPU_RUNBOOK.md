@@ -127,7 +127,8 @@ Read in `report.json`:
 | `peak_memory_gib` | per device | decode peak about 5 GB, est. from the VAE's own calibration constants |
 
 If decode is slow, compare `F3_NATTEN_BACKEND=flex-fna` with `cutlass-fna` and keep the faster one. If memory
-is tight, `policy.frozen.text_encoder.cpu()` after loading frees about 8.3 GiB.
+is tight (24 to 32 GB cards), add `--text-encoder-on-cpu` to `bench` / `replay`. It moves Qwen3-VL to host RAM
+after loading and frees about 8.3 GiB; in your own code, call `policy.frozen.text_encoder.cpu()` instead.
 
 ## 5. Imagined vs recorded future (10 min, the first demo-video material)
 

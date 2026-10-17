@@ -72,21 +72,27 @@ def run_fake(args) -> dict:
 # ---------------------------------------------------------------------------------------------
 # GPU helpers
 # ---------------------------------------------------------------------------------------------
-def load_policy(policy_id: str, device: str):
-    """Checkpoint and its saved processors (LeRobot main; model card usage)."""
+def load_policy(policy_id: str, device: str, *, text_encoder_on_cpu: bool = False):
+    """Checkpoint and its saved processors (LeRobot main; model card usage).
+
+    ``text_encoder_on_cpu`` moves Qwen3-VL to host RAM after the device move: about 8.3 GiB less VRAM, slower
+    first encode of each new instruction (LeRobot docs/source/flux3.mdx). Needed on 24 to 32 GB cards."""
     from lerobot.policies.factory import make_pre_post_processors
     from lerobot.policies.flux3 import Flux3Policy
 
     policy = Flux3Policy.from_pretrained(policy_id)
     policy.to(device).eval()
+    if text_encoder_on_cpu:
+        policy.frozen.text_encoder.cpu()
     pre, post = make_pre_post_processors(policy.config, pretrained_path=policy_id)
     return policy, pre, post
 
 
 def make_decoder(policy, decode_device: str | None):
     """Same-GPU decoding reuses the policy's VAE; another device loads a second frozen copy there."""
-    if not decode_device or decode_device == str(next(policy.parameters()).device):
-        return LatentDecoder(video_vae_of(policy))
+    policy_device = str(next(policy.parameters()).device)
+    if not decode_device or decode_device == policy_device:
+        return LatentDecoder(video_vae_of(policy), device=policy_device)
     from lerobot.policies.flux3.f3 import load_video_vae
 
     return LatentDecoder(load_video_vae(policy.config.video_vae_id, device=decode_device), device=decode_device)
@@ -152,7 +158,7 @@ def run_replay(args) -> dict:
     import torch
     from PIL import Image
 
-    policy, pre, _post = load_policy(args.policy, args.device)
+    policy, pre, _post = load_policy(args.policy, args.device, text_encoder_on_cpu=args.text_encoder_on_cpu)
     cfg = policy.config
     keys = {cfg.camera_order[0]: args.scene_key, cfg.camera_order[1]: args.wrist_key}
     side = cfg.canvas_hw[0]
@@ -263,7 +269,7 @@ def _load_config(policy_id: str):
 def run_bench(args) -> dict:
     import torch
 
-    policy, pre, _post = load_policy(args.policy, args.device)
+    policy, pre, _post = load_policy(args.policy, args.device, text_encoder_on_cpu=args.text_encoder_on_cpu)
     cfg = policy.config
     g = torch.Generator().manual_seed(0)
     cam_hw = (cfg.canvas_hw[0], cfg.canvas_hw[1] // 2)
@@ -327,6 +333,8 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("--policy", default="black-forest-labs/flux-3-action-so101")
         s.add_argument("--device", default="cuda:0")
         s.add_argument("--decode-device", default=None, help="e.g. cuda:1 to decode on another GPU")
+        s.add_argument("--text-encoder-on-cpu", action="store_true",
+                       help="keep Qwen3-VL in host RAM (saves about 8.3 GiB; for 24 to 32 GB cards)")
         s.add_argument("--task", default=None)
         s.add_argument("--out", default=f"outputs/imagine/{name}")
     for name in ("replay", "vaecheck"):
