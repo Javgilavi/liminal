@@ -12,10 +12,10 @@ zero-shot vs post-training, so **collecting our own demos and fine-tuning is the
 
 | Track | Owner | Goal |
 |---|---|---|
-| **Real** | so101-zeroshot (pivoted) + Oscar | Green Haller, one arm, one skill: "put the block in the cup". Fresh LeRobot calibration (degrees), D455 head cam as scene + the task arm's wrist cam, safety guards (step, joint, keep-out, stall, torque cap). **Mirror teleop**: the other Haller arm, torque off and moved by hand, is the leader (joint space, no VR/IK). 50 demos + 10 held-out over 3 layouts, h264 at 30 fps. Graded zero-shot A0r (released weights, our quantiles), then a LoRA from the A0r package on the 6000 pod overnight. Sunday: post-training eval, then Claude chains the skill ("put all the blocks in the cups") with the imagined-vs-actual view. |
+| **Real** | so101-zeroshot (pivoted) + Oscar | Green Haller, one arm, one skill: "put the block in the cup". Fresh LeRobot calibration (degrees), D455 head cam as scene + the task arm's wrist cam, safety guards (step, joint, keep-out, stall, torque cap). **VR teleop** (ws4-vr2, haller_ws HMI in solo mode on the task arm; mirror teleop was dropped because the head camera would see Oscar moving the other arm). One shared fresh LeRobot calibration (`haller_left`/`haller_right`) for recording, training and deployment; only one process holds the arms at a time. 50 demos + 10 held-out over 3 layouts, h264 at 30 fps. Graded zero-shot A0r (released weights, our quantiles), then a LoRA from the A0r package on the 6000 pod overnight. Sunday: post-training eval, then Claude chains the skill ("put all the blocks in the cups") with the imagined-vs-actual view. |
 | **Sim** | ws4-ttt (+ closed-loop child) | Same skill and contract in the MuJoCo Haller station: scripted demos, A0 vs A0r-sim vs LoRA-sim closed-loop success, TTT stage tracking on the rollouts. GPU: the 4500 pod only. Slide material: "pipeline validated in sim". |
 
-Dropped for this weekend: VR bimanual (ws4-vr2 parked as teleop backup), EE50, bimanual coordination, the red arm.
+Dropped for this weekend: VR bimanual (VR is used single-arm only), EE50, bimanual coordination, the red arm.
 GPU split: so101-flux-serve (RTX PRO 6000, EU-CZ-1) = real track serving + LoRA; ws4-flux-inference-2 (4500,
 EU-RO-1) = sim track. The old 4500 pod 4inbmv6d4xb876 is stopped and could not restart (host full).
 
