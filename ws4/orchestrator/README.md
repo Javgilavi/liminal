@@ -13,10 +13,11 @@ reads its joints (read-only, torque untouched) before each FLUX attempt, for the
 FLUX: the per-arm SO-101 package (zero-shot) or tonight's LoRA, served from the RTX PRO 6000 pod (`so101-flux-serve`).
 The arm side is `ws4/single_arm/run_single_arm.py`, imported read-only: torque-safe connect, camera parity with the
 VR recording (head unrotated, wrist rotated 180, default fourcc), joint and step limits, LeRobot's goal cap, the FK
-keep-out, a 60% torque limit; the orchestrator adds its stall and keep-out stops every tick, and every FLUX step first
-ramps to the demos' start pose `[0, 0, 0, 0, 0, 100]` through the same guard, checked against the station zones and the
-parked arm only (`KeepOut.without_envelope`; the demonstrated envelope bounds the policy, and unfolding from the folded
-rest leaves it for a moment). One keep-out refusal on that ramp stops and holds, as `move_to` does; observe mode skips
+keep-out, a 60% torque limit; the orchestrator adds its stall, keep-out and load-freeze stops every tick (load: 70% of
+the torque cap for 9 ticks or 90% once, policy only), and every FLUX step first ramps to the demos' start pose
+`[0, 0, 0, 0, 0, 100]` under the runner's ramp guard: ramp joint limits (1 deg from the stops, rest included) and the
+station zones plus the parked arm only (`KeepOut.without_envelope`). The policy then runs under the soft limits
+(calibrated range minus 5 deg, rest excluded) and all 9 keep-out zones, including the demonstrated envelope. One keep-out refusal on that ramp stops and holds, as `move_to` does; observe mode skips
 the ramp (nothing is sent). Before the ramp it reads the parked arm's pose on `/dev/haller_arm_left`
 (`keepout.read_arm_joints`) so the `other_arm` zone knows where it is. An unknown pose blocks the attempt (fail closed: the midline alone misses some
 reaches toward that arm): if another process holds that port (someone may be driving the arm), or the read fails and

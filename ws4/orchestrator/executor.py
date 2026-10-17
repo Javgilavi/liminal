@@ -56,6 +56,7 @@ class StepRun:
     reason: str = ""
     phase: str = ""
     homing: bool = False  # ramping to the skill's start pose before the policy starts
+    ramp_on: bool = False  # a scripted ramp (homing or the home step) runs: ramp_mode(True) is in effect
     t_home: float = 0.0
     policy_started: bool = False
     attempt_interventions: int = 0
@@ -401,8 +402,7 @@ class Executor:
             else None
         if home is not None:
             # Every FLUX step starts where its demonstrations started: ramp there through the same guard first.
-            if self.ramp_mode is not None:
-                self.ramp_mode(True)
+            self._ramp(run, True)
             self.runner.start(home, "home")
             run.target, run.homing, run.t_home, run.phase = home, True, self.t, "homing"
             self.events.add("info", f"{step.id}: moving the {step.arm} arm to the start pose before attempt "
@@ -417,6 +417,8 @@ class Executor:
         run.t_start, run.chunks, run.verify_at, run.phase = self.t, 0, skill.verify_every_chunks, ""
         target = self.resolve_target(step, skill)
         backend = self.backends.get(target)
+        if skill.name == "home":  # a scripted ramp too
+            self._ramp(run, True)
         try:
             if hasattr(backend, "begin"):
                 backend.begin(target, step.arm, skill)
@@ -470,8 +472,7 @@ class Executor:
                 if backend.reached("home", report.command[arm_slice(step.arm)], state6):
                     self.runner.stop(run.target)
                     run.homing = False
-                    if self.ramp_mode is not None:
-                        self.ramp_mode(False)
+                    self._ramp(run, False)
                     self.events.add("info", f"{step.id}: at the start pose")
                     self._start_policy(run)
                 else:
@@ -540,9 +541,13 @@ class Executor:
         if all(r.status == "done" for r in self.runs.values()):
             self._finish("succeeded", "")
 
+    def _ramp(self, run: StepRun, on: bool) -> None:
+        if self.ramp_mode is not None and run.ramp_on != on:
+            self.ramp_mode(on)
+        run.ramp_on = on
+
     def _release(self, run: StepRun) -> None:
-        if run.homing and self.ramp_mode is not None:
-            self.ramp_mode(False)
+        self._ramp(run, False)
         if run.verifying is not None:
             run.verifying.cancel()
             run.verifying = None

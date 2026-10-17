@@ -68,6 +68,8 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     h.add_argument("--stall-ticks", type=int, default=15)
     h.add_argument("--keepout-ticks", type=int, default=45)
     h.add_argument("--home-speed", type=float, default=1.0, help="deg per tick to the start pose")
+    h.add_argument("--limit-margin", type=float, default=5.0, help="policy soft limits: deg inside the calibration")
+    h.add_argument("--ramp-margin", type=float, default=1.0, help="scripted ramps: deg inside the calibration")
     h.add_argument("--allow-torque-off", action="store_true")
     h.add_argument("--no-other-arm", action="store_true",
                    help="deliberate tests only: do not read the parked robot-right arm's pose, so the keep-out's "
@@ -104,7 +106,7 @@ def _config(a: argparse.Namespace):
             max_relative_target=a.max_relative_target, torque_limit=a.torque_limit, max_step=a.max_step,
             max_gripper_step=a.max_gripper_step, stall_deg=a.stall_deg, stall_ticks=a.stall_ticks,
             keepout_ticks=a.keepout_ticks, home_speed=a.home_speed, allow_torque_off=a.allow_torque_off,
-            read_other_arm=not a.no_other_arm,
+            read_other_arm=not a.no_other_arm, limit_margin=a.limit_margin, ramp_margin=a.ramp_margin,
             token_cmd=a.token_cmd,
         )
     return SessionConfig(

@@ -12,7 +12,8 @@ The orchestrator reuses the single-arm runner's robot side instead of its attemp
   policy only, the demonstrated envelope (``joint_env``, ``tcp_env``); ramps use ``KeepOut.without_envelope``.
 - ``hold_here`` on every stop (freeze at the MEASURED pose), ``warm_up`` (pre-encode prompts on the server), and the
   torque-safe shutdown of its ``main``.
-The per-tick stall and keep-out stops are rebuilt in ``monitors.py`` with the same defaults.
+The per-tick stall, keep-out and load-freeze stops are rebuilt in ``monitors.py`` with the same defaults, and scripted
+ramps get the runner's ramp guard (``build_guard(ramp=True)`` limits, ``KeepOut.without_envelope``).
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from typing import Any
 import numpy as np
 
 from . import WS4
-from .monitors import KeepOutMonitor, StallMonitor
+from .monitors import KeepOutMonitor, LoadMonitor, StallMonitor
 
 OTHER_ARM_PORT = "/dev/haller_arm_left"  # the parked ROBOT-right arm
 OTHER_ARM_ID = "haller_left"
@@ -101,17 +102,24 @@ class HallerRig:
     clock: Callable[[], float] = time.monotonic
     _pose_t: float | None = None  # when other_q was last read successfully
     full_keepout: Any = None  # every zone incl. the demonstrated envelope; the guard's keepout outside ramps
+    policy_limits: Any = None  # build_guard(ramp=False): calibrated range minus --limit-margin, rest NOT included
+    ramp_limits: Any = None  # build_guard(ramp=True): --ramp-margin from the stops, widened to include rest
 
     @property
     def keepout(self) -> Any:
         return self.full_keepout if self.full_keepout is not None else self.guard.keepout
 
-    def ramp_keepout(self, on: bool) -> None:
-        """Scripted ramps check the station zones and the parked arm only (``KeepOut.without_envelope``, as
-        run_single_arm does): the envelope bounds what the POLICY may command, and unfolding from the folded rest
-        leaves the demonstrated TCP workspace for a moment (refused at step 20 of 98 with the full keep-out)."""
+    def set_ramp(self, on: bool) -> None:
+        """Scripted ramps (to the start pose, the ``home`` step) run under what run_single_arm gives its ramps:
+        - the ramp joint limits (``build_guard(ramp=True)``): the folded rest lies outside the policy's soft limits;
+        - the station zones and the parked arm only (``KeepOut.without_envelope``): the envelope bounds what the POLICY
+          may command, and unfolding from the folded rest leaves the demonstrated TCP workspace for a moment (refused
+          at step 20 of 98 with the full keep-out)."""
         full = self.keepout
         self.guard.keepout = full.without_envelope() if on and hasattr(full, "without_envelope") else full
+        limits = self.ramp_limits if on else self.policy_limits
+        if limits is not None:
+            self.guard.config = limits
 
     def refresh_other_arm(self) -> OtherArmPose:
         """Pose of the parked robot-right arm for the keep-out's other_arm zone, read-only (keepout.read_arm_joints:
@@ -172,15 +180,9 @@ class HallerRig:
         return "arm still holds with torque on; support it before switching the power off"
 
 
-def build(cfg: Any) -> HallerRig:
+def build(cfg: Any, home_pose: Any = None) -> HallerRig:
     sar, keepout_cls = import_single_arm()
-    ns = argparse.Namespace(
-        port=cfg.port, robot_id=cfg.robot_id, scene_cam=cfg.head_cam, wrist_cam=cfg.wrist_cam, scene_rotate=0,
-        wrist_rotate=cfg.wrist_rotate, scene_fourcc=cfg.scene_fourcc, wrist_fourcc=cfg.wrist_fourcc, parity_side=None,
-        max_relative_target=cfg.max_relative_target, observe=cfg.observe, allow_torque_off=cfg.allow_torque_off,
-        torque_limit=cfg.torque_limit, limit_margin=cfg.limit_margin, max_step=cfg.max_step,
-        max_gripper_step=cfg.max_gripper_step,
-    )
+    ns = guard_namespace(cfg, home_pose)
     real = cfg.robot == "so101"
     if real:
         if not cfg.head_cam:
@@ -188,14 +190,35 @@ def build(cfg: Any) -> HallerRig:
         so101 = sar.connect_so101(ns)
         calib = so101.calibration_fpath
     else:
-        so101, calib = sar.FakeSO101(), None
+        so101, calib = sar.FakeSO101(cfg.fake_start), cfg.fake_calibration or None
     robot = sar.SingleArmRobot(so101, SLOT, send=not cfg.observe, max_relative_target=cfg.max_relative_target)
     rest = robot.joints()
-    guard_cfg = sar.build_guard(ns, SLOT, calib, rest)
+    policy_limits, ramp_limits = guard_limits(sar, ns, calib, rest)
     keepout = keepout_cls.load(Path(cfg.keepout_config))
     if real and not keepout.calibrated:
         print("NOTE: table height not calibrated (keepout.py --touch); using the UNVERIFIED default", flush=True)
-    guard = sar.KeepOutGuard(guard_cfg, keepout, SLOT, lambda: robot.last_q)
-    monitors = [StallMonitor(SLOT, cfg.stall_deg, cfg.stall_ticks), KeepOutMonitor(guard, cfg.keepout_ticks)]
+    guard = sar.KeepOutGuard(policy_limits, keepout, SLOT, lambda: robot.last_q)
+    load_cap = 10.0 * (cfg.torque_limit if real else 100.0)  # Present_Load units at the torque cap (run_attempt)
+    monitors = [StallMonitor(SLOT, cfg.stall_deg, cfg.stall_ticks), KeepOutMonitor(guard, cfg.keepout_ticks),
+                LoadMonitor(robot.arm_load, load_cap, cfg.load_sustain, cfg.load_peak, cfg.load_ticks)]
     return HallerRig(sar, so101, robot, guard, monitors, rest, real, cfg.observe, cfg.other_arm_port,
-                     cfg.other_arm_id, cfg.read_other_arm, cfg.other_arm_max_age_s, full_keepout=keepout)
+                     cfg.other_arm_id, cfg.read_other_arm, cfg.other_arm_max_age_s, full_keepout=keepout,
+                     policy_limits=policy_limits, ramp_limits=ramp_limits)
+
+
+def guard_namespace(cfg: Any, home_pose: Any = None) -> argparse.Namespace:
+    """The run_single_arm flags its connect and build_guard read. ``start_pose`` set: the policy always starts there,
+    so its soft limits are not widened to the rest pose (build_guard)."""
+    return argparse.Namespace(
+        port=cfg.port, robot_id=cfg.robot_id, scene_cam=cfg.head_cam, wrist_cam=cfg.wrist_cam, scene_rotate=0,
+        wrist_rotate=cfg.wrist_rotate, scene_fourcc=cfg.scene_fourcc, wrist_fourcc=cfg.wrist_fourcc, parity_side=None,
+        max_relative_target=cfg.max_relative_target, observe=cfg.observe, allow_torque_off=cfg.allow_torque_off,
+        torque_limit=cfg.torque_limit, limit_margin=cfg.limit_margin, ramp_margin=cfg.ramp_margin,
+        max_step=cfg.max_step, max_gripper_step=cfg.max_gripper_step,
+        start_pose=None if home_pose is None else [float(v) for v in home_pose],
+    )
+
+
+def guard_limits(sar: Any, ns: argparse.Namespace, calib: Any, rest: np.ndarray) -> tuple[Any, Any]:
+    """(policy, ramp) SafetyConfigs as run_single_arm.main builds them."""
+    return sar.build_guard(ns, SLOT, calib, rest), sar.build_guard(ns, SLOT, calib, rest, ramp=True)

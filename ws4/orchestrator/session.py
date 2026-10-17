@@ -107,7 +107,13 @@ class SessionConfig:
     torque_limit: float = 60.0
     max_step: float = 2.0
     max_gripper_step: float = 5.0
-    limit_margin: float = 5.0
+    limit_margin: float = 5.0  # policy soft limits: deg inside the calibrated range
+    ramp_margin: float = 1.0  # scripted ramps: deg inside the calibrated range (run_single_arm --ramp-margin)
+    load_sustain: float = 0.7  # load freeze, fractions of the torque cap (run_single_arm --load-*)
+    load_peak: float = 0.9
+    load_ticks: int = 9
+    fake_calibration: str = ""  # fake arm only: a LeRobot calibration file for real joint limits (tests)
+    fake_start: tuple[float, ...] | None = None  # fake arm only: its pose at launch (default: run_single_arm's)
     stall_deg: float = 8.0
     stall_ticks: int = 15
     keepout_ticks: int = 45
@@ -222,12 +228,12 @@ class Session:
         elif cfg.env == "haller":
             from . import haller
 
-            self.rig = haller.build(cfg)
+            self.rig = haller.build(cfg, self.vocab.station.home_pose)
             base_robot = self.rig.robot
-            for m in self.rig.monitors:  # the ramp to the start pose stops at the first keep-out refusal
+            for m in self.rig.monitors:  # ramps: first keep-out refusal stops; no load freeze (as run_single_arm)
                 if hasattr(m, "ramping"):
                     m.ramping = lambda: self.executor is not None and any(
-                        r.homing for r in self.executor.runs.values() if r.status == "running")
+                        r.ramp_on for r in self.executor.runs.values() if r.status == "running")
         elif cfg.env == "xlerobot":
             from flux.run_xlerobot import LeRobotBimanualRobot, build_robot
 
@@ -583,7 +589,7 @@ class Session:
             on_attempt=self._log_attempt,
             on_estop=self.rig.hold if self.rig is not None else None,
             before_attempt=self._before_attempt if self.rig is not None else None,
-            ramp_mode=self.rig.ramp_keepout if self.rig is not None else None,
+            ramp_mode=self.rig.set_ramp if self.rig is not None else None,
         )
         result = self.executor.run(plan)
         self._encode_frames(self.base_robot.get_observation())

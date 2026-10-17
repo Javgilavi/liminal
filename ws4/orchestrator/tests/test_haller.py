@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 import yaml
 from orchestrator.haller import OtherArmPose
-from orchestrator.monitors import KeepOutMonitor, StallMonitor
+from orchestrator.monitors import KeepOutMonitor, LoadMonitor, StallMonitor
 from orchestrator.plan import Plan, Step, validate_plan
 from orchestrator.planner import StubPlanner
 from orchestrator.session import Session, SessionConfig, load_trial_log
@@ -377,5 +377,100 @@ def test_observe_mode_skips_the_ramp(tmp_path):
         plan = s.plan("put the pen in the box").result.plan
         assert s.execute(plan).status == "succeeded"
         assert starts == [PUT]
+    finally:
+        s.close()
+
+
+HALLER_CALIB = DEFAULT_VOCABULARY.parent.parent / "single_arm" / "calibration" / "haller_right.json"
+
+
+def test_policy_and_ramp_limits_as_run_single_arm_builds_them():
+    """build_guard reads start_pose and ramp_margin: with the start pose set, the policy's soft limits exclude the
+    folded rest; the ramp limits include it (so101-zeroshot 2026-10-17: lift +-99.9, elbow and flex +-93.5)."""
+    if not HALLER_CALIB.exists():
+        pytest.skip("no Haller calibration file")
+    from orchestrator import haller as haller_mod
+
+    sar, _ = haller_mod.import_single_arm()
+    cfg = SessionConfig(env="haller")
+    ns = haller_mod.guard_namespace(cfg, (0, 0, 0, 0, 0, 100))
+    policy, ramp = haller_mod.guard_limits(sar, ns, HALLER_CALIB, np.array(FOLDED_REST))
+    s = slice(0, 6)  # the task arm sits in the runner's left slot
+    lo, hi = policy.lower[s], policy.upper[s]
+    assert np.allclose([lo[1], hi[1]], [-99.9, 99.9], atol=0.2) and np.allclose([lo[2], hi[2]], [-93.5, 93.5], atol=0.2)
+    assert FOLDED_REST[2] > hi[2]  # elbow 97 is outside the policy limits ...
+    assert ramp.lower[s][2] <= FOLDED_REST[2] <= ramp.upper[s][2]  # ... and inside the ramp limits
+    assert (ramp.upper[s] >= hi).all() and (ramp.lower[s] <= lo).all()
+
+
+def test_load_monitor():
+    load = {"v": np.zeros(5)}
+    ramp = {"on": False}
+    mon = LoadMonitor(lambda: load["v"], cap=600.0, ticks=3, ramping=lambda: ramp["on"])
+    tick = iter(range(1, 1000))
+    call = lambda: mon(SimpleNamespace(tick=next(tick)), {})  # noqa: E731
+    load["v"] = np.array([0, 450, 0, 0, 0])  # 75% of the cap on the shoulder lift
+    assert call() is None and call() is None and "shoulder_lift at 75%" in call()
+    load["v"] = np.array([0, 0, 0, 550, 0])  # 92% on one tick
+    assert "wrist_flex at 92%" in call()
+    ramp["on"] = True  # ramps have no load freeze (run_single_arm.move_to)
+    assert all(call() is None for _ in range(5))
+    ramp["on"] = False
+    load["v"] = None
+    assert call() is None  # no reading (bus hiccup): nothing to judge
+
+
+def haller_session(tmp_path, **kw):
+    cfg = SessionConfig(env="haller", robot="fake", policy="fake", planner="stub", verifier="manual",
+                        realtime=False, task="pen_chain", vocabulary=short_vocab(tmp_path), max_run_s=60,
+                        trial_log=str(tmp_path / "trials.jsonl"), runs_dir=str(tmp_path / "runs"), **kw)
+    s = Session(cfg)
+    s.verifier = PassOnAttempt()
+    return s
+
+
+def test_ramp_from_the_folded_rest_under_real_limits(tmp_path):
+    """Ramp limits and station keep-out while ramping, policy limits and the full keep-out under FLUX."""
+    if not HALLER_CALIB.exists():
+        pytest.skip("no Haller calibration file")
+    s = haller_session(tmp_path, fake_calibration=str(HALLER_CALIB), fake_start=tuple(FOLDED_REST))
+    try:
+        seen = {}
+        original = s.runner.start
+
+        def spy(target, task):
+            seen[task] = (s.rig.guard.config is s.rig.ramp_limits, s.rig.guard.keepout is s.rig.full_keepout)
+            return original(target, task)
+
+        s.runner.start = spy
+        plan = s.plan("put the pen in the box").result.plan
+        assert s.execute(plan).status == "succeeded"
+        assert seen == {"home": (True, False), PUT: (False, True)}
+        assert s.rig.guard.config is s.rig.policy_limits and s.rig.guard.keepout is s.rig.full_keepout
+        assert not any("E-STOP" in e["msg"] for e in s.events.recent())
+    finally:
+        s.close()
+
+
+def test_load_freeze_stops_the_policy_not_the_ramp(tmp_path):
+    s = haller_session(tmp_path)
+    try:
+        s.verifier = PassOnAttempt({"put_pen_in_slot": 99})  # keep the policy running
+        s.rig.so101.load = [0, 800, 0, 0, 0]  # 80% of the fake's cap from the start
+        holds = []
+        s.rig.hold = lambda reason="": holds.append(reason)
+        plan = s.plan("put the pen in the box").result.plan
+        out = {}
+        thread = threading.Thread(target=lambda: out.setdefault("r", s.execute(plan)))
+        thread.start()
+        deadline = time.time() + 20
+        while (s.executor is None or s.executor.state != "estopped") and time.time() < deadline:
+            time.sleep(0.01)
+        assert s.executor.state == "estopped" and holds and "load: shoulder_lift at 80%" in holds[0]
+        msgs = [e["msg"] for e in s.events.recent()]
+        assert any("at the start pose" in m for m in msgs)  # the ramp finished under the same load
+        s.abort()
+        thread.join(timeout=10)
+        assert out["r"].status == "aborted"
     finally:
         s.close()
