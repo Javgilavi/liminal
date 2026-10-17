@@ -70,7 +70,9 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     h.add_argument("--home-speed", type=float, default=1.0, help="deg per tick to the start pose")
     h.add_argument("--allow-torque-off", action="store_true")
     h.add_argument("--no-other-arm", action="store_true",
-                   help="do not read the parked robot-right arm's pose (keep-out other_arm zone stays inactive)")
+                   help="deliberate tests only: do not read the parked robot-right arm's pose, so the keep-out's "
+                   "other_arm zone is off (logged in every attempt's notes). Default: read it before every FLUX "
+                   "attempt and block the attempt when the pose is unknown")
     h.add_argument("--token-cmd", default="", help="command printing the policy server token (never shown)")
     e = p.add_argument_group("execution and logging")
     e.add_argument("--no-gate", action="store_true", help="disable the inter-arm collision gate")

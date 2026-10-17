@@ -19,6 +19,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,8 +34,18 @@ OTHER_ARM_PORT = "/dev/haller_arm_left"  # the parked ROBOT-right arm
 OTHER_ARM_ID = "haller_left"
 
 
+@dataclass
+class OtherArmPose:
+    """Outcome of one refresh. ``block`` set: the attempt must not start (fail closed, so101-zeroshot 2026-10-17)."""
+
+    note: str  # short tag for the attempt's trial_log notes
+    message: str
+    block: str = ""
+
+
 def port_users(port: str) -> list[int]:
-    """PIDs of OTHER processes that have ``port`` open (scans /proc; a busy bus must never get a second reader)."""
+    """PIDs of OTHER processes that have ``port`` open (scans /proc; a busy bus must never get a second reader).
+    Only processes of the same user are visible; another user's process holding the port is not detected."""
     try:
         real = os.path.realpath(port)
     except OSError:
@@ -84,29 +96,46 @@ class HallerRig:
     other_arm_port: str = OTHER_ARM_PORT
     other_arm_id: str = OTHER_ARM_ID
     read_other_arm: bool = True
+    other_arm_max_age_s: float = 180.0
+    clock: Callable[[], float] = time.monotonic
+    _pose_t: float | None = None  # when other_q was last read successfully
 
     @property
     def keepout(self) -> Any:
         return self.guard.keepout
 
-    def refresh_other_arm(self) -> str:
+    def refresh_other_arm(self) -> OtherArmPose:
         """Pose of the parked robot-right arm for the keep-out's other_arm zone, read-only (keepout.read_arm_joints:
-        no register writes, torque untouched). Skipped, zone inactive, when another process holds that port."""
-        if not (self.real and self.read_other_arm):
-            return "other arm not read (fake arm or disabled)"
+        no register writes, torque untouched). The midline alone misses some reaches toward that arm, so an unknown
+        pose blocks the attempt instead of running without the zone:
+        - the port is held by another process: that arm may not be parked at all (someone may be driving it);
+        - the read raises: the last pose read in this session is reused if younger than ``other_arm_max_age_s``."""
+        if not self.real:
+            return OtherArmPose("fake arm", "other arm not read (fake arm)")
+        if not self.read_other_arm:
+            self.keepout.other_q = None
+            return OtherArmPose("DISABLED (--no-other-arm)", "other arm not read (--no-other-arm): other_arm zone off")
         users = port_users(self.other_arm_port)
         if users:
-            self.keepout.other_q = None
-            return f"other_arm zone INACTIVE: {self.other_arm_port} is held by pid {users}"
+            self.keepout.other_q, self._pose_t = None, None
+            why = f"{self.other_arm_port} is held by pid {users}: the parked arm may be moving"
+            return OtherArmPose("blocked: port held", why, f"other arm: {why}; stop that process, then Release and "
+                                "Resume")
         try:
             from keepout import read_arm_joints  # noqa: PLC0415
 
             q = read_arm_joints(self.other_arm_port, self.other_arm_id)
-        except Exception as exc:  # the zone is an extra layer; midline still guards that side
+        except Exception as exc:
+            err = f"could not read {self.other_arm_port} ({type(exc).__name__}: {exc})"
+            age = None if self._pose_t is None or self.keepout.other_q is None else self.clock() - self._pose_t
+            if age is not None and age <= self.other_arm_max_age_s:
+                return OtherArmPose(f"cached {age:.0f} s", f"{err}; reusing its pose read {age:.0f} s ago")
             self.keepout.other_q = None
-            return f"other_arm zone INACTIVE: could not read {self.other_arm_port} ({type(exc).__name__}: {exc})"
-        self.keepout.other_q = tuple(float(v) for v in q)
-        return f"other arm pose for the keep-out: {np.round(q, 1).tolist()}"
+            stale = "no earlier pose" if age is None else f"last pose is {age:.0f} s old"
+            return OtherArmPose("blocked: read failed", f"{err}, {stale}",
+                                f"other arm: {err}, {stale}; check the cable, then Release and Resume")
+        self.keepout.other_q, self._pose_t = tuple(float(v) for v in q), self.clock()
+        return OtherArmPose("read", f"other arm pose for the keep-out: {np.round(q, 1).tolist()}")
 
     def hold(self, reason: str = "") -> None:
         """Freeze at the measured pose so a blocked joint stops pushing (the runner alone would hold the command)."""
@@ -160,4 +189,4 @@ def build(cfg: Any) -> HallerRig:
     guard = sar.KeepOutGuard(guard_cfg, keepout, SLOT, lambda: robot.last_q)
     monitors = [StallMonitor(SLOT, cfg.stall_deg, cfg.stall_ticks), KeepOutMonitor(guard, cfg.keepout_ticks)]
     return HallerRig(sar, so101, robot, guard, monitors, rest, real, cfg.observe, cfg.other_arm_port,
-                     cfg.other_arm_id, cfg.read_other_arm)
+                     cfg.other_arm_id, cfg.read_other_arm, cfg.other_arm_max_age_s)

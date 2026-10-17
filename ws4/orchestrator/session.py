@@ -114,6 +114,7 @@ class SessionConfig:
     home_speed: float = 1.0  # deg per tick when ramping to the start pose (run_single_arm --return-speed)
     allow_torque_off: bool = False
     read_other_arm: bool = True  # read the parked arm's pose before each FLUX step (keep-out other_arm zone)
+    other_arm_max_age_s: float = 180.0  # a failed read may reuse a pose this young; older blocks the attempt
     other_arm_port: str = "/dev/haller_arm_left"
     other_arm_id: str = "haller_left"
     token_cmd: str = ""  # e.g. "ssh -p PORT root@HOST cat /workspace/flux_token"; output never shown
@@ -181,6 +182,7 @@ class Session:
         self.proposal: Proposal | None = None
         self.goal = ""
         self.executor: Executor | None = None
+        self._other_arm: dict[tuple[str, int], str] = {}  # (step, attempt) -> how the parked arm's pose was known
         self.last_result: dict | None = None
         self.planning = False
         self.run_dir: Path | None = None
@@ -631,19 +633,23 @@ class Session:
             return "sim:scripted-stand-in"
         return ", ".join(f"{a}={cfg.package_for(a)}" for a in self._arms())
 
-    def _before_policy(self, run: Any) -> None:
-        msg = self.rig.refresh_other_arm()
-        self.events.add("warn" if "INACTIVE" in msg else "info", f"{run.step.id}: {msg}")
+    def _before_policy(self, run: Any) -> str | None:
+        pose = self.rig.refresh_other_arm()
+        self._other_arm[(run.step.id, run.attempt)] = pose.note
+        level = "error" if pose.block else "info" if pose.note in ("read", "fake arm") else "warn"
+        self.events.add(level, f"{run.step.id}: {pose.message}")
+        return pose.block or None
 
     def _log_attempt(self, run: Any, ok: bool, reason: str) -> None:
         """One trial_log line per FLUX attempt (task = the skill), so each skill's success rate is graded too."""
         cfg = self.cfg
         tl = load_trial_log()
         verdict = run.verdicts[-1] if run.verdicts else None
+        other = self._other_arm.get((run.step.id, run.attempt), "n/a")
         notes = (f"step {run.step.id} attempt {run.attempt}/{run.step.max_attempts} of run "
                  f"{self.run_dir.name if self.run_dir else '-'}; prompt {run.skill.prompt!r}; "
                  f"{(self.executor.t if self.executor else 0) - run.t_start:.1f} s, {run.chunks} chunks; "
-                 f"verifier={self.verifier.name}"
+                 f"verifier={self.verifier.name}; other_arm={other}"
                  + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"
                     if verdict else ""))
         trial = tl.Trial(

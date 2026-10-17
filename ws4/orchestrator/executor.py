@@ -110,7 +110,7 @@ class Executor:
         monitors: list[Callable[[Any, dict], str | None]] | None = None,
         on_attempt: Callable[[StepRun, bool, str], None] | None = None,
         on_estop: Callable[[str], None] | None = None,
-        before_policy: Callable[[StepRun], None] | None = None,
+        before_policy: Callable[[StepRun], str | None] | None = None,
     ):
         self.runner = runner
         self.robot = robot
@@ -131,7 +131,8 @@ class Executor:
         self.monitors = list(monitors or [])  # per-tick checks; a returned reason latches the e-stop
         self.on_attempt = on_attempt  # every FLUX attempt that started: (run, verified, reason)
         self.on_estop = on_estop
-        self.before_policy = before_policy  # e.g. refresh the parked arm's pose for the keep-out
+        # e.g. refresh the parked arm's pose for the keep-out; a returned reason blocks the attempt (e-stop latched)
+        self.before_policy = before_policy
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="verify")
         self._lock = threading.RLock()
         self._commands: list[tuple[str, Any]] = []
@@ -406,7 +407,12 @@ class Executor:
         target = self.resolve_target(step, skill)
         backend = self.backends.get(target)
         if skill.is_flux and self.before_policy is not None:
-            self.before_policy(run)
+            block = self.before_policy(run)
+            if block:
+                run.target, run.phase = None, "blocked"
+                self.events.add("error", f"{step.id}: not started: {block}")
+                self.estop(block)  # the arm holds at the start pose; Resume retries this attempt
+                return
         try:
             if hasattr(backend, "begin"):
                 backend.begin(target, step.arm, skill)

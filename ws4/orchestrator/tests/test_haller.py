@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import yaml
+from orchestrator.haller import OtherArmPose
 from orchestrator.monitors import KeepOutMonitor, StallMonitor
 from orchestrator.plan import Plan, Step, validate_plan
 from orchestrator.planner import StubPlanner
@@ -193,24 +194,40 @@ def test_other_arm_pose_is_read_only_when_the_port_is_free(monkeypatch):
     import keepout
 
     ko = SimpleNamespace(other_q=None)
+    now = {"t": 1000.0}
     rig = haller_mod.HallerRig(sar=None, so101=None, robot=None, guard=SimpleNamespace(keepout=ko), monitors=[],
-                               rest=np.zeros(6), real=True, observe=False)
+                               rest=np.zeros(6), real=True, observe=False, clock=lambda: now["t"])
     reads = []
-    monkeypatch.setattr(keepout, "read_arm_joints", lambda port, rid: reads.append((port, rid)) or np.arange(6.0))
+    good = np.arange(6.0)
+    monkeypatch.setattr(keepout, "read_arm_joints", lambda port, rid: reads.append((port, rid)) or good)
     monkeypatch.setattr(haller_mod, "port_users", lambda port: [])
-    assert "other arm pose" in rig.refresh_other_arm()
+    pose = rig.refresh_other_arm()
+    assert not pose.block and pose.note == "read"
     assert reads == [("/dev/haller_arm_left", "haller_left")] and ko.other_q == (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
-    monkeypatch.setattr(haller_mod, "port_users", lambda port: [4242])  # e.g. the VR recorder still holds it
-    assert "INACTIVE" in rig.refresh_other_arm() and ko.other_q is None and len(reads) == 1
 
     def broken(port, rid):
         raise OSError("no such device")
 
-    monkeypatch.setattr(haller_mod, "port_users", lambda port: [])
     monkeypatch.setattr(keepout, "read_arm_joints", broken)
-    assert "INACTIVE" in rig.refresh_other_arm() and ko.other_q is None
+    now["t"] += 120  # a failed read reuses a pose younger than 180 s
+    pose = rig.refresh_other_arm()
+    assert not pose.block and pose.note == "cached 120 s" and ko.other_q == (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    now["t"] += 61  # ... and blocks once it is older
+    pose = rig.refresh_other_arm()
+    assert "OSError" in pose.block and "181 s old" in pose.block and ko.other_q is None
+    monkeypatch.setattr(keepout, "read_arm_joints", lambda port, rid: good)
+    assert not rig.refresh_other_arm().block
+    monkeypatch.setattr(haller_mod, "port_users", lambda port: [4242])  # someone may be driving the parked arm
+    pose = rig.refresh_other_arm()
+    assert "held by pid [4242]" in pose.block and ko.other_q is None
+    monkeypatch.setattr(haller_mod, "port_users", lambda port: [])
+    monkeypatch.setattr(keepout, "read_arm_joints", broken)  # a held port also drops the cached pose
+    assert "no earlier pose" in rig.refresh_other_arm().block
+    rig.read_other_arm = False
+    pose = rig.refresh_other_arm()
+    assert not pose.block and pose.note.startswith("DISABLED") and ko.other_q is None
     rig.real = False  # the fake arm never touches a bus
-    assert "not read" in rig.refresh_other_arm()
+    assert rig.refresh_other_arm().note == "fake arm"
 
 
 def test_port_users_finds_an_open_file(tmp_path):
@@ -233,14 +250,14 @@ def test_port_users_finds_an_open_file(tmp_path):
     assert port_users(str(tmp_path / "nobody_has_this")) == []
 
 
-def test_other_arm_refreshed_at_home_before_every_flux_attempt(haller):
+def test_other_arm_refreshed_at_home_before_every_flux_attempt(haller, tmp_path):
     verifier = PassOnAttempt()
     haller.verifier = verifier
     calls = []
 
     def refresh():
         calls.append(np.round(haller.rig.robot.joints(), 1).tolist())
-        return "other arm pose for the keep-out: [0, 0, 0, 0, 0, 0]"
+        return OtherArmPose("read", "other arm pose for the keep-out: [0, 0, 0, 0, 0, 0]")
 
     haller.rig.refresh_other_arm = refresh
     plan = haller.plan("put the pen in the box, take it out").result.plan
@@ -249,6 +266,35 @@ def test_other_arm_refreshed_at_home_before_every_flux_attempt(haller):
     for q in calls:  # after the ramp, before FLUX starts
         assert np.abs(np.array(q) - [0, 0, 0, 0, 0, 100]).max() <= 3.0
     assert sum("other arm pose" in e["msg"] for e in haller.events.recent()) == 2
+    attempts = [t for t in load_trial_log().load(tmp_path / "trials.jsonl") if t.task != "pen_chain"]
+    assert len(attempts) == 2 and all("other_arm=read" in t.notes for t in attempts)
+
+
+def test_unknown_other_arm_pose_blocks_the_attempt_until_resumed(haller):
+    haller.verifier = PassOnAttempt()
+    poses = [OtherArmPose("blocked: port held", "held", "other arm: /dev/haller_arm_left is held by pid [7]"),
+             OtherArmPose("read", "other arm pose for the keep-out: [0, 0, 0, 0, 0, 0]")]
+    haller.rig.refresh_other_arm = lambda: poses.pop(0)
+    holds, starts = [], []
+    haller.rig.hold = lambda reason="": holds.append(reason)
+    original = haller.runner.start
+    haller.runner.start = lambda target, task: starts.append(task) or original(target, task)
+    plan = haller.plan("put the pen in the box").result.plan
+    out = {}
+    thread = threading.Thread(target=lambda: out.setdefault("r", haller.execute(plan)))
+    thread.start()
+    deadline = time.time() + 20
+    while (haller.executor is None or haller.executor.state != "estopped") and time.time() < deadline:
+        time.sleep(0.01)
+    assert haller.executor.state == "estopped"
+    assert holds and "held by pid [7]" in holds[0]
+    assert PUT not in starts  # FLUX never started on an unknown parked-arm pose
+    haller.release()
+    while haller.executor.state != "paused" and time.time() < deadline:
+        time.sleep(0.01)
+    haller.resume()
+    thread.join(timeout=20)
+    assert out["r"].status == "succeeded" and starts.count(PUT) == 1 and not poses
 
 
 def test_keepout_refusal_during_the_ramp_stops_and_holds(haller):
