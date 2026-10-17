@@ -227,6 +227,17 @@ def test_disconnected_emergency_release_is_harmless():
         arm.set_torque(True)
 
 
+def test_camera_only_lifecycle_connects_and_disconnects_camera():
+    from liminal.hardware.runtime import connected_cameras
+
+    camera = MagicMock(name="top")
+    camera.name = "top"
+    with connected_cameras({"top": camera}):
+        camera.connect.assert_called_once()
+
+    camera.disconnect.assert_called_once()
+
+
 @pytest.mark.parametrize("operation", ["read_state", "send_action"])
 def test_transport_failure_stops_both_arms(operation):
     from liminal.hardware.mock_arm import MockArm

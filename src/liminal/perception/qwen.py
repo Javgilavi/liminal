@@ -87,12 +87,18 @@ class QwenVisionModel:
         self._engine_factory = engine_factory or _TransformersQwenEngine
         self._engine: _Engine | None = None
         self._load_lock = threading.Lock()
+        self._inference_lock = threading.Lock()
+        self._unhealthy_reason: str | None = None
         self.load_metrics: QwenLoadMetrics | None = None
         self.inference_metrics: list[QwenInferenceMetrics] = []
 
     @property
     def loaded(self) -> bool:
         return self._engine is not None
+
+    @property
+    def unhealthy_reason(self) -> str | None:
+        return self._unhealthy_reason
 
     def load(self) -> None:
         if self._engine is not None:
@@ -113,14 +119,25 @@ class QwenVisionModel:
             raise ValueError("Qwen inspection prompt must be non-empty")
         if not images:
             raise ValueError("Qwen inspection needs at least one image")
-        return await asyncio.to_thread(self._inspect_sync, prompt, images)
+        if self._unhealthy_reason is not None:
+            raise RuntimeError(f"Qwen model is quarantined: {self._unhealthy_reason}")
+        try:
+            return await asyncio.to_thread(self._inspect_sync, prompt, images)
+        except asyncio.CancelledError:
+            # Cancelling to_thread does not stop model.generate(). Refuse another
+            # request so an orphaned GPU inference can never overlap a retry.
+            self._unhealthy_reason = "inference was cancelled or exceeded its inspection deadline"
+            raise
 
     def _inspect_sync(self, prompt: str, images: list[Any]) -> str:
-        self.load()
-        assert self._engine is not None
-        result = self._engine.inspect(prompt, images)
-        self.inference_metrics.append(result.metrics)
-        return result.text
+        with self._inference_lock:
+            if self._unhealthy_reason is not None:
+                raise RuntimeError(f"Qwen model is quarantined: {self._unhealthy_reason}")
+            self.load()
+            assert self._engine is not None
+            result = self._engine.inspect(prompt, images)
+            self.inference_metrics.append(result.metrics)
+            return result.text
 
 
 class _TransformersQwenEngine:

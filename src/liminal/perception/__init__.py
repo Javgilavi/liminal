@@ -1,5 +1,6 @@
 from liminal.perception.config import PerceptionRuntime, load_perception_config
 from liminal.perception.inspector import SceneInspector
+from liminal.perception.live import inspect_live
 from liminal.perception.qwen import QwenInferenceMetrics, QwenLoadMetrics, QwenVisionConfig, QwenVisionModel
 from liminal.perception.replay import (
     InspectionRecording,
@@ -49,5 +50,6 @@ __all__ = [
     "evaluate_recording",
     "load_perception_config",
     "load_recording",
+    "inspect_live",
     "warm_vision_model",
 ]

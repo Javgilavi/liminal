@@ -107,6 +107,21 @@ accuracy, unknowns, false-positive transitions, repeat agreement, latency, and
 Qwen preprocessing/token-generation/GPU metrics per call. Treat any false-positive
 transition as a deployment blocker even if aggregate accuracy looks acceptable.
 
+Once the labeled evaluation passes, verify live camera capture and blackboard
+updates without connecting to either arm bus or issuing arm commands:
+
+```bash
+uv run liminal inspect-live \
+  --robot configs/robot/so101_dual.yaml \
+  --perception configs/perception/qwen3_vl_4b.yaml \
+  --samples 3
+```
+
+This command cannot determine whether another controller has left motor torque
+enabled, so verify that separately. It connects only the perception cameras and
+writes the captured frames, raw responses, parsed predicates, observation versions,
+and final blackboard state to `runs/`.
+
 ## On real hardware
 
 The connected bimanual XLeRobot has an isolated setup and a local operator UI:

@@ -74,3 +74,26 @@ def test_unknown_vision_provider_is_rejected():
 def test_unknown_qwen_quantization_is_rejected():
     with pytest.raises(ValueError, match="quantization must be none or bnb_4bit"):
         QwenVisionConfig(quantization="int2")
+
+
+def test_cancelled_qwen_inference_quarantines_model(monkeypatch):
+    entered = asyncio.Event()
+
+    async def blocked(function, *args, **kwargs):
+        entered.set()
+        await asyncio.Future()
+
+    monkeypatch.setattr(asyncio, "to_thread", blocked)
+    model = QwenVisionModel(QwenVisionConfig(device="cpu"), engine_factory=lambda config: None)
+
+    async def scenario():
+        task = asyncio.create_task(model.inspect("inspect", ["image"]))
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        with pytest.raises(RuntimeError, match="quarantined"):
+            await model.inspect("inspect", ["image"])
+
+    asyncio.run(scenario())
+    assert model.unhealthy_reason is not None

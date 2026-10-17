@@ -219,6 +219,68 @@ def _evaluate_perception(args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
+def _inspect_live(args: argparse.Namespace) -> int:
+    import math
+    from dataclasses import asdict
+
+    from liminal.app import build_context
+    from liminal.hardware.runtime import connected_cameras
+    from liminal.perception.config import load_perception_config
+    from liminal.perception.live import SnapshotCamera, inspect_live
+    from liminal.perception.qwen import QwenVisionModel
+    from liminal.perception.vlm import warm_vision_model
+
+    if args.samples < 1:
+        raise SystemExit("--samples must be positive")
+    if not math.isfinite(args.interval_s) or args.interval_s < 0:
+        raise SystemExit("--interval-s must be finite and non-negative")
+    runtime = load_perception_config(args.perception)
+    predicates = tuple(args.predicate or runtime.inspection.definitions)
+    request = runtime.inspection.request(
+        predicates,
+        context="Live camera preflight; this process has no arm-bus connection and issues no arm commands.",
+    )
+    ctx = build_context(
+        args.robot,
+        vision_model=runtime.model,
+        inspection=runtime.inspection,
+        inspection_confirmations=runtime.confirmations,
+    )
+    assert ctx.inspector is not None
+    missing_cameras = set(request.cameras) - set(ctx.cameras)
+    if missing_cameras:
+        raise SystemExit(f"robot config is missing perception cameras: {sorted(missing_cameras)}")
+    output_path = Path(args.output) if args.output else (
+        Path("runs") / f"{time.strftime('%Y%m%d-%H%M%S')}_live_perception.json"
+    )
+    capture_dir = output_path.parent / f"{output_path.stem}_frames"
+    cameras = {
+        name: SnapshotCamera(ctx.cameras[name], capture_dir)
+        for name in request.cameras
+    }
+    ctx.inspector.cameras = cameras
+    warm_vision_model(runtime.model)
+    with connected_cameras(cameras):
+        output = asyncio.run(inspect_live(
+            ctx.inspector,
+            request,
+            samples=args.samples,
+            interval_s=args.interval_s,
+        ))
+    if isinstance(runtime.model, QwenVisionModel):
+        output["model_metrics"] = {
+            "config": asdict(runtime.model.config),
+            "load": asdict(runtime.model.load_metrics) if runtime.model.load_metrics else None,
+            "inferences": [asdict(metrics) for metrics in runtime.model.inference_metrics],
+        }
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(output, indent=2) + "\n")
+    print(json.dumps({"passed": output["passed"], "final_blackboard": output["final_blackboard"]}, indent=2))
+    print(f"live perception report: {output_path}")
+    return 0 if output["passed"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="liminal")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -267,6 +329,15 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--repeats", type=int, default=3, help="independent calls per labeled frame (default: 3)")
     e.add_argument("--output", help="JSON report path; defaults to a timestamped file under runs/")
     e.set_defaults(fn=_evaluate_perception)
+
+    live = sub.add_parser("inspect-live", help="update the blackboard from live cameras with motors disabled")
+    live.add_argument("--robot", required=True, help="robot config containing live camera devices")
+    live.add_argument("--perception", required=True, help="persistent VLM + predicate config")
+    live.add_argument("--predicate", action="append", help="predicate to inspect; defaults to all definitions")
+    live.add_argument("--samples", type=int, default=3, help="number of independent inspections (default: 3)")
+    live.add_argument("--interval-s", type=float, default=0.25, help="delay between inspections")
+    live.add_argument("--output", help="JSON report path; defaults to a timestamped file under runs/")
+    live.set_defaults(fn=_inspect_live)
 
     args = ap.parse_args(argv)
     return args.fn(args)
