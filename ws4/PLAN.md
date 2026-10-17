@@ -79,21 +79,28 @@ completed task steps recorded, plus where it failed and whether a human had to i
     45 GPU-hours, so the best use is the Sunday demo-window server or one extra training run.
   - Set an AWS Budgets alert at EUR 133 and keep the invoice for reimbursement.
 - **Risks, orchestrator note.**
-  - **Measured on the pod (RTX PRO 4500, Qwen on CPU, prompts pre-encoded, 10 chunks each):**
+  - **Measured on the pod (RTX PRO 4500, SO-101 package, BF16, Qwen on CPU, prompts pre-encoded, 10 runs):**
 
-    | Setting | Median per chunk | p90 | Peak VRAM | Arm moving |
-    |---|---|---|---|---|
-    | default guidance 3 | 1.46 s | 1.47 s | 23.6 GiB | 42% |
-    | guidance 3 + `compile_model` | 1.22 s | 1.23 s | 23.6 GiB | 47% |
-    | **guidance 1.0 + compile** | **0.63 s** | 0.64 s | 23.6 GiB | **63%** |
+    | Setting | Server per chunk (median) | Laptop round trip (est.) | Arm moving (sync loop, round trip) |
+    |---|---|---|---|
+    | default guidance 3 | 1.46 s | 1.78 s (measured) | 38% |
+    | guidance 1.0 | 0.76 s | about 1.07 s | about 50% |
+    | guidance 3 + `compile_model` | 1.22 s | about 1.53 s | about 41% |
+    | **guidance 1.0 + compile** | **0.63 s** | about 0.94 s | **about 53%** |
 
-    Model load is 6.4 min (plus about 2 min with compile) per server start. Without the prompt warm-up, the first
-    use of a new prompt took 17 s.
+    The round trip adds about 0.31 s (SSH tunnel to EU-RO-1, 312 KB JPEG request). Only the default row was
+    measured end to end; the others add the same 0.31 s. p90 equals the median once all prompts are warmed.
+  - VRAM: 15.3 GiB resident and 15.8 GiB peak per chunk after Qwen moves to the CPU (the 23.6 GiB figure is the
+    load-time peak). With imagination decoding: 17.6 GiB peak. Decoding the 41 imagined frames costs 0.23 s
+    (sync) or about 0.2 s median (async on the same GPU). Best-of-2 with decode costs 3.27 s, so it is too slow
+    for every chunk and only fits at decision points.
+  - Server start to READY is about 9 min (6.4 min load, about 15 s per pre-encoded prompt, plus about 2 min with
+    compile). The pod stops itself after 20 idle GPU minutes, so restart it about 10 min before robot time. The
+    SSH port changes on every restart.
   - **Open question: does guidance 1.0 hurt action quality?** The package default is guidance 3 on both streams.
     Run the zero-shot attempts at both settings and log them as separate variants before standardising on 1.0.
-  - An RTX PRO 6000 pod for the Sunday demo window would roughly halve these times again (estimate) and fits two
-    model instances for truly parallel arms.
-  - Qwen must stay on the CPU here (23.6 + 8.3 GiB does not fit). About 8 GiB is left for imagination decoding.
+  - An RTX PRO 6000 pod for the Sunday demo window would roughly halve the server time again (estimate) and fits
+    two model instances for truly parallel arms. Two instances do not fit safely on this 32 GB card.
 
 ### Training box GPUs (3x RTX PRO 6000, 96 GB)
 
