@@ -11,6 +11,9 @@ import yaml
 from liminal.core.interfaces import Arm, SkillBackend
 from liminal.orchestration.context import ExecutionContext
 from liminal.orchestration.skills import PrimitiveBackend, SkillRouter
+from liminal.perception.inspector import SceneInspector
+from liminal.perception.types import InspectionProfile
+from liminal.perception.vlm import VisionModel
 from liminal.perception.world_state import WorldState
 from liminal.safety.supervisor import JointLimits, SafetySupervisor
 
@@ -85,7 +88,9 @@ def build_policy(backend: str, policy_cfg: dict[str, Any] | None = None) -> Skil
 
 def build_context(robot: str | Path | dict[str, Any], backend: str = "mock",
                   policy: str | Path | dict[str, Any] | None = None, log_path: str | Path | None = None,
-                  policy_backend: SkillBackend | None = None) -> ExecutionContext:
+                  policy_backend: SkillBackend | None = None, vision_model: VisionModel | None = None,
+                  inspection: InspectionProfile | None = None,
+                  inspection_confirmations: int = 2) -> ExecutionContext:
     robot_cfg = robot if isinstance(robot, dict) else _load(robot)
     policy_cfg = policy if isinstance(policy, dict) or policy is None else _load(policy)
     arms, cameras = build_arms(robot_cfg)
@@ -111,11 +116,21 @@ def build_context(robot: str | Path | dict[str, Any], backend: str = "mock",
         unknown = set(members) - set(arms)
         if g in arms or unknown:
             raise ValueError(f"arm group {g!r} must not shadow an arm and must list known arms (unknown: {unknown})")
-    return ExecutionContext(
+    world = WorldState(log_path=log_path)
+    ctx = ExecutionContext(
         arms=arms,
-        world=WorldState(log_path=log_path),
+        world=world,
         safety=SafetySupervisor(arms, limits),
         skills=router,
         cameras=cameras,
+        inspection=inspection or InspectionProfile(),
         arm_groups=groups,
     )
+    if vision_model is not None:
+        ctx.inspector = SceneInspector(
+            vision_model,
+            cameras,
+            world,
+            confirmations=inspection_confirmations,
+        )
+    return ctx

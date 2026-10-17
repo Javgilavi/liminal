@@ -102,6 +102,90 @@ class FluxPolicyBackend:
             ctx.safety.send(arm, action[i : i + n])
             i += n
 
+    def _stop(self, target: str, ctx: ExecutionContext) -> None:
+        for arm in ctx.members(target):
+            ctx.arms[arm].stop()
+
+    async def _inspect_progress(
+        self,
+        skill: Skill,
+        ctx: ExecutionContext,
+        started_at: float,
+    ) -> SkillResult | None:
+        """Pause and ask perception whether to finish, continue, or abort.
+
+        A ``None`` result means every invariant is confirmed and the success
+        predicate is confirmed false, so another FLUX chunk may run.
+        """
+
+        invariants = ctx.active_invariants
+        conditions = tuple(condition for condition in (skill.success, *invariants) if condition)
+        if not conditions:
+            return None
+        if ctx.inspector is None:
+            violated = tuple(condition for condition in invariants if ctx.world.evaluate(condition) is not True)
+            if violated:
+                self._stop(skill.arm, ctx)
+                return SkillResult(
+                    Status.FAILURE,
+                    skill,
+                    f"active invariant violated: {', '.join(violated)}",
+                    time.monotonic() - started_at,
+                )
+            return None
+
+        self._stop(skill.arm, ctx)
+        try:
+            request = ctx.inspection.request(
+                conditions,
+                context=f"The robot is executing the bounded skill {skill.name!r} on {skill.arm!r}.",
+            )
+        except (TypeError, ValueError) as exc:
+            return SkillResult(Status.FAILURE, skill, f"invalid inspection configuration: {exc}")
+
+        assessment = await ctx.inspector.inspect_until_known(
+            request,
+            timeout_s=ctx.inspection.timeout_s,
+            retry_delay_s=ctx.inspection.retry_delay_s,
+        )
+        values = {key: observation.value.value for key, observation in assessment.observations.items()}
+        ctx.world.log(
+            "skill_inspection",
+            skill=skill.label,
+            predicates=values,
+            invariants=invariants,
+            parse_error=assessment.parse_error,
+        )
+        unknown = tuple(
+            predicate for predicate in request.predicates if not assessment.observation(predicate).known
+        )
+        if unknown:
+            return SkillResult(
+                Status.FAILURE,
+                skill,
+                f"scene inspection inconclusive for {', '.join(unknown)}",
+                time.monotonic() - started_at,
+            )
+
+        violated = tuple(condition for condition in invariants if ctx.world.evaluate(condition) is not True)
+        if violated:
+            ctx.world.log("skill_invariant_violated", skill=skill.label, conditions=violated)
+            return SkillResult(
+                Status.FAILURE,
+                skill,
+                f"active invariant violated: {', '.join(violated)}",
+                time.monotonic() - started_at,
+            )
+        if skill.success and ctx.world.evaluate(skill.success) is True:
+            ctx.world.log("skill_terminated", skill=skill.label, condition=skill.success, reason="vlm_confirmed")
+            return SkillResult(
+                Status.SUCCESS,
+                skill,
+                f"confirmed {skill.success}",
+                time.monotonic() - started_at,
+            )
+        return None
+
     def reset(self, target: str) -> None:
         self._history.pop(target, None)
 
@@ -118,6 +202,13 @@ class FluxPolicyBackend:
         t0 = time.monotonic()
         history = self._history.setdefault(skill.arm, deque(maxlen=self.cfg.obs_history))
         period = 1.0 / self.cfg.control_hz
+        success_version = ctx.world.observation_version(skill.success) if skill.success else 0
+
+        # Inspect before the first motion. This catches an already-completed skill and
+        # refuses to enter a WHILE body when its physical invariant is not observable.
+        result = await self._inspect_progress(skill, ctx, t0)
+        if result is not None:
+            return result
 
         while True:
             history.append(self._observe(skill.arm, ctx))
@@ -128,8 +219,29 @@ class FluxPolicyBackend:
             for action in chunk[: self.cfg.execute_steps]:
                 self._send(skill.arm, action, ctx)
                 await asyncio.sleep(period)
-                if skill.success and ctx.world.holds(skill.success):
+                violated = tuple(
+                    condition for condition in ctx.active_invariants
+                    if ctx.world.evaluate(condition) is not True
+                )
+                if violated:
+                    self._stop(skill.arm, ctx)
+                    return SkillResult(
+                        Status.FAILURE,
+                        skill,
+                        f"active invariant violated: {', '.join(violated)}",
+                        time.monotonic() - t0,
+                    )
+                observed_success = (
+                    ctx.world.holds(skill.success, after_version=success_version)
+                    if ctx.inspector is not None else ctx.world.holds(skill.success)
+                ) if skill.success else False
+                if observed_success:
+                    self._stop(skill.arm, ctx)
                     return SkillResult(Status.SUCCESS, skill, duration_s=time.monotonic() - t0)
+
+            result = await self._inspect_progress(skill, ctx, t0)
+            if result is not None:
+                return result
             if not skill.success:
                 # No predicate to wait for: one chunk is the whole skill.
                 return SkillResult(Status.SUCCESS, skill, duration_s=time.monotonic() - t0)

@@ -2,8 +2,9 @@ import asyncio
 
 import pytest
 
-from liminal.core.types import Skill, Status
-from liminal.orchestration import bt
+from liminal.core.types import Skill, SkillResult, Status
+from liminal.orchestration import bt, parse_task
+from liminal.perception import FixtureVisionModel, SceneInspector
 from liminal.policy.mock import Fault, MockBackend
 from liminal.safety import ArmConflict
 
@@ -66,6 +67,27 @@ def test_while_holds_and_requires_until(make_ctx):
     assert ctx.arms["left"].holding is not None
 
 
+def test_while_registers_active_invariant(make_ctx):
+    class Backend:
+        active = ()
+
+        async def execute(self, skill, ctx):
+            self.active = ctx.active_invariants
+            return SkillResult(Status.SUCCESS, skill)
+
+    backend = Backend()
+    ctx = make_ctx(backend)
+    ctx.world.set("cable_secured_clear", True)
+    node = bt.While(
+        "left",
+        maintain="cable_secured_clear",
+        body=bt.SkillNode(Skill("right", "remove_to_red_cup")),
+    )
+    assert run(node.run(ctx)) is Status.SUCCESS
+    assert backend.active == ("cable_secured_clear",)
+    assert ctx.active_invariants == ()
+
+
 def test_while_cancels_body_when_invariant_breaks(make_ctx):
     backend = MockBackend(duration_s=0.2, faults=[Fault("pick_place", facts={"lid_open": False})])
     ctx = make_ctx(backend)
@@ -114,6 +136,28 @@ def test_waitfor_and_timeout(make_ctx):
         return ok, late
 
     assert run(scenario()) == (Status.SUCCESS, Status.TIMEOUT)
+
+
+def test_inspect_node_waits_for_known_consensus(make_ctx):
+    response = {"predicates": {"lid_open": {"value": "false", "evidence": "lid is down"}}}
+    model = FixtureVisionModel([response, response])
+    ctx = make_ctx()
+    ctx.inspector = SceneInspector(model, ctx.cameras, ctx.world, confirmations=2)
+    spec = parse_task({
+        "tree": {
+            "inspect": {
+                "predicates": ["lid_open"],
+                "cameras": ["top"],
+                "definitions": {"lid_open": "The lid is raised and the box interior is visible."},
+                "context": "Inspect the mock server box.",
+                "timeout_s": 0.2,
+                "retry_delay_s": 0,
+            }
+        }
+    })
+    assert run(spec.tree.run(ctx)) is Status.SUCCESS
+    assert ctx.world.known("lid_open") and not ctx.world.holds("lid_open")
+    assert "box interior is visible" in model.calls[0][0]
 
 
 def test_group_skill_claims_every_member_arm(make_ctx, mock_backend):

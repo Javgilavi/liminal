@@ -43,6 +43,10 @@ def test_goal_not_reached_is_reported_as_failure(make_ctx):
     ({"tree": {"skill": {"arm": "left"}}}, "'name' is required"),
     ({"tree": {"while": {"arm": "left", "do": {"check": "x"}}}}, "needs arm, maintain"),
     ({"tree": {"sequence": []}}, "non-empty list"),
+    (
+        {"tree": {"inspect": {"predicates": ["lid_open"], "definitions": {"cable_clear": "clear"}}}},
+        "definitions must refer to requested predicates",
+    ),
 ])
 def test_task_spec_errors_are_actionable(bad, msg):
     with pytest.raises(TaskSpecError, match=msg):
