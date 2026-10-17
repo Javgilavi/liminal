@@ -8,17 +8,21 @@ Design, plan format, measurements and open items: [`../research/orchestrator.md`
 ## Sunday demo: the green Haller, one arm, the red pen (run this)
 
 Task (final, `skills.yaml`): the robot's LEFT arm puts the red pen in its slot in the cardboard box and takes it out
-again, on a chain Claude plans. The robot-RIGHT arm stays parked and holding; this process never connects to it.
+again, on a chain Claude plans. The robot-RIGHT arm stays parked and holding; this process never commands it and only
+reads its joints (read-only, torque untouched) before each FLUX attempt, for the keep-out's `other_arm` zone.
 FLUX: the per-arm SO-101 package (zero-shot) or tonight's LoRA, served from the RTX PRO 6000 pod (`so101-flux-serve`).
 The arm side is `ws4/single_arm/run_single_arm.py`, imported read-only: torque-safe connect, camera parity with the
 VR recording (head unrotated, wrist rotated 180, default fourcc), joint and step limits, LeRobot's goal cap, the FK
 keep-out, a 60% torque limit; the orchestrator adds its stall and keep-out stops every tick, and every FLUX step first
-ramps to the demos' start pose `[0, 0, 0, 0, 0, 100]` through the same guard. Each step ends on a Claude Haiku 5.5
-check of the head frame.
+ramps to the demos' start pose `[0, 0, 0, 0, 0, 100]` through the same guard (one keep-out refusal on that ramp stops
+and holds, as `move_to` does). Then it reads the parked arm's pose on `/dev/haller_arm_left` (`keepout.read_arm_joints`)
+so the `other_arm` zone knows where it is; if another process holds that port or the read fails, the zone stays
+inactive and the HMI shows a warning (`--no-other-arm` skips the read). Each step ends on a Claude Haiku 5.5 check of
+the head frame.
 
 ```bash
 # 0. One process per arm: stop the haller HMI and the VR recorder first (this must print nothing).
-fuser /dev/ttyACM* /dev/haller_arm_right
+fuser /dev/ttyACM* /dev/haller_arm_right /dev/haller_arm_left
 # 1. Tunnel to the policy server. Pod host and SSH port: ask the orchestrator session or read them in the RunPod console.
 ssh -N -L 8765:127.0.0.1:8765 -o ExitOnForwardFailure=yes -i ~/.ssh/id_ed25519_osrdvs root@<pod-ip> -p <ssh-port>
 # 2. Dry run on the real arm: observe mode, torque never enabled, nothing sent (check cameras, plan, checks).

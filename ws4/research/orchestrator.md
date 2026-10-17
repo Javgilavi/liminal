@@ -54,23 +54,28 @@ recording protocol's S1 to S5) until the demo task is final.
 - **Task** (final, from the orchestrator session): the robot's LEFT arm (`/dev/haller_arm_right`, calibration
   `haller_right`) runs two FLUX skills with the datasets' exact prompts, "put the red pen in its slot in the cardboard
   box" and "take the red pen out of its slot and put it on the mat", plus the `home` primitive at
-  `[0, 0, 0, 0, 0, 100]` and `hold`. The robot-RIGHT arm stays parked and is not connected. `skills.yaml` now holds
+  `[0, 0, 0, 0, 0, 100]` and `hold`. The robot-RIGHT arm stays parked and is never commanded; its joints are only read
+(read-only) for the keep-out. `skills.yaml` now holds
   this vocabulary with a `station` block (available arms, home pose, notes for the planner); the sim pack-box vocabulary
   moved to `skills_sim_pack_box.yaml`.
 - **Arm side**: `orchestrator/haller.py` imports `ws4/single_arm/run_single_arm.py` read-only (`connect_so101`,
   `SingleArmRobot`, `build_guard`, `KeepOutGuard`, `hold_here`, `warm_up`, `disconnect_so101`, `FakeSO101`) and the
   `keepout` module; `orchestrator/monitors.py` rebuilds its per-tick stall stop (8 deg for 15 ticks, arm joints only)
-  and keep-out stop (45 consecutive refusals). The inter-arm collision gate is off on this station (one moving arm, the
-  other not connected); the keep-out's midline zone guards that side. Every FLUX step first ramps to the home pose at
-  1 deg per tick through the same guard, because every VR demo starts there. A stop freezes the arm at its MEASURED
+  and keep-out stop (45 consecutive refusals; a single refusal while ramping to the start pose, as `move_to` does). The
+  inter-arm collision gate is off on this station (one moving arm, the other parked); the keep-out's midline and
+  `other_arm` zones guard that side. Every FLUX step first ramps to the home pose at 1 deg per tick through the same
+  guard, because every VR demo starts there; then, before the policy starts, `keepout.read_arm_joints` reads the parked
+  arm's pose for the `other_arm` zone (skipped, zone inactive, with a warning when another process holds
+  `/dev/haller_arm_left` or the read fails). A stop freezes the arm at its MEASURED
   pose (`hold_here`), as the single-arm runner does.
 - **Logging**: one `trial_log.py` line per FLUX attempt (task = the skill, 1/1 or 0/1 with the failure reason and the
   interventions during that attempt) and one per chain (task `pen_chain`). The fake arm and observe mode log to
   `runs/trials_mock.jsonl`, never the graded log.
 - **Verified (no hardware, no pod)**: on run_single_arm's `FakeSO101` with a fake policy, "put the pen in the box,
   take it out, put it back" plans as three chained left-arm steps; the arm is within 3 deg of home each time a FLUX
-  policy starts; a failed attempt (timeout) is logged and retried; a monitor stop latches the e-stop and calls the hold
-  (`tests/test_haller.py`, 7 tests). Live Claude plan for "put the pen in the box, take it out, put it back, and
+  policy starts; a failed attempt (timeout) is logged and retried; a monitor stop latches the e-stop and calls the hold;
+  the parked arm's pose is refreshed once per FLUX attempt, at home, and skipped when its port is held; a keep-out
+  refusal on the ramp stops before FLUX starts (`tests/test_haller.py`, 12 tests, `read_arm_joints` faked). Live Claude plan for "put the pen in the box, take it out, put it back, and
   repeat the whole cycle twice": 14.2 s, USD 0.030, 8 steps, left arm only, pen states consistent (it inserted a
   take-out between cycles) and a final `home`.
 - **Not verified**: anything on the real arm (VR recording holds it tonight), the policy server on the RTX PRO 6000 pod

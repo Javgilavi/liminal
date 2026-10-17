@@ -174,3 +174,99 @@ def test_fake_arm_never_writes_the_graded_log(tmp_path):
         assert sorted(s.target_backend) == ["left:prim", "left:so101"]  # the parked right arm gets no target
     finally:
         s.close()
+
+
+def test_keepout_monitor_stops_the_ramp_at_the_first_refusal():
+    guard = SimpleNamespace(last_zone="base")
+    ramp = {"on": True}
+    keep = KeepOutMonitor(guard, ticks=45, ramping=lambda: ramp["on"])
+    assert "refused the ramp" in keep(None, {})  # move_to semantics: one refusal ends the ramp
+    ramp["on"] = False
+    assert all(keep(None, {}) is None for _ in range(44))  # under the policy, 45 in a row are needed
+    assert "45 ticks" in keep(None, {})
+
+
+def test_other_arm_pose_is_read_only_when_the_port_is_free(monkeypatch):
+    from orchestrator import haller as haller_mod
+
+    haller_mod.import_single_arm()
+    import keepout
+
+    ko = SimpleNamespace(other_q=None)
+    rig = haller_mod.HallerRig(sar=None, so101=None, robot=None, guard=SimpleNamespace(keepout=ko), monitors=[],
+                               rest=np.zeros(6), real=True, observe=False)
+    reads = []
+    monkeypatch.setattr(keepout, "read_arm_joints", lambda port, rid: reads.append((port, rid)) or np.arange(6.0))
+    monkeypatch.setattr(haller_mod, "port_users", lambda port: [])
+    assert "other arm pose" in rig.refresh_other_arm()
+    assert reads == [("/dev/haller_arm_left", "haller_left")] and ko.other_q == (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    monkeypatch.setattr(haller_mod, "port_users", lambda port: [4242])  # e.g. the VR recorder still holds it
+    assert "INACTIVE" in rig.refresh_other_arm() and ko.other_q is None and len(reads) == 1
+
+    def broken(port, rid):
+        raise OSError("no such device")
+
+    monkeypatch.setattr(haller_mod, "port_users", lambda port: [])
+    monkeypatch.setattr(keepout, "read_arm_joints", broken)
+    assert "INACTIVE" in rig.refresh_other_arm() and ko.other_q is None
+    rig.real = False  # the fake arm never touches a bus
+    assert "not read" in rig.refresh_other_arm()
+
+
+def test_port_users_finds_an_open_file(tmp_path):
+    import subprocess
+    import sys
+
+    from orchestrator.haller import port_users
+
+    path = tmp_path / "fake_port"
+    path.write_text("")
+    holder = subprocess.Popen([sys.executable, "-c", f"f = open({str(path)!r}); import time; time.sleep(30)"])
+    try:
+        deadline = time.time() + 10
+        while holder.pid not in port_users(str(path)) and time.time() < deadline:
+            time.sleep(0.05)
+        assert holder.pid in port_users(str(path))
+    finally:
+        holder.kill()
+        holder.wait()
+    assert port_users(str(tmp_path / "nobody_has_this")) == []
+
+
+def test_other_arm_refreshed_at_home_before_every_flux_attempt(haller):
+    verifier = PassOnAttempt()
+    haller.verifier = verifier
+    calls = []
+
+    def refresh():
+        calls.append(np.round(haller.rig.robot.joints(), 1).tolist())
+        return "other arm pose for the keep-out: [0, 0, 0, 0, 0, 0]"
+
+    haller.rig.refresh_other_arm = refresh
+    plan = haller.plan("put the pen in the box, take it out").result.plan
+    assert haller.execute(plan).status == "succeeded"
+    assert len(calls) == 2
+    for q in calls:  # after the ramp, before FLUX starts
+        assert np.abs(np.array(q) - [0, 0, 0, 0, 0, 100]).max() <= 3.0
+    assert sum("other arm pose" in e["msg"] for e in haller.events.recent()) == 2
+
+
+def test_keepout_refusal_during_the_ramp_stops_and_holds(haller):
+    haller.verifier = PassOnAttempt()
+    haller.rig.guard.keepout.refuse = lambda target, q: (True, "table")
+    holds = []
+    haller.rig.hold = lambda reason="": holds.append(reason)
+    plan = haller.plan("put the pen in the box").result.plan
+    out = {}
+    thread = threading.Thread(target=lambda: out.setdefault("r", haller.execute(plan)))
+    thread.start()
+    deadline = time.time() + 20
+    while (haller.executor is None or haller.executor.state != "estopped") and time.time() < deadline:
+        time.sleep(0.01)
+    assert haller.executor.state == "estopped"
+    assert holds and "refused the ramp" in holds[0]
+    (run,) = haller.executor.runs.values()
+    assert run.homing and not run.policy_started  # FLUX never started
+    haller.abort()
+    thread.join(timeout=10)
+    assert out["r"].status == "aborted"

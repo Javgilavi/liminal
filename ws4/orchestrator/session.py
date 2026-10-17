@@ -113,6 +113,9 @@ class SessionConfig:
     keepout_ticks: int = 45
     home_speed: float = 1.0  # deg per tick when ramping to the start pose (run_single_arm --return-speed)
     allow_torque_off: bool = False
+    read_other_arm: bool = True  # read the parked arm's pose before each FLUX step (keep-out other_arm zone)
+    other_arm_port: str = "/dev/haller_arm_left"
+    other_arm_id: str = "haller_left"
     token_cmd: str = ""  # e.g. "ssh -p PORT root@HOST cat /workspace/flux_token"; output never shown
     # Execution
     gate: bool = True
@@ -219,6 +222,10 @@ class Session:
 
             self.rig = haller.build(cfg)
             base_robot = self.rig.robot
+            for m in self.rig.monitors:  # the ramp to the start pose stops at the first keep-out refusal
+                if hasattr(m, "ramping"):
+                    m.ramping = lambda: self.executor is not None and any(
+                        r.homing for r in self.executor.runs.values() if r.status == "running")
         elif cfg.env == "xlerobot":
             from flux.run_xlerobot import LeRobotBimanualRobot, build_robot
 
@@ -571,6 +578,7 @@ class Session:
             monitors=self.rig.monitors if self.rig is not None else None,
             on_attempt=self._log_attempt,
             on_estop=self.rig.hold if self.rig is not None else None,
+            before_policy=self._before_policy if self.rig is not None else None,
         )
         result = self.executor.run(plan)
         self._encode_frames(self.base_robot.get_observation())
@@ -622,6 +630,10 @@ class Session:
         if cfg.policy == "scripted":
             return "sim:scripted-stand-in"
         return ", ".join(f"{a}={cfg.package_for(a)}" for a in self._arms())
+
+    def _before_policy(self, run: Any) -> None:
+        msg = self.rig.refresh_other_arm()
+        self.events.add("warn" if "INACTIVE" in msg else "info", f"{run.step.id}: {msg}")
 
     def _log_attempt(self, run: Any, ok: bool, reason: str) -> None:
         """One trial_log line per FLUX attempt (task = the skill), so each skill's success rate is graded too."""

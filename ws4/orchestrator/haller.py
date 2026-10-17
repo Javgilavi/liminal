@@ -17,6 +17,7 @@ The per-tick stall and keep-out stops are rebuilt in ``monitors.py`` with the sa
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,30 @@ import numpy as np
 
 from . import WS4
 from .monitors import KeepOutMonitor, StallMonitor
+
+OTHER_ARM_PORT = "/dev/haller_arm_left"  # the parked ROBOT-right arm
+OTHER_ARM_ID = "haller_left"
+
+
+def port_users(port: str) -> list[int]:
+    """PIDs of OTHER processes that have ``port`` open (scans /proc; a busy bus must never get a second reader)."""
+    try:
+        real = os.path.realpath(port)
+    except OSError:
+        return []
+    users = []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == os.getpid():
+            continue
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            for fd in os.listdir(fd_dir):
+                if os.path.realpath(os.path.join(fd_dir, fd)) == real:
+                    users.append(int(pid))
+                    break
+        except OSError:  # gone, or not ours to inspect
+            continue
+    return users
 
 SINGLE_ARM = WS4 / "single_arm"
 SLOT = "left"  # the task arm is the robot's left arm
@@ -56,6 +81,32 @@ class HallerRig:
     rest: np.ndarray  # measured pose at launch
     real: bool
     observe: bool
+    other_arm_port: str = OTHER_ARM_PORT
+    other_arm_id: str = OTHER_ARM_ID
+    read_other_arm: bool = True
+
+    @property
+    def keepout(self) -> Any:
+        return self.guard.keepout
+
+    def refresh_other_arm(self) -> str:
+        """Pose of the parked robot-right arm for the keep-out's other_arm zone, read-only (keepout.read_arm_joints:
+        no register writes, torque untouched). Skipped, zone inactive, when another process holds that port."""
+        if not (self.real and self.read_other_arm):
+            return "other arm not read (fake arm or disabled)"
+        users = port_users(self.other_arm_port)
+        if users:
+            self.keepout.other_q = None
+            return f"other_arm zone INACTIVE: {self.other_arm_port} is held by pid {users}"
+        try:
+            from keepout import read_arm_joints  # noqa: PLC0415
+
+            q = read_arm_joints(self.other_arm_port, self.other_arm_id)
+        except Exception as exc:  # the zone is an extra layer; midline still guards that side
+            self.keepout.other_q = None
+            return f"other_arm zone INACTIVE: could not read {self.other_arm_port} ({type(exc).__name__}: {exc})"
+        self.keepout.other_q = tuple(float(v) for v in q)
+        return f"other arm pose for the keep-out: {np.round(q, 1).tolist()}"
 
     def hold(self, reason: str = "") -> None:
         """Freeze at the measured pose so a blocked joint stops pushing (the runner alone would hold the command)."""
@@ -108,4 +159,5 @@ def build(cfg: Any) -> HallerRig:
         print("NOTE: table height not calibrated (keepout.py --touch); using the UNVERIFIED default", flush=True)
     guard = sar.KeepOutGuard(guard_cfg, keepout, SLOT, lambda: robot.last_q)
     monitors = [StallMonitor(SLOT, cfg.stall_deg, cfg.stall_ticks), KeepOutMonitor(guard, cfg.keepout_ticks)]
-    return HallerRig(sar, so101, robot, guard, monitors, rest, real, cfg.observe)
+    return HallerRig(sar, so101, robot, guard, monitors, rest, real, cfg.observe, cfg.other_arm_port,
+                     cfg.other_arm_id, cfg.read_other_arm)

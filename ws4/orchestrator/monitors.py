@@ -40,13 +40,19 @@ class StallMonitor:
 
 
 class KeepOutMonitor:
-    def __init__(self, guard: Any, ticks: int = 45):
-        self.guard, self.ticks = guard, ticks
+    """While ``ramping()`` (the scripted move to the start pose), the first refusal already stops, as
+    run_single_arm.move_to does (it holds and returns False on a keep-out refusal)."""
+
+    def __init__(self, guard: Any, ticks: int = 45, ramping: Any = None):
+        self.guard, self.ticks, self.ramping = guard, ticks, ramping
         self.run = 0
 
     def __call__(self, report: Any, obs: dict) -> str | None:
         zone = getattr(self.guard, "last_zone", "")
         self.run = self.run + 1 if zone else 0
+        if zone and self.ramping is not None and self.ramping():
+            self.run = 0
+            return f"keep-out: the {zone} zone refused the ramp to the start pose"
         if self.run >= self.ticks:
             n, self.run = self.run, 0
             return f"keep-out: the {zone} zone refused the target for {n} ticks in a row"
