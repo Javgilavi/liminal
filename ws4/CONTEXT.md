@@ -41,6 +41,22 @@ All new WS4 work lives under `ws4/` and is standalone (no imports from `src/limi
    first embodiment fine-tune).
 5. Hardware setup and user interface / how to trigger the model.
 
+## Official track brief (BFL PDF from the hackathon group, received 12:58)
+
+- Task: connect skills (picking, placing, pushing, stacking) into an autonomous sequence. FLUX must stay in the
+  control loop; longer, more challenging chains score higher. Extra demonstrations are allowed.
+- Setup: the SO-101 checkpoint expects a scene camera and a wrist camera. Keep camera mapping, calibration,
+  joint units and normalization consistent between recording, training and deployment. LeLab offers a GUI for
+  SO-101 calibration, teleoperation and dataset recording.
+- **Evaluation (graded, both parts count):**
+  - Zero-shot: evaluate the released pretrained checkpoint on the chosen task without task-specific fine-tuning.
+    Record which checkpoint, what worked, where it failed.
+  - Post-training: fine-tune with demonstrations, evaluate on the same task under comparable conditions. Show
+    what improved, what still fails, and whether human intervention is needed.
+  - Keep a record of successful attempts, total attempts and completed task steps. Testing the unchanged
+    baseline while training runs is encouraged.
+- Submit: GitHub repository, presentation slides, demo video.
+
 ## Our hardware: the XLeRobot "station"
 
 Photos: `ws4/assets/photos/xlerobot_station.jpg` (1600 px) and `xlerobot_station_full.jpg` (full res).

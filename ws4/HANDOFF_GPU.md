@@ -133,6 +133,12 @@ python -m lerobot.scripts.lerobot_train --config_path=examples/flux3/lora.json \
   --steps=6000 --save_freq=500 --output_dir=outputs/lora_P
 ```
 
+**Base package:** flux-action issue #2 (open) reports that the stock package's normalization stats come
+from an old-convention SO-100 dataset (shoulder_lift 85 to 184 degrees), while all our data is modern degrees
+centred on 0. If `~/so101_quantiles.json` from step 2 confirms this, build a re-normalized package from the
+training data with `flux/GPU_RUNBOOK.md` §4, and use it as `--policy.path` for P, A and B instead of the stock
+id.
+
 After about 50 microsteps, read the step time in the log. Lower `--steps` if the run would not finish by
 about 19:00, because GPU 1 is needed for LoRA B tonight.
 
