@@ -12,7 +12,7 @@ def test_shipped_qwen_config_is_lazy_and_complete():
     assert isinstance(runtime.model, QwenVisionModel)
     assert not runtime.model.loaded
     assert runtime.model.config.checkpoint == "Qwen/Qwen3-VL-4B-Instruct"
-    assert runtime.model.config.device == "cuda:2"
+    assert runtime.model.config.device == "cuda:0"
     assert runtime.confirmations == 2
     assert set(runtime.inspection.definitions) == {
         "lid_open",

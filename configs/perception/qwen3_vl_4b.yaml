@@ -1,7 +1,7 @@
 model:
   provider: qwen
   checkpoint: Qwen/Qwen3-VL-4B-Instruct
-  device: cuda:2             # VERIFY against the deployment machine's GPU layout
+  device: cuda:0             # VERIFY against the deployment machine's GPU layout
   dtype: bfloat16
   max_new_tokens: 150
 
