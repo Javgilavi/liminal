@@ -1,0 +1,36 @@
+# V1 authored procedure for the replay scenario configs/replay/two_blocks.yaml:
+#   liminal episode configs/replay/two_blocks.yaml --task configs/tasks/replay_two_blocks_v1.yaml --db runs/v1.sqlite3
+# Each placement is guarded by check-then-act and retried; success is judged only from fresh evidence.
+name: replay_two_blocks_v1
+description: Authored tree, one fresh evidence-verified attempt per placement (no planner).
+goal: blue_in_box
+tree:
+  sequence:
+    - retry:
+        attempts: 3
+        do:
+          fallback:
+            - check: red_in_box
+            - skill:
+                arm: left
+                name: pick_place
+                target: red
+                params: {object_id: red, destination_id: box}
+                prompt: Pick up the red block and place it inside the white box.
+                success: red_in_box
+                timeout_s: 15
+                verify_timeout_s: 1
+    - retry:
+        attempts: 3
+        do:
+          fallback:
+            - check: blue_in_box
+            - skill:
+                arm: right
+                name: pick_place
+                target: blue
+                params: {object_id: blue, destination_id: box}
+                prompt: Pick up the blue block and place it inside the white box.
+                success: blue_in_box
+                timeout_s: 15
+                verify_timeout_s: 1

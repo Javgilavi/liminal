@@ -1,0 +1,30 @@
+# Destination perturbation: each block has its own bin. After the first robot placement, a person
+# takes that block back out (scheduled event below). The ReplayModel applies it while "thinking" about
+# the next step, so the CLI trace shows episode_plan_dropped (stale_revision), the obligation being
+# reopened from fresh evidence, and the placement being redone as a new verified effect.
+name: moved_destination
+goal:
+  id: goal-sort-blocks
+  text: Put the red block in the left bin and the blue block in the right bin
+  obligations: [red_in_left_bin, blue_in_right_bin]
+objects:
+  red: red block
+  blue: blue block
+  left_bin: left bin
+  right_bin: right bin
+obligations:
+  red_in_left_bin: {object_id: red, destination_id: left_bin}
+  blue_in_right_bin: {object_id: blue, destination_id: right_bin}
+initial_locations: {red: table, blue: table}
+events:
+  - {after_actions: 1, kind: relocate, object_id: red, location: table}
+capabilities:
+  version: replay-v1
+  available_arms: [left, right]
+  skills:
+    pick_place:
+      arms: [left, right]
+      effect_templates: ["{object_id}_in_{destination_id}"]
+      prompt_template: "Pick up the {object_label} and place it inside the {destination_label}."
+      max_timeout_s: 15
+      max_attempts: 2

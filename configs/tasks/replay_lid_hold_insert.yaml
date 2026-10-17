@@ -1,0 +1,47 @@
+# V5 cooperative arms on a replay scenario (configs/replay/lid_hold_insert*.yaml). NOT hardware.
+#   liminal episode configs/replay/lid_hold_insert_slip.yaml --task configs/tasks/replay_lid_hold_insert.yaml
+# Left opens the lid (own evidence attempt), then HOLDS it: `while` claims the left arm for the
+# whole hold, re-observes `lid_open` every 0.1 s while the right arm's insert runs (own attempt),
+# cancels the insert and FAILS if the lid is lost or unseen, and requires `block_in_slot` after
+# the body returns. Retry then homes both arms and starts over; the guard skips an insert
+# that is already verified. Release is an explicit node after the block, never implied.
+name: replay_lid_hold_insert
+description: Cooperative hold-and-insert with continuous evidence monitoring and defined recovery.
+goal: block_in_slot
+tree:
+  sequence:
+    - retry:
+        attempts: 3
+        recovery:
+          parallel:
+            - {skill: {arm: left, name: home}}
+            - {skill: {arm: right, name: home}}
+        do:
+          sequence:
+            - skill:
+                arm: left
+                name: open_lid
+                target: lid
+                prompt: Grasp the edge of the lid and lift it open.
+                success: lid_open
+                timeout_s: 15
+                verify_timeout_s: 1
+            - while:
+                arm: left
+                maintain: lid_open
+                until: block_in_slot
+                establish_timeout_s: 2
+                do:
+                  fallback:
+                    - check: block_in_slot
+                    - skill:
+                        arm: right
+                        name: insert
+                        target: block
+                        params: {object_id: block, destination_id: slot}
+                        prompt: Pick up the red block and insert it into the box slot.
+                        success: block_in_slot
+                        timeout_s: 15
+                        verify_timeout_s: 1
+    - skill: {arm: left, name: release}
+    - check: block_in_slot

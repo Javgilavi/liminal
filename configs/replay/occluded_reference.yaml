@@ -1,0 +1,28 @@
+# V3 delayed reference: the reference frame marks the red block as the target, then the live
+# camera cannot see it (occluded). Its predicate must stay UNKNOWN, not FALSE, until it is
+# revealed or handled. The blue block is a labelled distractor that is not part of the goal.
+name: occluded_reference
+goal:
+  id: goal-marked-block
+  text: Put the block marked in the reference photo into the box
+  obligations: [red_in_box]
+objects:
+  red: red block
+  blue: blue block
+  box: white box
+obligations:
+  red_in_box: {object_id: red, destination_id: box}
+reference_frames:
+  ref-target: red
+initial_locations: {red: table}
+initially_occluded: [red]
+capabilities:
+  version: replay-v1
+  available_arms: [left, right]
+  skills:
+    pick_place:
+      arms: [left, right]
+      effect_templates: ["{object_id}_in_{destination_id}"]
+      prompt_template: "Pick up the {object_label} and place it inside the {destination_label}."
+      max_timeout_s: 15
+      max_attempts: 2

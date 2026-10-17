@@ -1,0 +1,39 @@
+# V5 cooperative arms, REPLAY fixture (not hardware): the left arm opens and HOLDS the box lid
+# while the right arm inserts the block. `lid_open` is an observed scene predicate; a hold
+# controller being engaged is bookkeeping and proves nothing about the lid.
+#   liminal episode configs/replay/lid_hold_insert.yaml --task configs/tasks/replay_lid_hold_insert.yaml
+name: lid_hold_insert
+goal:
+  id: goal-lid-insert
+  text: Hold the lid open with the left arm and insert the block into the slot with the right arm
+  obligations: [block_in_slot]
+objects:
+  block: red block
+  slot: box slot
+obligations:
+  block_in_slot: {object_id: block, destination_id: slot}
+initial_locations: {block: table}
+capabilities:
+  version: replay-v5
+  available_arms: [left, right]
+  skills:
+    open_lid:
+      arms: [left]
+      effect_templates: [lid_open]
+      prompt_template: "Grasp the edge of the lid and lift it open."
+      max_timeout_s: 15
+    insert:
+      arms: [right]
+      effect_templates: ["{object_id}_in_{destination_id}"]
+      prompt_template: "Pick up the {object_label} and insert it into the {destination_label}."
+      max_timeout_s: 15
+state:
+  predicates: {lid_open: false}
+  skills:
+    open_lid: {duration_s: 0.05}
+    insert: {duration_s: 0.4, requires: [lid_open]}
+  support:
+    lid_open: {arm: left, release_closes: true}
+  faults:
+    # Latent: the lid would slip during the first insert, but only if nobody is holding it.
+    - {kind: slip_during, skill: insert, state: lid_open, at_s: 0.15, on_attempt: 1, unless_supported_by: left}
