@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>liminal operator console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307090a'/%3E%3Crect x='7' y='7' width='7' height='18' rx='2' fill='%233be3b4'/%3E%3Crect x='18.5' y='7.5' width='6' height='17' rx='2' fill='none' stroke='%233be3b4' stroke-width='1.6' stroke-dasharray='2.4 2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Same identity as ws4/site/index.html (liminal). Dark only: this is a live robot control station. */
+  :root {
+    color-scheme: dark;
+    --bg: #07090a; --bg-raise: #0b0e0f; --panel: #0f1314; --panel2: #151b1c; --panel3: #1b2223;
+    --line: rgba(255, 255, 255, .08); --line2: rgba(255, 255, 255, .14);
+    --text: #f3f5f4; --muted: #a3aca9; --dim: #6f7875;
+    --accent: #3be3b4; --accent-soft: rgba(59, 227, 180, .12); --accent-line: rgba(59, 227, 180, .4); --accent-ink: #03150f;
+    /* status colours: legibility first */
+    --blue: #5aa2ff; --green: #3be3b4; --red: #ff4d4f; --amber: #f5b544; --violet: #b49cff; --teal: #5fd4e8;
+    --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--font); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- sticky header: e-stop always visible ---------- */
+  header.top {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 20px; min-height: 76px;
+    background: rgba(7, 9, 10, .9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  header.top:has(#estop.latched) { background: linear-gradient(180deg, rgba(255, 77, 79, .22), rgba(7, 9, 10, .92)); border-bottom-color: var(--red); }
+  .brand { display: flex; align-items: center; gap: 10px; margin-right: 6px; white-space: nowrap; }
+  .brand svg { width: 26px; height: 26px; flex: none; }
+  .brand .name { font-weight: 700; font-size: 18px; letter-spacing: -.03em; }
+  .brand .sub { font: 500 11px/1 var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .08em; padding-left: 10px; border-left: 1px solid var(--line2); }
+  .spacer { flex: 1; }
+  .controls { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+
+  /* state badge */
+  .state {
+    display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px;
+    font: 600 12px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap;
+    border: 1px solid var(--line2); background: var(--panel2); color: var(--muted);
+  }
+  .state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+  .s-idle, .s-paused { color: var(--muted); }
+  .s-paused { color: var(--amber); border-color: rgba(245, 181, 68, .45); background: rgba(245, 181, 68, .1); }
+  .s-running { color: var(--blue); border-color: rgba(90, 162, 255, .5); background: rgba(90, 162, 255, .12); }
+  .s-running::before { animation: blink 1.2s ease-in-out infinite; }
+  .s-succeeded { color: var(--green); border-color: var(--accent-line); background: var(--accent-soft); }
+  .s-failed, .s-aborted, .s-estopped { color: #ff8a8c; border-color: rgba(255, 77, 79, .6); background: rgba(255, 77, 79, .14); }
+  .s-awaiting_replan { color: var(--amber); border-color: rgba(245, 181, 68, .55); background: rgba(245, 181, 68, .12); }
+  @keyframes blink { 50% { opacity: .3; } }
+
+  /* buttons */
+  button {
+    font: 500 13.5px/1 var(--font); color: var(--text); background: var(--panel2); border: 1px solid var(--line2);
+    border-radius: 10px; height: 36px; padding: 0 14px; cursor: pointer; white-space: nowrap;
+    transition: border-color .12s, background .12s, transform .12s;
+  }
+  button:hover:not(:disabled) { border-color: rgba(255, 255, 255, .32); }
+  button:disabled { opacity: .35; cursor: default; }
+  button.primary { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #fff; }
+  button.go { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; height: 40px; padding: 0 18px; }
+  button.go:hover:not(:disabled) { background: #5cebc3; }
+  #release, #resume, #abort { height: 44px; padding: 0 16px; font-weight: 600; }
+  #abort:not(:disabled) { color: #ffb0b1; border-color: rgba(255, 77, 79, .45); }
+
+  /* the e-stop: biggest, reddest thing on screen */
+  #estop {
+    display: inline-flex; align-items: center; gap: 12px; height: 56px; padding: 0 22px 0 18px; border-radius: 14px;
+    background: linear-gradient(180deg, #ff4d4f, #d9292c); border: 2px solid #ff9a9c; color: #fff;
+    font: 800 19px/1 var(--font); letter-spacing: .08em;
+    box-shadow: 0 0 0 4px rgba(255, 77, 79, .22), 0 10px 30px -8px rgba(255, 77, 79, .65);
+  }
+  #estop:hover { background: linear-gradient(180deg, #ff5f61, #e02f32); border-color: #ffc2c3; }
+  #estop:active { transform: translateY(1px); }
+  #estop svg { width: 24px; height: 24px; flex: none; }
+  #estop kbd { background: rgba(0, 0, 0, .25); border-color: rgba(255, 255, 255, .4); color: #fff; font-size: 11px; letter-spacing: .04em; }
+  #estop.latched { animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(255, 77, 79, .45), 0 10px 30px -8px rgba(255, 77, 79, .8); } }
+
+  /* context bar: config + spend */
+  .context { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--bg-raise); }
+  .context .lbl { font: 500 11px/1 var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-right: 4px; }
+  #cfg { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font: 500 12px/1 var(--mono); padding: 6px 9px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+  .chip b { color: var(--text); font-weight: 600; }
+  #cost { color: var(--muted); }
+
+  /* ---------- layout ---------- */
+  main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; padding: 16px 20px 28px; max-width: 1760px; margin: 0 auto; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 18px; margin-bottom: 16px; }
+  section h2 {
+    font: 600 11.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .1em; color: var(--accent);
+    margin: 0 0 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  #planmeta { font: 500 12px/1.3 var(--mono); color: var(--dim); text-transform: none; letter-spacing: 0; }
+
+  textarea {
+    width: 100%; min-height: 72px; resize: vertical; background: var(--bg); color: var(--text);
+    border: 1px solid var(--line2); border-radius: 12px; padding: 12px 14px; font: 500 16px/1.45 var(--font); letter-spacing: -.01em;
+  }
+  textarea:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+  textarea:disabled { opacity: .6; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  input[type=number] { width: 72px; height: 36px; background: var(--bg); color: var(--text); border: 1px solid var(--line2); border-radius: 10px; padding: 0 10px; font: 500 13px var(--mono); }
+  input[type=checkbox] { accent-color: var(--accent); vertical-align: -2px; }
+  label { cursor: pointer; }
+  .muted { color: var(--muted); } .err { color: #ff8a8c; } .small { font-size: 12.5px; }
+  #planstatus { font-family: var(--mono); color: var(--accent); }
+  #simctl .muted.small { font-family: var(--mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+
+  /* ---------- plan lanes ---------- */
+  .rationale { font-size: 14px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
+  .rationale:empty { display: none; }
+  #errors:not(:empty) { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255, 77, 79, .08); border: 1px solid rgba(255, 77, 79, .35); }
+  .lanes { display: grid; grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr); gap: 10px 0; align-items: stretch; }
+  .lanehead { display: flex; align-items: center; gap: 8px; font: 600 11.5px/1 var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .1em; padding: 2px 2px 4px; }
+  .lanehead::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--muted); }
+  .par { display: flex; align-items: center; justify-content: center; color: var(--violet); font: 800 22px/1 var(--font); text-shadow: 0 0 14px rgba(180, 156, 255, .6); }
+  .par:not(:empty) { background: linear-gradient(rgba(180, 156, 255, .25), rgba(180, 156, 255, .25)) center / 1px 100% no-repeat; }
+  .cell { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+  .card {
+    border: 1px solid var(--line2); border-left: 4px solid #59606c; border-radius: 12px; padding: 10px 12px 11px;
+    background: var(--panel2); min-width: 0; transition: background .2s, border-color .2s;
+  }
+  .card.proposed { border-left-color: var(--muted); }
+  .card.pending { border-left-color: #59606c; }
+  .card.running { border-left-color: var(--blue); border-color: rgba(90, 162, 255, .45); background: linear-gradient(90deg, rgba(90, 162, 255, .12), rgba(90, 162, 255, .03)), var(--panel2); }
+  .card.done { border-left-color: var(--green); border-color: rgba(59, 227, 180, .28); }
+  .card.failed { border-left-color: var(--red); border-color: rgba(255, 77, 79, .5); background: linear-gradient(90deg, rgba(255, 77, 79, .14), rgba(255, 77, 79, .04)), var(--panel2); }
+  .card.interrupted { border-left-color: var(--amber); border-color: rgba(245, 181, 68, .45); }
+  .card .t { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 8px; font: 600 14px/1.3 var(--mono); letter-spacing: -.01em; }
+  .card .t > span:first-child { overflow-wrap: break-word; min-width: 0; max-width: 100%; }
+  .card .t .st { font: 700 10.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); white-space: nowrap; padding: 4px 6px; border-radius: 6px; background: rgba(255, 255, 255, .05); }
+  .card.running .st { color: var(--blue); background: rgba(90, 162, 255, .14); }
+  .card.done .st { color: var(--green); background: var(--accent-soft); }
+  .card.failed .st { color: #ff8a8c; background: rgba(255, 77, 79, .16); }
+  .card.interrupted .st { color: var(--amber); background: rgba(245, 181, 68, .14); }
+  .card .p { font-size: 13px; color: #cfe0ff; margin-top: 6px; word-break: break-word; }
+  .card .c { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .card .c.err { color: #ff8a8c; }
+  .card .v { font-size: 12.5px; margin-top: 6px; color: #b8f2dd; padding: 6px 8px; border-radius: 8px; background: rgba(59, 227, 180, .06); }
+  .card .v.no { color: #f1dca8; background: rgba(245, 181, 68, .07); }
+  .bar { height: 5px; background: rgba(255, 255, 255, .07); border-radius: 99px; margin-top: 8px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--blue); border-radius: 99px; transition: width .3s linear; }
+  .ov { display: flex; gap: 6px; margin-top: 8px; }
+  .ov button { height: 26px; padding: 0 9px; font-size: 11.5px; border-radius: 7px; background: transparent; }
+  .kind-primitive .p { color: var(--teal); }
+  .kind-hold { border-style: dashed; border-left-style: solid; background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .025) 0 8px, transparent 8px 16px), var(--panel2); }
+  .approve-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .approve-row .muted.small { flex: 1 1 260px; }
+
+  /* ---------- banners ---------- */
+  .banner { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; margin-bottom: 12px; font-weight: 600; font-size: 14px; }
+  .banner::before { content: "!"; flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 800 13px/1 var(--font); }
+  .banner.estop { background: rgba(255, 77, 79, .16); border: 1px solid var(--red); color: #ffd6d6; }
+  .banner.estop::before { background: var(--red); color: #fff; }
+  .banner.replan { background: rgba(245, 181, 68, .12); border: 1px solid var(--amber); color: #ffe7b8; }
+  .banner.replan::before { background: var(--amber); color: #241700; }
+
+  /* ---------- run table ---------- */
+  table.kv { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.kv td { padding: 8px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.kv tr:last-child td { border-bottom: 0; }
+  table.kv td:first-child { color: var(--dim); width: 38%; font: 500 11.5px/1.5 var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  table.kv td:last-child { font-variant-numeric: tabular-nums; }
+  #runkv:empty::after { content: "No run yet."; color: var(--dim); font-size: 13px; }
+
+  /* ---------- cameras ---------- */
+  .cams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .cams figure { margin: 0; position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #000; }
+  .cams img { width: 100%; display: block; aspect-ratio: 4/3; object-fit: cover; background: #000; }
+  .cams figure.head { grid-column: span 2; }
+  figcaption {
+    position: absolute; left: 8px; top: 8px; font: 600 10.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em;
+    color: var(--text); background: rgba(7, 9, 10, .72); backdrop-filter: blur(6px); padding: 5px 7px; border-radius: 6px; border: 1px solid var(--line2);
+  }
+
+  /* ---------- events ---------- */
+  #log {
+    height: 320px; overflow: auto; font: 12px/1.55 var(--mono); background: #050707; border-radius: 12px; padding: 10px 12px;
+    border: 1px solid var(--line); scrollbar-width: thin; scrollbar-color: var(--line2) transparent;
+  }
+  #log div { white-space: pre-wrap; word-break: break-word; padding: 1px 0; }
+  .l-error { color: #ff8a8c; } .l-warn { color: #f5c76a; } .l-info { color: #d6dcda; } .l-debug { color: #5d6663; }
+
+  kbd { font: 600 11px/1 var(--mono); background: #20272a; border: 1px solid #3a4245; border-bottom-width: 2px; border-radius: 5px; padding: 3px 6px; }
+
+  /* ---------- narrow windows: e-stop stays on top, full width ---------- */
+  @media (max-width: 760px) {
+    header.top { padding: 10px 12px; gap: 10px; }
+    .brand .sub { display: none; }
+    .controls { width: 100%; order: 3; }
+    #release, #resume, #abort { flex: 1 1 0; padding: 0 8px; min-width: 0; }
+    #estop { flex: 1.6 1 0; justify-content: center; height: 52px; font-size: 17px; padding: 0 12px; }
+    .context, main { padding-left: 12px; padding-right: 12px; }
+    section { padding: 14px; }
+    .lanes { grid-template-columns: minmax(0, 1fr) 26px minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { #estop.latched, .s-running::before { animation: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 26 26" aria-hidden="true"><rect x="4" y="4" width="7.5" height="18" rx="2.2" fill="#3be3b4"/><rect x="15.3" y="4.6" width="6.4" height="16.8" rx="2" fill="none" stroke="#3be3b4" stroke-width="1.5" stroke-dasharray="2.6 2.1"/></svg>
+    <span class="name">liminal</span><span class="sub">XLeRobot operator console</span>
+  </div>
+  <span id="state" class="state s-idle">idle</span>
+  <span class="spacer"></span>
+  <div class="controls">
+    <button id="release" title="Release the e-stop latch">Release</button>
+    <button id="resume" title="Restart interrupted steps">Resume</button>
+    <button id="abort" title="Stop the run and log it as aborted">Abort</button>
+    <button id="estop" title="Stop both arms (spacebar)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z"/><path d="M12 7.5v6M12 16.5v.5" stroke-linecap="round"/></svg>E-STOP <kbd>space</kbd></button>
+  </div>
+</header>
+<div class="context">
+  <span class="lbl">Session</span>
+  <span id="cfg"></span>
+  <span class="spacer"></span>
+  <span class="chip" id="cost">USD 0.0000</span>
+</div>
+<main>
+  <div>
+    <section>
+      <h2>Goal</h2>
+      <textarea id="goal" placeholder="Describe the task, e.g. put the apple and the yellow block in the box, then close the lid">put the apple and the yellow block in the box, then close the lid</textarea>
+      <div class="row">
+        <button class="primary" id="planbtn">Plan</button>
+        <span id="planstatus" class="muted small"></span>
+        <span class="spacer"></span>
+        <span id="simctl" class="row" style="margin:0">
+          <span class="muted small">sim seed</span><input type="number" id="seed" value="0">
+          <label class="small muted"><input type="checkbox" id="lidonbox"> lid on box</label>
+          <button id="reset">Reset scene</button>
+        </span>
+      </div>
+    </section>
+    <section>
+      <h2>Plan <span id="planmeta" class="muted small"></span></h2>
+      <div id="banners"></div>
+      <div id="rationale" class="rationale"></div>
+      <div id="errors" class="err small"></div>
+      <div id="lanes" class="lanes"></div>
+      <div class="row approve-row">
+        <button class="go" id="approve" disabled>Approve and run</button>
+        <span class="muted small">A human approves every plan. Claude only picks skills from the vocabulary; nothing it writes reaches the motors.</span>
+      </div>
+    </section>
+    <section>
+      <h2>Run</h2>
+      <table class="kv" id="runkv"></table>
+    </section>
+  </div>
+  <div>
+    <section>
+      <h2>Cameras</h2>
+      <div class="cams">
+        <figure class="head"><img id="cam-head" alt="head camera"><figcaption>head camera (scene for both arms)</figcaption></figure>
+        <figure><img id="cam-left_wrist" alt="left wrist camera"><figcaption>left wrist</figcaption></figure>
+        <figure><img id="cam-right_wrist" alt="right wrist camera"><figcaption>right wrist</figcaption></figure>
+      </div>
+    </section>
+    <section id="imaginesec" style="display:none">
+      <h2>Imagined vs actual</h2>
+      <div class="cams">
+        <figure><img id="cam-imagined" alt="imagined"><figcaption>FLUX imagined frame</figcaption></figure>
+        <figure><img id="cam-actual" alt="actual"><figcaption>actual</figcaption></figure>
+      </div>
+    </section>
+    <section>
+      <h2>Events</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let S = null, lastSeq = 0, proposalVersion = null;
+
+async function post(path, body = {}) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-HMI": "1" }, body: JSON.stringify(body) });
+  let data = {}; try { data = await r.json(); } catch (e) {}
+  if (!r.ok && data.message) addLocal("warn", data.message);
+  if (!r.ok && data.error) addLocal("warn", data.error);
+  return data;
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function addLocal(level, msg) { const d = document.createElement("div"); d.className = "l-" + level; d.textContent = "(hmi) " + msg; $("log").appendChild(d); $("log").scrollTop = 1e9; }
+
+function estop() { $("estop").classList.add("latched"); post("/api/estop"); }
+$("estop").onclick = estop;
+$("release").onclick = () => post("/api/release");
+$("resume").onclick = () => post("/api/resume");
+$("abort").onclick = () => { if (confirm("Abort the run? It is logged as an aborted attempt.")) post("/api/abort"); };
+$("planbtn").onclick = () => post("/api/plan", { goal: $("goal").value });
+$("approve").onclick = () => { if (proposalVersion != null) post("/api/approve", { version: proposalVersion }); };
+$("reset").onclick = () => post("/api/reset", { seed: $("seed").value, lid_on_box: $("lidonbox").checked });
+document.addEventListener("keydown", (e) => {
+  if (e.code !== "Space") return;
+  const running = S && S.run && !["succeeded", "failed", "aborted"].includes(S.run.state);
+  const typing = document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName);
+  if (running || !typing) { e.preventDefault(); estop(); }
+});
+
+function card(st, isRun) {
+  const kind = st.skill === "hold" ? "kind-hold" : "kind-" + (st.kind || "flux");
+  const status = st.status || "proposed";
+  let html = `<div class="card ${status} ${kind}"><div class="t"><span>${esc(st.id)}</span><span class="st">${esc(status)}${st.attempt ? " " + st.attempt + "/" + st.max_attempts : ""}</span></div>`;
+  if (st.skill === "hold") html += `<div class="p">hold until ${esc((st.hold_until || []).join(", "))}</div>`;
+  else if (st.kind === "primitive") html += `<div class="p">primitive: ${esc(st.skill)}</div>`;
+  else html += `<div class="p">FLUX: "${esc(st.prompt || "")}"</div>`;
+  if (st.success_check) html += `<div class="c">check: ${esc(st.success_check)}</div>`;
+  if (st.depends_on && st.depends_on.length) html += `<div class="c">after: ${esc(st.depends_on.join(", "))}</div>`;
+  if (isRun && status === "running") {
+    const pct = Math.min(100, 100 * (st.elapsed_s || 0) / (st.timeout_s || 1));
+    html += `<div class="c">${(st.elapsed_s || 0).toFixed(1)} s / ${st.timeout_s} s, ${st.chunks} chunks${st.phase ? ", " + esc(st.phase) : ""}${st.verifying ? ", verifying..." : ""}</div><div class="bar"><div style="width:${pct}%"></div></div>`;
+  }
+  if (isRun && st.last_verdict) {
+    const v = st.last_verdict;
+    html += `<div class="v ${v.done ? "" : "no"}">${v.done ? "&#10003;" : "&#8230;"} ${esc(v.source)} (${(v.confidence ?? 0).toFixed(2)}): ${esc(v.observation)}</div>`;
+  }
+  if (isRun && st.reason && status !== "done") html += `<div class="c err">${esc(st.reason)}</div>`;
+  if (isRun && !["done"].includes(status) && S.run && !["succeeded", "failed", "aborted"].includes(S.run.state))
+    html += `<div class="ov"><button onclick="post('/api/override',{step:'${esc(st.id)}',done:true})">mark done</button><button onclick="post('/api/override',{step:'${esc(st.id)}',done:false})">mark failed</button></div>`;
+  return html + "</div>";
+}
+
+function renderLanes(steps, levels, pairs, isRun) {
+  const lanes = $("lanes");
+  if (!steps || !steps.length) { lanes.innerHTML = '<div class="muted small" style="grid-column: span 3">No plan yet. Type a goal and press Plan.</div>'; return; }
+  const lv = (s) => (levels && levels[s.id] != null) ? levels[s.id] : (s.level ?? 0);
+  const maxL = Math.max(...steps.map(lv));
+  const pairSet = new Set((pairs || []).map(p => p[0] + "|" + p[1]));
+  let html = '<div class="lanehead">left arm</div><div></div><div class="lanehead">right arm</div>';
+  for (let l = 0; l <= maxL; l++) {
+    const L = steps.filter(s => s.arm === "left" && lv(s) === l), R = steps.filter(s => s.arm === "right" && lv(s) === l);
+    const conc = L.some(a => R.some(b => pairSet.has(a.id + "|" + b.id)));
+    html += `<div class="cell">${L.map(s => card(s, isRun)).join("")}</div>`;
+    html += `<div class="par" title="${conc ? "runs concurrently" : ""}">${conc ? "&#8741;" : ""}</div>`;
+    html += `<div class="cell">${R.map(s => card(s, isRun)).join("")}</div>`;
+  }
+  lanes.innerHTML = html;
+}
+
+function kv(rows) { return rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join(""); }
+
+function render() {
+  if (!S) return;
+  const c = S.config;
+  $("cfg").innerHTML = [["env", c.env], ["policy", c.policy], ["planner", c.planner_model || c.planner], ["verifier", c.verifier], ["gate", c.gate ? "on" : "off"]]
+    .map(([k, v]) => `<span class="chip">${k} <b>${esc(v)}</b></span>`).join(" ");
+  $("simctl").style.display = c.env === "sim" ? "" : "none";
+  const run = S.run, active = run && !["succeeded", "failed", "aborted"].includes(run.state);
+  const state = S.estopped && !active ? "estopped" : (run ? run.state : "idle");
+  $("state").textContent = state.replace("_", " "); $("state").className = "state s-" + state;
+  $("estop").classList.toggle("latched", !!S.estopped);
+  $("release").disabled = !S.estopped; $("resume").disabled = !(run && run.state === "paused"); $("abort").disabled = !active;
+  const cost = S.cost; $("cost").textContent = `Claude USD ${cost.total_usd.toFixed(4)} / ${cost.budget_usd.toFixed(2)}`;
+  $("planbtn").disabled = S.planning || active; $("goal").disabled = active;
+  $("planstatus").textContent = S.planning ? "planning..." : "";
+  const p = S.proposal;
+  let banners = "";
+  if (S.estopped) banners += `<div class="banner estop">E-STOP latched: both arms hold their last command. Release, then Resume or Abort.</div>`;
+  if (run && run.state === "awaiting_replan") banners += `<div class="banner replan">A step failed. ${p && p.kind === "replan" ? "Claude proposed a new plan below: approve it to continue." : "Waiting for the planner..."}</div>`;
+  $("banners").innerHTML = banners;
+  if (p && (!active || p.kind === "replan")) {
+    proposalVersion = p.ok ? p.version : null;
+    $("approve").disabled = !p.ok || (p.kind === "plan" && active);
+    $("approve").textContent = p.kind === "replan" ? "Approve replan and continue" : "Approve and run";
+    $("planmeta").textContent = `v${p.version} from ${p.source}, ${p.attempts} attempt(s), ${p.latency_s} s, USD ${p.cost_usd.toFixed(4)}` + (p.concurrent_pairs && p.concurrent_pairs.length ? `, ${p.concurrent_pairs.length} concurrent pair(s)` : "");
+    $("rationale").textContent = p.plan ? (p.plan.rationale || "") : "";
+    $("errors").innerHTML = (p.errors || []).map(e => "&#9888; " + esc(e)).join("<br>");
+    const steps = p.plan ? p.plan.steps.map(s => ({ ...s, kind: (S.vocabulary.find(v => v.name === s.skill) || {}).kind, prompt: (S.vocabulary.find(v => v.name === s.skill) || {}).prompt })) : [];
+    renderLanes(steps, p.levels, p.concurrent_pairs, false);
+  } else if (run) {
+    proposalVersion = null; $("approve").disabled = true; $("approve").textContent = "Approve and run";
+    $("planmeta").textContent = `running plan v${run.plan_version}`; $("errors").innerHTML = "";
+    renderLanes(run.steps, null, run.concurrent_pairs, true);
+  } else { proposalVersion = null; $("approve").disabled = true; renderLanes([], null, [], false); }
+  const rows = [];
+  if (run) {
+    const cc = run.concurrency || {};
+    const both = cc.active_ticks ? (100 * cc.both_arms_moving_ticks / cc.active_ticks).toFixed(0) + "%" : "-";
+    rows.push(["state", esc(run.state) + (run.failure ? ` <span class="err">${esc(run.failure)}</span>` : "")],
+      ["active time", `${run.t.toFixed(1)} s (${run.tick} ticks)`], ["arms", `left: ${esc(run.arms.left || "idle")}, right: ${esc(run.arms.right || "idle")}`],
+      ["both arms moving", both], ["interventions / replans", `${run.interventions} / ${run.replans}`]);
+    for (const [t, l] of Object.entries(cc.latency_s || {})) rows.push([`chunk latency ${t}`, `median ${l.median.toFixed(2)} s, max ${l.max.toFixed(2)} s (n=${l.n})`]);
+  }
+  if (S.gate) rows.push(["collision gate", `${S.gate.chunks} chunks, ${S.gate.truncated} truncated, ${S.gate.refused} refused, ${S.gate.tick_blocks} tick blocks, ${S.gate.ms_per_frame ?? "-"} ms/frame`]);
+  for (const [k, v] of Object.entries(cost.by_purpose || {})) rows.push([`Claude ${k}`, `${v.calls} calls, USD ${v.cost_usd.toFixed(4)}, median ${v.median_latency_s?.toFixed(1)} s`]);
+  if (S.last_result && S.last_result.trial) { const t = S.last_result.trial; rows.push(["last trial", `${esc(t.task)}/${esc(t.variant)} #${t.attempt}: ${t.steps_done}/${t.steps_total} steps, ${t.success ? "success" : "fail"} &rarr; ${esc(S.config.trial_log)}`]); }
+  $("runkv").innerHTML = kv(rows);
+  const log = $("log"), stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+  for (const e of S.events) {
+    if (e.seq <= lastSeq) continue; lastSeq = e.seq;
+    const d = document.createElement("div"); d.className = "l-" + e.level;
+    d.textContent = new Date(e.time * 1000).toLocaleTimeString() + "  " + e.msg; log.appendChild(d);
+  }
+  while (log.childElementCount > 600) log.removeChild(log.firstChild);
+  if (stick) log.scrollTop = 1e9;
+}
+
+async function poll() {
+  try { const r = await fetch("/api/state"); S = await r.json(); render(); } catch (e) {}
+  setTimeout(poll, 300);
+}
+function cams() {
+  const t = Date.now();
+  for (const n of ["head", "left_wrist", "right_wrist"]) { const img = new Image(); img.onload = () => { $("cam-" + n).src = img.src; }; img.src = `/api/frame/${n}.jpg?t=${t}`; }
+  setTimeout(cams, 250);
+}
+poll(); cams();
+</script>
+</body>
+</html>

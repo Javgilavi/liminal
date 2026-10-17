@@ -1,0 +1,47 @@
+<!-- Orchestrator demo scene: "put the apple and the yellow block in the box, then close the lid".
+     Robot, cameras and table come from ws4/sim (read-only include). The props are new and owned by ws4/orchestrator:
+     an open box both arms can reach top-down, a red "apple", a yellow block, and a loose lid with a knob that the
+     scripted sim skills pick up and place (ws4/sim's hinged lidbox is out of top-down reach at x = 0.42 m).
+     Sizes are stand-ins, not measured props. -->
+<mujoco model="orchestrator_pack_box">
+  <compiler angle="radian" meshdir="../../assets" autolimits="true"/>
+  <include file="../../sim/model/station_robot.xml"/>
+  <asset>
+    <texture name="floor" type="2d" builtin="checker" rgb1="0.45 0.45 0.47" rgb2="0.4 0.4 0.42" width="512" height="512"/>
+    <material name="floor" texture="floor" texrepeat="8 8"/>
+    <texture name="skybox" type="skybox" builtin="gradient" rgb1="0.85 0.82 0.76" rgb2="0.6 0.58 0.55" width="512" height="512"/>
+  </asset>
+  <worldbody>
+    <light name="key" pos="0.6 0.5 1.6" dir="-0.35 -0.3 -1" directional="true" diffuse="0.65 0.63 0.6" specular="0.1 0.1 0.1" castshadow="true"/>
+    <light name="fill" pos="-0.5 -0.8 1.2" dir="0.4 0.5 -1" directional="true" diffuse="0.25 0.25 0.27" specular="0 0 0" castshadow="false"/>
+    <geom name="floor" type="plane" pos="0 0 -0.75" size="3 3 0.1" material="floor" contype="0" conaffinity="0"/>
+    <camera name="overview" mode="fixed" pos="1.0 0.6 0.75" xyaxes="-0.5767 0.8170 0 -0.4081 -0.2881 0.8663" fovy="50"/>
+    <camera name="top_down" mode="fixed" pos="0.25 0 1.4" xyaxes="0 -1 0 1 0 0" fovy="55"/>
+    <!-- Open box, 15 x 15 cm outside, 5 cm walls, fixed to the table. -->
+    <body name="box" pos="0.25 0 0">
+      <geom name="box_floor" type="box" pos="0 0 0.003" size="0.075 0.075 0.003" rgba="0.55 0.36 0.2 1"/>
+      <geom name="box_near" type="box" pos="-0.072 0 0.028" size="0.003 0.075 0.025" rgba="0.55 0.36 0.2 1"/>
+      <geom name="box_far" type="box" pos="0.072 0 0.028" size="0.003 0.075 0.025" rgba="0.55 0.36 0.2 1"/>
+      <geom name="box_left" type="box" pos="0 0.072 0.028" size="0.075 0.003 0.025" rgba="0.55 0.36 0.2 1"/>
+      <geom name="box_right" type="box" pos="0 -0.072 0.028" size="0.075 0.003 0.025" rgba="0.55 0.36 0.2 1"/>
+    </body>
+    <!-- Red apple stand-in: a 4.4 cm, slightly flattened ellipsoid with rolling friction (a real apple does not roll
+         away at the first touch the way a perfect sphere does). -->
+    <body name="apple" pos="0.21 0.16 0.019">
+      <freejoint name="apple_joint"/>
+      <geom name="apple_geom" type="ellipsoid" size="0.022 0.022 0.019" rgba="0.8 0.1 0.08 1" mass="0.04" friction="1.0 0.02 0.01" condim="6"/>
+      <geom name="apple_stem" type="capsule" fromto="0 0 0.017 0.003 0 0.027" size="0.002" rgba="0.3 0.2 0.08 1" mass="0.001" contype="0" conaffinity="0"/>
+    </body>
+    <!-- Yellow block: a 4 cm cube. -->
+    <body name="yellow_block" pos="0.21 -0.16 0.0201">
+      <freejoint name="yellow_block_joint"/>
+      <geom name="yellow_block_geom" type="box" size="0.02 0.02 0.02" rgba="0.95 0.8 0.1 1" mass="0.04" friction="0.9 0.01 0.001" condim="4"/>
+    </body>
+    <!-- Loose lid: 17 x 17 cm plate with a 3.6 cm knob on top, starts on the table (box open). -->
+    <body name="lid" pos="0.08 -0.30 0.004">
+      <freejoint name="lid_joint"/>
+      <geom name="lid_plate" type="box" size="0.085 0.085 0.004" rgba="0.72 0.5 0.28 1" mass="0.02" friction="0.8 0.01 0.001"/>
+      <geom name="lid_knob" type="box" pos="0 0 0.022" size="0.018 0.018 0.018" rgba="0.3 0.2 0.1 1" mass="0.008" friction="1.0 0.02 0.002" condim="4"/>
+    </body>
+  </worldbody>
+</mujoco>
