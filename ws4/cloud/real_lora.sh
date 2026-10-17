@@ -71,7 +71,8 @@ probe|train)
   # (for picking the best one later) but the training state only on the newest (enough to resume).
   pruner=""
   if [ "$1" = train ]; then
-    ( while sleep 300; do
+    ( set +e  # under the script's -e/pipefail, the first find before checkpoints/ exists would end the loop
+      while sleep 300; do
         find "$out/checkpoints" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' 2>/dev/null | sort | head -n -1 |
           while read -r d; do rm -rf "$d/training_state"; done
       done ) &

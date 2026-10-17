@@ -424,6 +424,99 @@ Timeline (UTC):
     chunk while sharing the GPU with training. The test server was stopped afterwards.
 - Oscar, 17 Oct evening: the overnight run waits for the final split (enough data first), then 20,000
   microsteps.
+- Test run losses (28 takes): eval 0.285, 0.271, 0.257, 0.254 at microsteps 500 to 2,000; train loss per 500
+  microsteps 0.222, 0.178, 0.172, 0.167 (action MSE 0.208 to 0.140), max 0.48, gradient norm at most 1.9.
+  Flattening on 28 takes, so with about three times the data the 20,000 microsteps stand.
+- The test run's pruner did not prune: under `set -e` its first `find`, before `checkpoints/` existed, ended the
+  loop. It now runs under `set +e`.
+- 19:40 UTC: final dataset snapshot, identical to the live recording apart from the split files. 104 episodes,
+  46,372 frames, layouts A 24, B 15, C 50, D 15. Converted per arm (all episodes; the run selects them) and
+  uploaded (475 MB) to `/workspace/real_lora/pen_in_right_final`. That folder is also the held-out per-arm copy
+  for the morning offline eval.
+- Final split (`ws4_split.json` "final" at 19:40:18 UTC, copies on the pod and in `ws4/.cache/real_lora/`):
+  - 82 train;
+  - 14 held-out: A 20 to 22, B 36 to 38, C 85 to 88, D 99 and 101 to 103;
+  - 8 dropped: 15, 16, 23, 28, 34, 43, 61, 100, which equal review.json's rejects.
+- Base `/workspace/packages/so101_haller_pen_B`: variant B quantiles of the 82 train takes (38,030 frames).
+- 19:43:00 UTC: first launch `/workspace/real_lora/lora_pen` (82 train, 14 eval). Stopped at 19:50 after
+  7 min: at 19:43:05 ws4-vr2 froze the split at 12 held-out (the last 3 good takes per layout), which moved 85
+  and 99 into train. The 82-take split files are kept as `ws4/.cache/real_lora/*_82.*`.
+- **19:50:20 UTC: overnight run `/workspace/real_lora/lora_pen84` started on the frozen split.**
+  - 84 train, 12 held-out (A 20 to 22, B 36 to 38, C 86 to 88, D 101 to 103), 8 dropped.
+  - Base `/workspace/packages/so101_haller_pen_B84`: B quantiles of the 84 train takes (38,686 frames).
+  - 20,000 microsteps, batch 2 x accum 4, checkpoints (raw + EMA) and eval loss on the 12 held-out takes
+    (256 samples) every 500. LeRobot reports "84 train, 12 eval".
+  - ETA about 02:35 UTC (04:35 CEST). Log `/workspace/logs/train_final84.out`.
+  - Eval loss on the 12 held-out takes: 0.261, 0.249, 0.231, 0.231, 0.233 at 500 to 2,500 microsteps.
+  - Held-out action-error eval of the 2.5k EMA adapter: done at about 20:53 UTC (`ws4/research/pen_lora.md`).
+  - Pruner checked at 20:21: checkpoint 500 kept only its raw and EMA adapters, 1,000 also its training state;
+    3.1 GB for both, so about 37 GB for the run.
+- Learning curve (`ws4/research/pen_lora.md`), on the training pod:
+  - `/workspace/real_lora/curve_watch.sh` evaluates the EMA adapters at 2.5k, 5k, 10k, 15k and 20k as they
+    land, using `ws4/cloud/lora_adapter.py eval` (offline_diag.py on the 12 held-out takes, adapter folded in
+    memory) and `/workspace/real_lora/eval_ckpt.sh`.
+  - Each eval takes about 5 min next to training (17 GB, text encoder on the CPU).
+  - Zero-shot B baseline done at 19:57.
+- Robot-facing server (orchestrator, 20:00 UTC): on real-serve-6000, not the training GPU.
+  - `bash /workspace/serve/pen_serve.sh 005000` runs one `lora_adapter.py serve` with two packages, as
+    so101-zeroshot's `eval_pen.sh` wants: `base` (B84) and `lora_5000` (B84 + the 5k EMA adapter folded in
+    memory). Port 8790, guidance 1.0 + compile, pen prompt pre-encoded, logs in `/workspace/serve/`; about 50 GB.
+  - It starts when the 5k checkpoint lands. 10k, 15k and 20k replace it on the same port; each swap has about
+    5 min of downtime and is announced to so101-zeroshot first. `pen_serve.sh stop` ends it when the arm
+    session ends.
+  - Tested at 20:05 to 20:08 UTC with `pen_serve.sh 000500`: READY in about 3 min.
+    - Warm-up: `base` 50 s (first call, compile), `lora_500` 10 s.
+    - Serve-pod GPU 81 of 96 GB with ws4-imagine's 8780 server.
+    - From the laptop through an SSH tunnel: both packages 6-D, finite 42 x 6 chunks; round trip about 0.9 s,
+      server 0.5 to 0.6 s (EUR-IS-1 is further from the laptop than EU-CZ-1, where the round trip was 0.48 s).
+    - `lora_500` differs from `base` on identical requests (mean 0.83, max 3.0 in command units), so the adapter is
+      applied.
+    - Stopped at 20:10 UTC (`pen_serve.sh stop`), since no arm session can happen yet (the Haller is lent out).
+      A running pen server counts as busy for the serve pod's watchdog.
+    - Oscar (via the orchestrator, 20:20 UTC): keep real-serve-6000 and a pen server on 8790 up all night, so the
+      arm can use the 5k checkpoint whenever it comes back; later checkpoints when the held-out curve says they
+      are better. The serve pod's watchdog is now 8 h idle and counts `flux.remote` too.
+    - Swaps keep the gap short: `pen_serve.sh <step>` starts `lora_adapter.py serve --replace-pid <old>`, which
+      loads and folds the new models on the CPU while the old server keeps serving, then stops it and moves to
+      the GPU. `/workspace/serve/swap_5k.sh` runs the 5k swap as soon as that adapter lands.
+    - Median normalization check (orchestrator, 20:30 UTC), on real-serve-6000 at 20:36 to 20:43 UTC:
+      - `/workspace/packages/so101_haller_pen_M` (stats `/workspace/real_lora/a0r_M_median.json`): held-out eval and
+        speed check, results in `ws4/research/pen_lora.md`.
+      - NO-GO for a median-base LoRA: overall direction 69 % against the 80 % bar.
+      - `median` joins 8790 at the 5k swap via `/workspace/serve/pen_extra.txt`; 3 packages need 64 GB available.
+      - Staged, not launched: `/workspace/packages/so101_haller_pen_M84g` and `/workspace/real_lora/launch_penM.sh`.
+    - Code check for imagination (orchestrator's request: serve from ws4-imagine's updated copy if default requests
+      are unchanged), 20:35 to 20:45 UTC, `lora_500` on three servers, same command, 5 identical default requests:
+      - current code (`/workspace/liminal/ws4`): bit-identical between 2-model 8790 and 1-model 8792, and on repeats;
+      - `/workspace/serve/ws4` (ws4-imagine's copy plus `lora_adapter.py`): max 0.255, mean 0.019 off. `flux/` is
+        identical; the new `imagine/` hooks the samplers (likely interplay with `compile_model`, unverified).
+      - Lazy imagination itself works there: same commands as its default request, 0.68 s round trip, frames
+        fetched in 0.78 s.
+      - So the arm server stays on the current code (the orchestrator's fallback). `/workspace/serve/ws4` is kept
+        for ws4-imagine.
+      - Settled at 20:58 UTC, after ws4-imagine could not reproduce the drift. A fresh one-model server of the
+        *current* code also differs from the live 8790, by exactly the same max 0.255 / mean 0.019. So the cause is
+        compile-time variance: with `compile_model` on, each fresh process lands in one of two numeric states,
+        whatever the code copy.
+      - ws4-imagine's code does not change default commands; `imagine/` is not imported unless a request asks for
+        imagination. `pen_serve.sh` now runs from the refreshed `/workspace/serve/ws4` (lazy imagination
+        available), with `/workspace/liminal/ws4` as the fallback.
+      - Every server restart may shift commands by up to about 0.25 (deg or gripper %), which is small next to the
+        4 to 6 deg action errors.
+    - so101-zeroshot's `eval_pen.sh` rehearsal (fake robot, nothing logged) passed against `base` and `lora_500`:
+      tunnel, token, 6-D contract and warm-up OK; chunk round trip 0.71 to 1.04 s median, server 0.36 to 0.71 s.
+    - Restarted 20:19 UTC for so101-zeroshot's fake-robot rehearsal, now with the text encoder on the CPU
+      (`TE_CPU=1`, the new default): 34.6 GB for both packages instead of about 52. The serve-pod GPU was at
+      93.4 of 97.9 GB with ws4-imagine's two servers (8780 stock B84, 8781 the test merge
+      `so101_haller_pen_B_prov_lora500`, which ws4-imagine now uses, so keep it).
+  - No merged 14 GB packages are written: the volume could hold only about one more.
+- Watchdog: re-armed at 60 min idle from 19:40 while waiting for the split, back to 30 min at 19:47:38. The run
+  keeps the pod busy, so it stops about 30 min after the run ends (about 03:00 UTC).
+- Pod cost if it stops then: 18:24:44 to about 03:00 UTC, about 8.6 h, about $21 at $2.49/h. The 150 GB volume
+  adds about $0.35 per day until deleted.
+- Not done, at the safety check's request: removing the probe outputs (`/workspace/real_lora/lora_pen_probe_b2`,
+  `_b8`), the test merge (`/workspace/packages/so101_haller_pen_B_prov_lora500`, 13.9 GB) and the probe base
+  package. They are not needed for the run (91 of 150 GB used before it); delete them by hand if space runs short.
 - Base variant B (quantiles from our demos, no transforms; gripper absolute as recorded), confirmed by
   so101-zeroshot: B and D tie over seeds 0 and 1 on the offline diagnostic, and B needs no flip in the data or
   at deployment.
@@ -440,3 +533,22 @@ LoRA step time (LeRobot `lerobot_train`, `examples/flux3/lora.json`, text encode
   state; `real_lora.sh train` keeps the training state only on the newest checkpoint.
 - With eval and a checkpoint every 500 microsteps: about 3,000 microsteps (750 updates) per hour, so 20,000
   microsteps (5,000 updates, about 1.3 epochs of a 55-episode set) take about 6.7 h, about $17 at $2.49/h.
+
+## Serving pod real-serve-6000 (orchestrator, 17 Oct 19:50 UTC)
+
+| What | Value |
+|---|---|
+| Pod | `real-serve-6000`, id `6jfpc4cliq27jk`, 1x RTX PRO 6000 96 GB, EUR-IS-1, $2.49/h, container disk 40 GB |
+| Volume | `real-train-is` (hnh342zg4i) at `/workspace`, shared with real-train-6000 (RunPod allowed the second attach) |
+| SSH | `ssh root@157.157.221.177 -p 15377 -i ~/.ssh/id_ed25519_osrdvs` (changes on every start) |
+| Watchdog | `pod_job_watchdog.sh 480` with `WATCH_JOBS=lora_adapter.py\|flux.remote\|imagine.replay_server\|warm_prompts\|offline_diag\|real_lora.sh\|ckpt_eval\|bootstrap.sh` (20:16 UTC), log `/workspace/logs/serve_watchdog.log`. Oscar, 17 Oct 22:16 CEST: keep the pod up all night so the arm can use the 5k checkpoint whenever it comes back (about $2.49/h overnight, approved) |
+
+- Purpose: serving only, so the overnight LoRA keeps its GPU. Covers ws4-imagine's replay test (base
+  `so101_haller_pen_B84`, held-out takes from `pen_in_right_final`), the real-arm checkpoint serving and the
+  offline checkpoint evals.
+- The volume's envs work on it as they are (torch 2.11 cu128, sm_120, NATTEN 0.21.6).
+- Ports: 8780 and 8781 ws4-imagine (B84 replay tests), 8790 the real-arm checkpoint server (ws4-datasets: `base` + `lora_500` from 20:13 UTC, `lora_5000` from about 21:38 UTC).
+- Also on this volume since 20:08 UTC: `act-train-4500` (id zhkilyhem41c2f, RTX PRO 4500, $0.72/h), the ACT baseline session's training pod (third attach of the volume).
+- Spend on this RunPod account on 17 Oct as of 20:15 UTC: $13.38 billed; four pods running at $6.42/h.
+- Writes go under `/workspace/serve/` and `/workspace/imagine/` only. `/workspace/liminal/ws4` is the training
+  run's code, so other ws4 copies go to their own folders (for example `/workspace/imagine/ws4`).
