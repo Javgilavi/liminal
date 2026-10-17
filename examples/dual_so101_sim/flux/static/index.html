@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLUX Arm Sim</title>
+<style>
+  :root { --bg:#111317; --panel:#1b1e24; --line:#2b2f37; --text:#e6e8eb; --muted:#9aa1ab; --accent:#4c8dff; --bad:#ff6b6b; --ok:#3ecf8e; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:16px; display:grid; gap:16px; grid-template-columns: minmax(0,2fr) minmax(0,1fr); }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  img { width:100%; display:block; border-radius:6px; background:#000; }
+  .cams { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .cams figure { margin:0; } figcaption { color:var(--muted); font-size:12px; margin-top:2px; }
+  textarea { width:100%; min-height:70px; background:#0d0f12; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; font:inherit; resize:vertical; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+  button, select, input { background:#0d0f12; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font:inherit; }
+  button { cursor:pointer; } button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .chips button { font-size:12px; padding:4px 8px; color:var(--muted); }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; margin:0; font-size:13px; }
+  dt { color:var(--muted); } dd { margin:0; font-family:ui-monospace, monospace; overflow-wrap:anywhere; }
+  .state-running { color:var(--ok); } .state-error { color:var(--bad); }
+  .muted { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <div class="panel">
+      <h1>FLUX 3 Action · Haller sim</h1>
+      <img data-frame="view" src="/frame/view.jpg" alt="Simulation view">
+      <div class="cams">
+        <figure><img data-frame="scene" src="/frame/scene.jpg" alt=""><figcaption>scene camera sent to the model</figcaption></figure>
+        <figure><img data-frame="wrist" src="/frame/wrist.jpg" alt=""><figcaption>wrist camera sent to the model</figcaption></figure>
+      </div>
+    </div>
+  </section>
+  <aside class="panel">
+    <p id="demo-note" class="muted" style="display:none; color:#f5c451">Demo policy: the arm does a scripted wave and ignores the instruction. Start the app with <code>--policy http://…:8100</code> to use FLUX.</p>
+    <label for="task">Instruction</label>
+    <textarea id="task" placeholder="e.g. Pick up the green cube and put it on the blue square"></textarea>
+    <div class="row chips">
+      <button data-t="Pick up the green cube and put it on the blue square">green → blue</button>
+      <button data-t="Pick up the yellow cube">pick yellow</button>
+      <button data-t="Push the green cube to the left">push green</button>
+    </div>
+    <div class="row">
+      <label>Arm <select id="arm"><option>right</option><option>left</option></select></label>
+      <label>Scene cam <select id="cam"><option value="top">top (D455)</option><option value="front">front</option></select></label>
+      <label>Seconds <input id="secs" type="number" value="30" min="1" max="300" style="width:70px"></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="run">Run</button>
+      <button id="stop">Stop</button>
+      <button id="reset">Reset scene</button>
+      <button id="shuffle">Shuffle cubes</button>
+    </div>
+    <hr style="border-color:var(--line); margin:12px 0">
+    <dl id="status"></dl>
+    <p class="muted">Sim time pauses while the model thinks, so slow inference only slows the episode, not the physics.</p>
+  </aside>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const post = async (url, body) => {
+  try {
+    const response = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body || {})});
+    if (!response.ok) throw new Error(await response.text());
+    await poll(false);
+  } catch (error) { alert(`Request failed: ${error.message}`); }
+};
+// Short frame requests leave browser connections available for controls and status,
+// including when multiple simulator tabs are open.
+document.querySelectorAll("img[data-frame]").forEach(img => {
+  const refresh = () => {
+    if (document.hidden) { setTimeout(refresh, 1000); return; }
+    img.src = `/frame/${img.dataset.frame}.jpg?t=${Date.now()}`;
+  };
+  img.onload = () => setTimeout(refresh, 300);
+  img.onerror = () => setTimeout(refresh, 1000);
+  refresh();
+});
+document.querySelectorAll(".chips button").forEach(b => b.onclick = () => { $("task").value = b.dataset.t; });
+$("run").onclick = () => post("/run", {task: $("task").value, arm: $("arm").value, seconds: +$("secs").value, scene_cam: $("cam").value});
+$("stop").onclick = () => post("/stop");
+const preview = () => post("/preview", {task: "-", arm: $("arm").value, scene_cam: $("cam").value});
+$("arm").onchange = preview; $("cam").onchange = preview;
+$("reset").onclick = () => post("/reset", {jitter_m: 0});
+$("shuffle").onclick = () => post("/reset", {jitter_m: 0.05, seed: Math.floor(Math.random() * 1e6)});
+async function poll(repeat = true) {
+  try {
+    const s = await (await fetch("/status", {cache:"no-store"})).json();
+    $("demo-note").style.display = s.demo ? "block" : "none";
+    const rows = [
+      ["policy", esc(s.policy)], ["state", `<span class="state-${esc(s.state)}">${esc(s.state)}</span>`], ["task", esc(s.task || "-")],
+      ["arm", esc(s.arm)], ["scene cam", esc(s.scene_cam)], ["sim time", `${s.sim_s} s (tick ${s.tick})`], ["last chunk", s.last_infer_ms != null ? `${s.last_infer_ms} ms` : "-"],
+      ["command", s.action ? s.action.join(", ") : "-"],
+      ...Object.entries(s.cubes || {}).map(([k, v]) => [k, v.join(", ")]),
+    ];
+    if (s.error) rows.push(["error", `<span class="state-error">${esc(s.error)}</span>`]);
+    $("status").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  } catch (e) { /* server restarting */ }
+  if (repeat) setTimeout(poll, 500);
+}
+poll();
+</script>
+</body>
+</html>
