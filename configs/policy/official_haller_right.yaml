@@ -1,0 +1,42 @@
+# Default real-robot profile: HF Space d7da38e state/action normalization.
+arm: right
+expected_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
+prompt: Grasp the white cup.
+duration_s: 120.0
+inference:
+  n_action_steps: 32        # execute this many of each 42 predicted actions
+  num_inference_steps: 4    # Euler sampling steps
+  guidance_scale: 3.0
+  guidance_scale_action: null  # inherit guidance_scale
+  sampler_shift: 6.93
+  seed: 42
+# Haller policy slew limiting is disabled; calibrated travel checks remain.
+# No startup-relative excursion cap or measured-position command-lead cap.
+stall_detection:
+  window_s: 1.0            # require sustained load AND no measured movement
+  min_load: 0.4            # fraction of torque limit; not a calibrated force
+  min_error: 0.75          # degrees of arm-joint position error
+  min_progress: 0.1        # measured movement resets the observation window
+scene_key: top
+wrist_camera_id: wrist_a    # reuse the camera now owned by Haller
+wrist_device: /dev/v4l/by-path/pci-0000:06:00.3-usb-0:1.2:1.0-video-index0
+wrist_rotation: 180
+# User confirmed the arm on the left of the scene image, beside the cups,
+# with wrist A, is the intended controller `right` (2026-10-17).
+camera_verified: true
+# Verified software contract: five joint degrees and gripper percentage points;
+# HF normalization is handled exactly once by the saved official processors.
+units_verified: true
+# HF statistics require native degree/percent coordinates, without legacy offsets.
+# Model value = scale * Haller value + offset. Inverted for returned targets.
+coordinate_mapping: hf_space_native
+joint_scale: [1, 1, 1, 1, 1, 1]
+joint_offset: [0, 0, 0, 0, 0, 0]
+normalization_profile: hf_space_native
+checkpoint: /liminal/models/so101-hf-space-native-20261017
+vm: prd-inf-vm-01
+zone: europe-west1-b
+project: motion-mvp
+official_lerobot: true
+worker: /liminal/scripts/flux_lerobot_worker.py
+python: /liminal/train-env/bin/python

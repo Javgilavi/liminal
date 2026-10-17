@@ -13,3 +13,9 @@ sim_assets/
 *.safetensors
 *.ckpt
 .env
+
+# Local profiles and generated experiment artifacts
+configs/policy/*.local.yaml
+experiments/**/artifacts/
+*.pt
+*.pth

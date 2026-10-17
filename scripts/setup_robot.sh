@@ -6,5 +6,5 @@ command -v uv >/dev/null || { echo "Install uv: https://docs.astral.sh/uv/gettin
 command -v fuser >/dev/null || { echo "Install psmisc (provides fuser) with your system package manager." >&2; exit 1; }
 if [ ! -d .venv-robot ]; then uv venv --python 3.12 .venv-robot; fi
 env -u PYTHONPATH PYTHONNOUSERSITE=1 uv pip install --python .venv-robot/bin/python \
-  --torch-backend=cpu -e '.[hardware,ui,dev]'
+  --torch-backend=cpu -e '.[hardware,ui,live,dev]'
 echo "Ready. Start: ./scripts/control_robot.sh"
