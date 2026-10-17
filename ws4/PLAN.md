@@ -39,6 +39,18 @@ Submission: **Sun 18 Oct 14:00 CEST**. A snapshot of `ws4/` is on branch `ws4-ha
     640x480 as in the recording protocol).
   - Tools: `data/fetch_public.sh` (download, convert per arm and 12-D, merge) and `data/merge_datasets.py`. The
     aggregate step itself is untested until real videos are on the training box.
+- **VR teleop recording (haller_ws, branch `ws4-hackathon`, 5 local commits; parked while the USB ports serve the
+  single arm).** Log: `~/haller_ws/hmi/HACKATHON-WS4-VR.md`.
+  - **Data bug fixed in f35bf29:** in the default "behind" stance every VR take filed each arm's action under the
+    other arm (solo takes stored action == state). Do not train on any Haller VR take recorded before f35bf29.
+  - Record h264 live (live SVT-AV1 dropped frames, up to 431 ms gaps), then convert with haller_ws
+    `scripts/dataset_to_av1.py SRC DST` before merging with public data. `ws4/teleop/transcode.py` (the first
+    VR agent's draft) crashes on haller h264 input: do not use it.
+  - FLUX configs record at 30 Hz (`recording:` section, session_hz 30). Sim start:
+    `HALLER_HMI_CONFIG=config.flux-sim.yaml scripts/quest-teleop/up.sh --sim --usb`; stop with `down.sh`.
+  - Keep heavy CPU jobs off the laptop while recording or running robot loops (30 Hz timing gate).
+  - Still open: headset takes, real-robot checklist, Haller calibration files (not on this laptop), a real-rig
+    FLUX recording config.
 - **Time-split evidence for the judges:** LoRA A (own only) vs LoRA B (own + at most 30 to 50% public) with
   identical steps. Report the held-out action error and hardware success. Keep public data only if B wins.
 
