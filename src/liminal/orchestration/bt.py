@@ -21,6 +21,7 @@ from contextlib import AsyncExitStack
 
 from liminal.core.types import Skill, Status
 from liminal.orchestration.context import ExecutionContext
+from liminal.perception.types import InspectionRequest
 from liminal.safety.supervisor import ArmConflict, EmergencyStop
 
 _ids = itertools.count()
@@ -98,6 +99,41 @@ class WaitFor(Node):
     async def _run(self, ctx: ExecutionContext) -> Status:
         ok = await ctx.world.wait_for(self.condition, timeout=self.timeout_s)
         return Status.SUCCESS if ok else Status.TIMEOUT
+
+
+class Inspect(Node):
+    """Inspect until every requested predicate is known or the deadline expires."""
+
+    def __init__(
+        self,
+        request: InspectionRequest,
+        timeout_s: float | None = None,
+        retry_delay_s: float = 0.05,
+        name: str | None = None,
+    ):
+        super().__init__(name or f"inspect:{','.join(request.predicates)}")
+        self.request = request
+        self.timeout_s = request.timeout_s if timeout_s is None else timeout_s
+        self.retry_delay_s = retry_delay_s
+        if self.timeout_s <= 0 or retry_delay_s < 0:
+            raise ValueError("inspection timeout must be positive and retry delay non-negative")
+
+    async def _run(self, ctx: ExecutionContext) -> Status:
+        if ctx.inspector is None:
+            ctx.world.log("inspect_unavailable", node=self.name)
+            return Status.FAILURE
+
+        assessment = await ctx.inspector.inspect_until_known(
+            self.request,
+            timeout_s=self.timeout_s,
+            retry_delay_s=self.retry_delay_s,
+        )
+        values = {key: observation.value.value for key, observation in assessment.observations.items()}
+        ctx.world.log("inspection", node=self.name, values=values, parse_error=assessment.parse_error)
+        if all(assessment.observation(predicate).known for predicate in self.request.predicates):
+            return Status.SUCCESS
+        ctx.world.log("inspect_timeout", node=self.name, predicates=self.request.predicates)
+        return Status.TIMEOUT
 
 
 class SetFact(Node):
@@ -200,16 +236,17 @@ class While(Node):
                 ctx.world.log("while_not_established", node=self.name, condition=self.maintain)
                 return Status.FAILURE
 
-            body = asyncio.create_task(self.body.run(ctx))
-            monitor = asyncio.create_task(ctx.world.wait_until_violated(self.maintain))
-            try:
-                done, _ = await asyncio.wait({body, monitor}, return_when=asyncio.FIRST_COMPLETED)
-            finally:
-                for t in (body, monitor):
-                    t.cancel()
-                await asyncio.gather(body, monitor, return_exceptions=True)
+            with ctx.watch_invariant(self.maintain):
+                body = asyncio.create_task(self.body.run(ctx))
+                monitor = asyncio.create_task(ctx.world.wait_until_violated(self.maintain))
+                try:
+                    done, _ = await asyncio.wait({body, monitor}, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    for t in (body, monitor):
+                        t.cancel()
+                    await asyncio.gather(body, monitor, return_exceptions=True)
 
-            if monitor in done and body not in done:
+            if monitor in done and not ctx.world.holds(self.maintain):
                 ctx.world.log("while_violated", node=self.name, condition=self.maintain)
                 return Status.FAILURE
             status = body.result()

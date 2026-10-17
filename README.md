@@ -67,19 +67,73 @@ Same executor, safety and task grammar for both. Comparison and decision: [PLAN.
 ## Quick start (no hardware needed)
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-pytest                                   # all tests run on mock arms
+uv sync --extra dev
+uv run pytest                            # all tests run on mock arms
 
 # Run the cooperative-holding demo on mock arms
-liminal run configs/tasks/lid_hold_insert.yaml
+uv run liminal run configs/tasks/lid_hold_insert.yaml
 # Check every task file compiles
-liminal validate configs/tasks/*.yaml
+uv run liminal validate configs/tasks/*.yaml
 # Goal -> task tree (template planner; --planner claude|gemini needs `.[llm]` + API key)
-liminal plan "hold the lid and insert the block"
+uv run liminal plan "hold the lid and insert the block"
 # Bimanual obstacle planner (WS2)
-python scripts/plan_obstacle.py --strategy hold_away
+uv run python scripts/plan_obstacle.py --strategy hold_away
 ```
+
+`pyproject.toml` declares direct dependencies and `uv.lock` pins the resolved
+environment. The committed `.python-version` selects Python 3.12. Use `uv lock
+--check` in CI or before deployment to detect dependency changes that were not
+locked.
+
+## Qwen scene inspection
+
+The real VLM adapter is optional and loads its checkpoint lazily, once per process.
+Check the device in `configs/perception/qwen3_vl_4b.yaml`, then inspect one synchronized
+set of recorded views before enabling any robot motion:
+
+```bash
+uv sync --extra dev --extra vlm-qwen
+uv run liminal inspect --perception configs/perception/qwen3_vl_4b.yaml \
+  --image top=path/to/top.jpg \
+  --image left_wrist=path/to/left_wrist.jpg \
+  --image right_wrist=path/to/right_wrist.jpg
+```
+
+The shipped configuration uses bitsandbytes NF4 quantization with bfloat16
+computation. Set `quantization: none` to measure the unquantized BF16 baseline.
+
+The command prints schema-validated predicates plus load, preprocessing,
+time-to-first-token, total-latency, and GPU-memory measurements. Pass the same
+configuration file to `liminal run` using its `--perception` option.
+
+Before robot deployment, label synchronized camera views using the manifest format
+in `data/perception_eval/labels.example.yaml`, then run repeated offline evaluation:
+
+```bash
+uv run liminal evaluate-perception data/perception_eval/labels.yaml \
+  --perception configs/perception/qwen3_vl_4b.yaml \
+  --repeats 3
+```
+
+The JSON report retains raw model responses and parsed evidence, and summarizes
+accuracy, unknowns, false-positive transitions, repeat agreement, latency, and
+Qwen preprocessing/token-generation/GPU metrics per call. Treat any false-positive
+transition as a deployment blocker even if aggregate accuracy looks acceptable.
+
+Once the labeled evaluation passes, verify live camera capture and blackboard
+updates without connecting to either arm bus or issuing arm commands:
+
+```bash
+uv run liminal inspect-live \
+  --robot configs/robot/so101_dual.yaml \
+  --perception configs/perception/qwen3_vl_4b.yaml \
+  --samples 3
+```
+
+This command cannot determine whether another controller has left motor torque
+enabled, so verify that separately. It connects only the perception cameras and
+writes the captured frames, raw responses, parsed predicates, observation versions,
+and final blackboard state to `runs/`.
 
 ## On real hardware
 

@@ -96,7 +96,7 @@ Touching another workstream's path is fine for small fixes. Tell the owner.
 
 ## Style
 
-- Python ≥3.10, type hints, dataclasses, `async` for anything that waits on the world.
+- Python 3.12, type hints, dataclasses, `async` for anything that waits on the world.
 - Match the surrounding code. Comments explain *why*, not *what*.
 - Line length 120 (ruff). Keep modules small and dependency-light.
 - Commits: `ws<N>: <imperative summary>` (e.g. `ws3: add Fallback recovery to lid task`).

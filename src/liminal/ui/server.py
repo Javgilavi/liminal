@@ -10,7 +10,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 
-def create_app(robot: str, backend: str = "mock", policy: str | None = None, task_dir: str = "configs/tasks"):
+def create_app(
+    robot: str,
+    backend: str = "mock",
+    policy: str | None = None,
+    task_dir: str = "configs/tasks",
+    perception: str | None = None,
+):
     from fastapi import FastAPI, HTTPException, Request
     from fastapi.responses import FileResponse, Response
     from fastapi.staticfiles import StaticFiles
@@ -21,8 +27,20 @@ def create_app(robot: str, backend: str = "mock", policy: str | None = None, tas
     from liminal.hardware.runtime import connected
     from liminal.orchestration import run_task
     from liminal.orchestration.planner import TemplatePlanner
+    from liminal.perception.config import load_perception_config
+    from liminal.perception.vlm import warm_vision_model
 
-    ctx = build_context(robot, backend=backend, policy=policy)
+    perception_runtime = load_perception_config(perception) if perception else None
+    if perception_runtime:
+        warm_vision_model(perception_runtime.model)
+    ctx = build_context(
+        robot,
+        backend=backend,
+        policy=policy,
+        vision_model=perception_runtime.model if perception_runtime else None,
+        inspection=perception_runtime.inspection if perception_runtime else None,
+        inspection_confirmations=perception_runtime.confirmations if perception_runtime else 2,
+    )
     planner = TemplatePlanner(task_dir)
     state: dict[str, Any] = {"running": None, "last_report": None, "arms": {}, "sampled_at": 0.0}
     controls = asyncio.Lock()

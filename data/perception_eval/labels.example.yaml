@@ -1,0 +1,29 @@
+name: component_replacement_perception
+
+request:
+  predicates: [lid_open, access_clear, access_blocked]
+  cameras: [top, left_wrist, right_wrist]
+  context: >-
+    Offline labeled scene. Use all synchronized views. The deployed perception
+    configuration supplies the predicate definitions, timeout, and exclusivity.
+
+frames:
+  - name: lid_closed_clear_access
+    images:
+      top: lid_closed/top.jpg
+      left_wrist: lid_closed/left_wrist.jpg
+      right_wrist: lid_closed/right_wrist.jpg
+    expected:
+      lid_open: false
+      access_clear: true
+      access_blocked: false
+
+  - name: ambiguous_access
+    images:
+      top: ambiguous/top.jpg
+      left_wrist: ambiguous/left_wrist.jpg
+      right_wrist: ambiguous/right_wrist.jpg
+    expected:
+      lid_open: unknown
+      access_clear: unknown
+      access_blocked: unknown
