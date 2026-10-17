@@ -1,0 +1,14 @@
+# Fast replay/mock experiment used by the tests. Not hardware.
+name: smoke
+description: Planner vs authored on one block, with a lie injection, plus one interrupt/resume.
+budgets: {max_attempts: 6, max_model_calls: 20}
+repeats: 1
+seeds: [1]
+scenarios:
+  - {name: one_block, scenario: configs/replay/workbench.yaml, goal: "Put the red block in the box"}
+  - {name: lie_first, scenario: configs/replay/workbench.yaml, goal: "Put the red block in the box", lie_first: true}
+  - {name: interrupt_resume, scenario: configs/replay/workbench.yaml,
+     goal: "Put the red and blue blocks in the box", interrupt_after: 1}
+conditions:
+  - {name: authored, mode: authored}
+  - {name: planner, mode: planner}

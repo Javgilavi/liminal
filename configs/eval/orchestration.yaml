@@ -1,0 +1,26 @@
+# V1 vs V2/V3: authored compiled tree vs one-validated-step-at-a-time planner on the debugging set.
+# Replay/mock only. Failure injections live on scenarios so every condition sees the same ones.
+name: orchestration
+description: >
+  Authored tree vs planner on the initial debugging set (two blocks, failed grasp, false success claim,
+  occluded reference, moved destination, interrupt/resume). Same replay scenes, same budgets.
+budgets: {max_attempts: 6, max_model_calls: 20}
+repeats: 3
+seeds: [1, 2, 3]
+scenarios:
+  - {name: two_blocks, scenario: configs/replay/workbench.yaml, goal: "Put the red and blue blocks in the box"}
+  - {name: fail_first, scenario: configs/replay/workbench.yaml, goal: "Put the red block in the box",
+     fail_first: true}
+  - {name: lie_first, scenario: configs/replay/workbench.yaml, goal: "Put the red block in the box",
+     lie_first: true}
+  - {name: fail_then_lie, scenario: configs/replay/workbench.yaml, goal: "Put the red block in the box",
+     fail_first: true, lie_first: true}
+  - {name: occluded_reference, scenario: configs/replay/occluded_reference.yaml,
+     goal: "Put the red block in the box"}
+  - {name: moved_destination, scenario: configs/replay/moved_destination.yaml,
+     goal: "Put the red block in the left bin and the blue block in the right bin"}
+  - {name: interrupt_resume, scenario: configs/replay/two_blocks.yaml,
+     goal: "Put the red and blue blocks in the box", interrupt_after: 1}
+conditions:
+  - {name: authored, mode: authored}
+  - {name: planner, mode: planner, model: replay}

@@ -1,0 +1,23 @@
+# H2/H3/H5: memory axes under the same budgets. Options the memory session has not landed in
+# run_episode yet are reported as "skipped: option unavailable", never crashed.
+name: memory_ablation
+description: Keyframe retention (none/event/nominated) and cross-run experience (off/read), planner fixed.
+  Each run gets an empty experience db, so `read` here only checks the plumbing;
+  a real retrieval comparison needs a frozen corpus built from development scenes.
+budgets: {max_attempts: 6, max_model_calls: 20}
+repeats: 2
+seeds: [1, 2]
+scenarios:
+  - {name: occluded_reference, scenario: configs/replay/occluded_reference.yaml,
+     goal: "Put the red block in the box"}
+  - {name: interrupt_resume, scenario: configs/replay/two_blocks.yaml,
+     goal: "Put the red and blue blocks in the box", interrupt_after: 1}
+  - {name: moved_destination, scenario: configs/replay/moved_destination.yaml,
+     goal: "Put the red block in the left bin and the blue block in the right bin"}
+conditions:
+  - {name: baseline, mode: planner}
+  - {name: keyframes_none, mode: planner, memory: {keyframes: none}}
+  - {name: keyframes_event, mode: planner, memory: {keyframes: event}}
+  - {name: keyframes_nominated, mode: planner, memory: {keyframes: nominated}}
+  - {name: experience_off, mode: planner, memory: {experience_mode: "off"}}
+  - {name: experience_read, mode: planner, memory: {experience_mode: read, experience_db: "{work}/experience.sqlite3"}}
