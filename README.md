@@ -30,7 +30,20 @@ true*, and *whether the goal really happened*.
 
 Strategy and key decisions: [PLAN.md](PLAN.md). Full design: [docs/architecture.md](docs/architecture.md).
 Who does what, and by when: [TASK.md](TASK.md). Rules for humans and coding agents:
-[AGENT.md](AGENT.md) (`CLAUDE.md` is an identical copy for Claude Code).
+[AGENTS.md](AGENTS.md) (`CLAUDE.md` is an identical copy for Claude Code).
+
+## First single-arm validation
+
+The first SO101 validation includes **official LeRobot FLUX inference on the real
+robot** and **MuJoCo task-LoRA training/evaluation**. In five matched simulation
+scenes, the raw adapter achieved bilateral contact in 3/5 and lifts over 3.5 cm
+in 2/5; all models completed 0/5 placements. Physical inference and motor execution
+are recorded, with task success still unverified.
+
+- [Results, evidence and limitations](docs/validation/single-arm-v1.md)
+- [Run real-robot inference](docs/official-inference.md)
+- [Reproduce the MuJoCo experiment](docs/simulation-validation.md)
+- [Documentation index](docs/README.md)
 
 ## Two ways to drive two arms with FLUX
 
@@ -83,6 +96,12 @@ Setup, device mapping, calibration, limits, E-stop behavior and the API are in
 ROS, Node.js, a GPU, or FLUX weights. Scripted and FLUX task backends still use the
 same safety supervisor; see the guide before running tasks on hardware.
 
+For Haller UI ownership and remote GPU inference, follow the
+[official LeRobot inference guide](docs/official-inference.md). It defaults to
+real-camera inference without motor commands; execution requires a verified rig
+profile and explicit UI engagement. Liminal supplies SSH transport and execution;
+LeRobot supplies `Flux3Policy` and its saved pre/postprocessors.
+
 Every run writes a JSONL event log under `runs/` (facts, node start/end, retries,
 WHILE violations). Use it to count success rates over trials.
 
@@ -125,18 +144,24 @@ src/liminal/
   data/           demo-collection variation protocol
   ui/             CLI and HTTP operator API
 configs/          robot, policy, embodiment, skill catalog, task trees
-scripts/          demo recording, LoRA, FLUX smoke test, waypoint recording, obstacle planner
-docs/             architecture and per-workstream research briefs
+scripts/          real/GPU inference, simulation collection/training/evaluation, hardware utilities
+experiments/      compact validation results, provenance and training recipes
+sim/single_arm/   versioned MuJoCo scene/model; external meshes
+integrations/     external Haller controller patch and installation guide
+docs/             guides, validation reports, architecture and research briefs
 ```
 
 ## Status and caveats
 
 - The orchestration stack (BT, WHILE/UNTIL, safety, world state, planners, mock and
   scripted backends) runs and is tested.
-- **FLUX 3 Action loading is a stub.** `FluxPolicyBackend.load/predict` raise
-  `NotImplementedError` until WS1 wires them against the official BFL docs. All FLUX
-  numbers in `configs/policy/flux3_so101.yaml` (chunk 42 / execute 32 / 30 Hz /
-  8-frame history / ~32 GB BF16) come from planning notes and are marked `VERIFY`.
+- **Single-arm inference is implemented** through the dedicated official LeRobot
+  runner. The HF Space normalization profile is experimental on the physical rig.
+  The orchestration class `FluxPolicyBackend.load/predict` remains a stub; it is
+  separate from the validated inference runner. Planning configs retain `VERIFY`
+  markers and are not the commissioned inference profiles.
+- The simulation adapter improves grasp-related measures on a small test set;
+  completed placement, real-task success and bimanual transfer remain unverified.
 - LeRobot imports and CLI flags change between releases. They are isolated in
   `hardware/so101.py` and `scripts/record_demos.sh`.
 - SO-101 holding is **position** holding, not torque control. Keep loads light.

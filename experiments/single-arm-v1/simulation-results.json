@@ -1,0 +1,1116 @@
+{
+  "contract": "native joint degrees, gripper percent, HF simulator statistics, 20 Hz throughout",
+  "dataset": {
+    "status": "passed",
+    "episodes": 80,
+    "frames": 32220,
+    "fps": 20,
+    "coordinate_frame": "native",
+    "checks": "Converted state/action endpoints in every episode; timestamps; three prepared HF processors",
+    "video_checks": [
+      {
+        "episode": 0,
+        "frame": 0,
+        "camera": "scene",
+        "psnr": 36.353910089227895
+      },
+      {
+        "episode": 0,
+        "frame": 0,
+        "camera": "wrist",
+        "psnr": 39.01920095992198
+      },
+      {
+        "episode": 0,
+        "frame": 200,
+        "camera": "scene",
+        "psnr": 35.785855122796605
+      },
+      {
+        "episode": 0,
+        "frame": 200,
+        "camera": "wrist",
+        "psnr": 38.701047365038015
+      },
+      {
+        "episode": 64,
+        "frame": 0,
+        "camera": "scene",
+        "psnr": 36.31392821590013
+      },
+      {
+        "episode": 64,
+        "frame": 0,
+        "camera": "wrist",
+        "psnr": 39.214979101526865
+      },
+      {
+        "episode": 64,
+        "frame": 200,
+        "camera": "scene",
+        "psnr": 35.91515331284746
+      },
+      {
+        "episode": 64,
+        "frame": 200,
+        "camera": "wrist",
+        "psnr": 38.868116005466476
+      },
+      {
+        "episode": 79,
+        "frame": 0,
+        "camera": "scene",
+        "psnr": 36.3743199833703
+      },
+      {
+        "episode": 79,
+        "frame": 0,
+        "camera": "wrist",
+        "psnr": 39.503389913171674
+      },
+      {
+        "episode": 79,
+        "frame": 200,
+        "camera": "scene",
+        "psnr": 35.88221435864131
+      },
+      {
+        "episode": 79,
+        "frame": 200,
+        "camera": "wrist",
+        "psnr": 38.26893728189449
+      }
+    ],
+    "source_physics_audit": "collection-inference-audit.json"
+  },
+  "provenance": {
+    "source_recordings": "/liminal/experiments/sim-task-lora-20261017/raw",
+    "base_weights": "/liminal/models/so101",
+    "prepared_base": "/liminal/experiments/sim-task-native-hf-20261017/base-native-hf",
+    "coordinate_frame": "native joint degrees; gripper percent",
+    "normalization": {
+      "state": {
+        "q01": [
+          -37.969,
+          -99.316,
+          -45.78,
+          22.987,
+          -68.712,
+          0.45
+        ],
+        "q99": [
+          35.288,
+          43.076,
+          90.308,
+          95.704,
+          17.753,
+          40.324
+        ]
+      },
+      "action": {
+        "q01": [
+          -1.652,
+          -3.235,
+          -3.147,
+          -2.198,
+          -1.708,
+          0.0
+        ],
+        "q99": [
+          1.701,
+          3.487,
+          3.307,
+          2.072,
+          1.699,
+          40.733
+        ]
+      }
+    },
+    "fps": 20,
+    "timing": "10 physics steps of 5 ms per command; corrected dataset, policy and video rate",
+    "old_adapter_reused": false,
+    "training_budget": "1000 microbatches, 250 optimizer updates, matching the earlier initial experiment",
+    "official_docs": "https://huggingface.co/docs/lerobot/main/en/flux3",
+    "bfl_recipe": "https://github.com/black-forest-labs/flux-action/blob/main/docs/so101-lora.md",
+    "lerobot_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+    "version_note": "The fork named in BFL docs is not publicly fetchable. Use the clean official huggingface/lerobot checkout at the recorded revision, with its official examples/flux3/lora.json and saved checkpoint processors. PyTorch 2.10/cu128 and matching NATTEN are supported by current LeRobot documentation.",
+    "normalization_source": {
+      "repo": "multimodalart/flux-3-action-so101-sim",
+      "revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "url": "https://huggingface.co/spaces/multimodalart/flux-3-action-so101-sim/resolve/d7da38e032da0e136d6de21c218dc616982a8cc9/app.py",
+      "sha256": "550110dec42f60c570a6228b29689356a44edb07c3de2dc81278bf416b74c5ee",
+      "normalization": {
+        "state": {
+          "q01": [
+            -37.969,
+            -99.316,
+            -45.78,
+            22.987,
+            -68.712,
+            0.45
+          ],
+          "q99": [
+            35.288,
+            43.076,
+            90.308,
+            95.704,
+            17.753,
+            40.324
+          ]
+        },
+        "action": {
+          "q01": [
+            -1.652,
+            -3.235,
+            -3.147,
+            -2.198,
+            -1.708,
+            0.0
+          ],
+          "q99": [
+            1.701,
+            3.487,
+            3.307,
+            2.072,
+            1.699,
+            40.733
+          ]
+        }
+      }
+    }
+  },
+  "training_metrics": {
+    "wall_seconds": 1076.9203907810152,
+    "peak_allocated_bytes": 30940530176,
+    "peak_reserved_bytes": 33707524096
+  },
+  "comparison": [
+    {
+      "policy": "zeroshot",
+      "episodes": 5,
+      "contact": 5,
+      "bilateral_contact": 0,
+      "lift_over_3_5cm": 0,
+      "placement_success": 0,
+      "max_lift_cm": 1.9238687614744572,
+      "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/base-native-hf",
+      "saved_hf_processors_verified": [
+        "policy_postprocessor_step_0_flux3_action_history_unnormalizer.safetensors",
+        "policy_preprocessor_step_3_flux3_observation_history_normalizer.safetensors",
+        "policy_preprocessor_step_4_flux3_action_target_normalizer.safetensors"
+      ],
+      "per_episode": [
+        {
+          "seed": 20000,
+          "randomization": {
+            "seed": 20000,
+            "block_xy": [
+              0.2217727908176665,
+              -0.05075566398042527
+            ],
+            "bowl_xy": [
+              0.22415610771863403,
+              0.1307901024228673
+            ],
+            "block_yaw_rad": 0.06696381183626174,
+            "camera_jitter_m": [
+              -0.0021738139682228,
+              -0.0007720692953429513,
+              0.0031939665819879486
+            ],
+            "initial_native_degrees": [
+              0.05357885395952791,
+              -93.1965771312615,
+              84.07093467469538,
+              70.37653706149563,
+              0.3688346552638937,
+              -4.500073530456477
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/base-native-hf",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 19.261630760040134,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.00018842934591405992,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 95,
+          "final": {
+            "block_xyz": [
+              0.22119274301155367,
+              -0.05128236863358985,
+              0.01389224457978384
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20001,
+          "randomization": {
+            "seed": 20001,
+            "block_xy": [
+              0.2260755951527704,
+              -0.03835147226959302
+            ],
+            "bowl_xy": [
+              0.23520022365233045,
+              0.13203271289021387
+            ],
+            "block_yaw_rad": 0.02577836881757775,
+            "camera_jitter_m": [
+              0.0024634180338265277,
+              -0.003940851613436879,
+              -0.003959481345377815
+            ],
+            "initial_native_degrees": [
+              -0.8616228884513649,
+              -93.45438099326353,
+              85.88189057724706,
+              69.72817539674827,
+              0.1529838784508276,
+              -4.500070534887436
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/base-native-hf",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 19.111914268229157,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.009044164527372032,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 250,
+          "final": {
+            "block_xyz": [
+              0.21192055244276709,
+              -0.0443184464123621,
+              0.013892244579783861
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20002,
+          "randomization": {
+            "seed": 20002,
+            "block_xy": [
+              0.22951988048185562,
+              -0.035324662934457775
+            ],
+            "bowl_xy": [
+              0.2330433772429859,
+              0.13543036983637577
+            ],
+            "block_yaw_rad": 0.07886230987856299,
+            "camera_jitter_m": [
+              -0.0019119533379680603,
+              0.002399767655388874,
+              -0.002541134129928568
+            ],
+            "initial_native_degrees": [
+              0.5683230620279959,
+              -94.95693017873444,
+              85.59244412788387,
+              69.17945670904749,
+              -0.7697348546609936,
+              -4.500078143183952
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/base-native-hf",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 19.119479135144502,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.0030957860242440335,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 182,
+          "final": {
+            "block_xyz": [
+              0.2255164022825107,
+              -0.040735375616285686,
+              0.013892244579783832
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20003,
+          "randomization": {
+            "seed": 20003,
+            "block_xy": [
+              0.22715768470172798,
+              -0.037503053958259605
+            ],
+            "bowl_xy": [
+              0.23192475470592608,
+              0.1288696103222336
+            ],
+            "block_yaw_rad": -0.08408038652235468,
+            "camera_jitter_m": [
+              0.001129672271139014,
+              0.001433698247245139,
+              0.0027972876678237033
+            ],
+            "initial_native_degrees": [
+              -0.3049028129744292,
+              -94.22123336586328,
+              85.68731238494841,
+              70.08297601244145,
+              -0.662390732671653,
+              -4.500072474388211
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/base-native-hf",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 19.09051844710484,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.019238687614744572,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 115,
+          "final": {
+            "block_xyz": [
+              0.21919736923509148,
+              -0.07591654782553336,
+              0.014296719610800783
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20004,
+          "randomization": {
+            "seed": 20004,
+            "block_xy": [
+              0.23708904922838342,
+              -0.05186895481659699
+            ],
+            "bowl_xy": [
+              0.23259071693422428,
+              0.13142816289112802
+            ],
+            "block_yaw_rad": 0.017466841655309137,
+            "camera_jitter_m": [
+              0.0002866965292829182,
+              -0.0007431696326200637,
+              -0.0037417569439891826
+            ],
+            "initial_native_degrees": [
+              0.30616707881390204,
+              -93.71857668226725,
+              84.05719748459883,
+              70.25239567580036,
+              0.5465710795321287,
+              -4.5000757168588725
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/base-native-hf",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 19.110301438253373,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.00021120267226763974,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 145,
+          "final": {
+            "block_xyz": [
+              0.23746743113684107,
+              -0.05323577951064728,
+              0.013892244579783929
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        }
+      ]
+    },
+    {
+      "policy": "raw",
+      "episodes": 5,
+      "contact": 5,
+      "bilateral_contact": 3,
+      "lift_over_3_5cm": 2,
+      "placement_success": 0,
+      "max_lift_cm": 15.687322515564992,
+      "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model",
+      "saved_hf_processors_verified": [
+        "policy_postprocessor_step_0_flux3_action_history_unnormalizer.safetensors",
+        "policy_preprocessor_step_3_flux3_observation_history_normalizer.safetensors",
+        "policy_preprocessor_step_4_flux3_action_target_normalizer.safetensors"
+      ],
+      "per_episode": [
+        {
+          "seed": 20000,
+          "randomization": {
+            "seed": 20000,
+            "block_xy": [
+              0.2217727908176665,
+              -0.05075566398042527
+            ],
+            "bowl_xy": [
+              0.22415610771863403,
+              0.1307901024228673
+            ],
+            "block_yaw_rad": 0.06696381183626174,
+            "camera_jitter_m": [
+              -0.0021738139682228,
+              -0.0007720692953429513,
+              0.0031939665819879486
+            ],
+            "initial_native_degrees": [
+              0.05357885395952791,
+              -93.1965771312615,
+              84.07093467469538,
+              70.37653706149563,
+              0.3688346552638937,
+              -4.500073530456477
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.40331347985193,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.000902359130403459,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 9,
+          "final": {
+            "block_xyz": [
+              0.20643445850351314,
+              -0.019442356148656394,
+              0.013892236627953943
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20001,
+          "randomization": {
+            "seed": 20001,
+            "block_xy": [
+              0.2260755951527704,
+              -0.03835147226959302
+            ],
+            "bowl_xy": [
+              0.23520022365233045,
+              0.13203271289021387
+            ],
+            "block_yaw_rad": 0.02577836881757775,
+            "camera_jitter_m": [
+              0.0024634180338265277,
+              -0.003940851613436879,
+              -0.003959481345377815
+            ],
+            "initial_native_degrees": [
+              -0.8616228884513649,
+              -93.45438099326353,
+              85.88189057724706,
+              69.72817539674827,
+              0.1529838784508276,
+              -4.500070534887436
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.185900124255568,
+          "touched_block": true,
+          "bilateral_contact": true,
+          "max_lift_m": 0.012377460812694453,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 23,
+          "final": {
+            "block_xyz": [
+              0.1894706898167281,
+              -0.037472409110280325,
+              0.013892244579783799
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20002,
+          "randomization": {
+            "seed": 20002,
+            "block_xy": [
+              0.22951988048185562,
+              -0.035324662934457775
+            ],
+            "bowl_xy": [
+              0.2330433772429859,
+              0.13543036983637577
+            ],
+            "block_yaw_rad": 0.07886230987856299,
+            "camera_jitter_m": [
+              -0.0019119533379680603,
+              0.002399767655388874,
+              -0.002541134129928568
+            ],
+            "initial_native_degrees": [
+              0.5683230620279959,
+              -94.95693017873444,
+              85.59244412788387,
+              69.17945670904749,
+              -0.7697348546609936,
+              -4.500078143183952
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.28596425615251,
+          "touched_block": true,
+          "bilateral_contact": true,
+          "max_lift_m": 0.11908956921221267,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 8,
+          "final": {
+            "block_xyz": [
+              0.32285991025537847,
+              0.12321318401342653,
+              0.013892244579783776
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20003,
+          "randomization": {
+            "seed": 20003,
+            "block_xy": [
+              0.22715768470172798,
+              -0.037503053958259605
+            ],
+            "bowl_xy": [
+              0.23192475470592608,
+              0.1288696103222336
+            ],
+            "block_yaw_rad": -0.08408038652235468,
+            "camera_jitter_m": [
+              0.001129672271139014,
+              0.001433698247245139,
+              0.0027972876678237033
+            ],
+            "initial_native_degrees": [
+              -0.3049028129744292,
+              -94.22123336586328,
+              85.68731238494841,
+              70.08297601244145,
+              -0.662390732671653,
+              -4.500072474388211
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.53927773796022,
+          "touched_block": true,
+          "bilateral_contact": true,
+          "max_lift_m": 0.15687322515564991,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 76,
+          "final": {
+            "block_xyz": [
+              0.3108795126992045,
+              0.05611265519302273,
+              0.04555246083618551
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20004,
+          "randomization": {
+            "seed": 20004,
+            "block_xy": [
+              0.23708904922838342,
+              -0.05186895481659699
+            ],
+            "bowl_xy": [
+              0.23259071693422428,
+              0.13142816289112802
+            ],
+            "block_yaw_rad": 0.017466841655309137,
+            "camera_jitter_m": [
+              0.0002866965292829182,
+              -0.0007431696326200637,
+              -0.0037417569439891826
+            ],
+            "initial_native_degrees": [
+              0.30616707881390204,
+              -93.71857668226725,
+              84.05719748459883,
+              70.25239567580036,
+              0.5465710795321287,
+              -4.5000757168588725
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.234648855868727,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.001739579682941552,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 9,
+          "final": {
+            "block_xyz": [
+              0.23575463253588497,
+              -0.048254930207560685,
+              0.013892244579783799
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        }
+      ]
+    },
+    {
+      "policy": "ema",
+      "episodes": 5,
+      "contact": 2,
+      "bilateral_contact": 0,
+      "lift_over_3_5cm": 0,
+      "placement_success": 0,
+      "max_lift_cm": 1.2784188859353702,
+      "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model_ema",
+      "saved_hf_processors_verified": [
+        "policy_postprocessor_step_0_flux3_action_history_unnormalizer.safetensors",
+        "policy_preprocessor_step_3_flux3_observation_history_normalizer.safetensors",
+        "policy_preprocessor_step_4_flux3_action_target_normalizer.safetensors"
+      ],
+      "per_episode": [
+        {
+          "seed": 20000,
+          "randomization": {
+            "seed": 20000,
+            "block_xy": [
+              0.2217727908176665,
+              -0.05075566398042527
+            ],
+            "bowl_xy": [
+              0.22415610771863403,
+              0.1307901024228673
+            ],
+            "block_yaw_rad": 0.06696381183626174,
+            "camera_jitter_m": [
+              -0.0021738139682228,
+              -0.0007720692953429513,
+              0.0031939665819879486
+            ],
+            "initial_native_degrees": [
+              0.05357885395952791,
+              -93.1965771312615,
+              84.07093467469538,
+              70.37653706149563,
+              0.3688346552638937,
+              -4.500073530456477
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model_ema",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.41126181697473,
+          "touched_block": false,
+          "bilateral_contact": false,
+          "max_lift_m": 3.847202856635534e-09,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 8,
+          "final": {
+            "block_xyz": [
+              0.2217727908176665,
+              -0.05075566398042527,
+              0.013892244579705856
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20001,
+          "randomization": {
+            "seed": 20001,
+            "block_xy": [
+              0.2260755951527704,
+              -0.03835147226959302
+            ],
+            "bowl_xy": [
+              0.23520022365233045,
+              0.13203271289021387
+            ],
+            "block_yaw_rad": 0.02577836881757775,
+            "camera_jitter_m": [
+              0.0024634180338265277,
+              -0.003940851613436879,
+              -0.003959481345377815
+            ],
+            "initial_native_degrees": [
+              -0.8616228884513649,
+              -93.45438099326353,
+              85.88189057724706,
+              69.72817539674827,
+              0.1529838784508276,
+              -4.500070534887436
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model_ema",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.24872313020751,
+          "touched_block": false,
+          "bilateral_contact": false,
+          "max_lift_m": 3.8464177693625645e-09,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 223,
+          "final": {
+            "block_xyz": [
+              0.22607559149787299,
+              -0.03835132444284877,
+              0.0138922445797838
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20002,
+          "randomization": {
+            "seed": 20002,
+            "block_xy": [
+              0.22951988048185562,
+              -0.035324662934457775
+            ],
+            "bowl_xy": [
+              0.2330433772429859,
+              0.13543036983637577
+            ],
+            "block_yaw_rad": 0.07886230987856299,
+            "camera_jitter_m": [
+              -0.0019119533379680603,
+              0.002399767655388874,
+              -0.002541134129928568
+            ],
+            "initial_native_degrees": [
+              0.5683230620279959,
+              -94.95693017873444,
+              85.59244412788387,
+              69.17945670904749,
+              -0.7697348546609936,
+              -4.500078143183952
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model_ema",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.286593244876713,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 2.8414814038160707e-06,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 77,
+          "final": {
+            "block_xyz": [
+              0.2295889414253292,
+              -0.0353168642138266,
+              0.013892244579783887
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20003,
+          "randomization": {
+            "seed": 20003,
+            "block_xy": [
+              0.22715768470172798,
+              -0.037503053958259605
+            ],
+            "bowl_xy": [
+              0.23192475470592608,
+              0.1288696103222336
+            ],
+            "block_yaw_rad": -0.08408038652235468,
+            "camera_jitter_m": [
+              0.001129672271139014,
+              0.001433698247245139,
+              0.0027972876678237033
+            ],
+            "initial_native_degrees": [
+              -0.3049028129744292,
+              -94.22123336586328,
+              85.68731238494841,
+              70.08297601244145,
+              -0.662390732671653,
+              -4.500072474388211
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model_ema",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.250625669024885,
+          "touched_block": true,
+          "bilateral_contact": false,
+          "max_lift_m": 0.012784188859353703,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 97,
+          "final": {
+            "block_xyz": [
+              0.20770805348427676,
+              -0.0517770195534121,
+              0.013892244579783816
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        },
+        {
+          "seed": 20004,
+          "randomization": {
+            "seed": 20004,
+            "block_xy": [
+              0.23708904922838342,
+              -0.05186895481659699
+            ],
+            "bowl_xy": [
+              0.23259071693422428,
+              0.13142816289112802
+            ],
+            "block_yaw_rad": 0.017466841655309137,
+            "camera_jitter_m": [
+              0.0002866965292829182,
+              -0.0007431696326200637,
+              -0.0037417569439891826
+            ],
+            "initial_native_degrees": [
+              0.30616707881390204,
+              -93.71857668226725,
+              84.05719748459883,
+              70.25239567580036,
+              0.5465710795321287,
+              -4.5000757168588725
+            ]
+          },
+          "checkpoint": "/liminal/experiments/sim-task-native-hf-20261017/training-1000/checkpoints/001000/pretrained_model_ema",
+          "task": "Pick up the red block and place it in the blue container.",
+          "fps": 20.0,
+          "physics_control_hz": 20.0,
+          "timing_consistent": true,
+          "requested_ticks": 600,
+          "execution_horizon": 32,
+          "joint_frame": "native",
+          "normalization": "checkpoint",
+          "protocol": "Official select_action and both saved processors every tick; acknowledge issued commands; keep the official queued action horizon; reset all three between episodes.",
+          "success_rule": "bilateral contact, lift > 3.5 cm, release and stable placement for 15 ticks",
+          "status": "completed",
+          "completed_ticks": 600,
+          "simulated_seconds": 29.999999999998227,
+          "wall_seconds": 28.238721273839474,
+          "touched_block": false,
+          "bilateral_contact": false,
+          "max_lift_m": 3.84637438392843e-09,
+          "stable_placement_ticks": 0,
+          "safety_limited_ticks": 6,
+          "final": {
+            "block_xyz": [
+              0.23708862059210845,
+              -0.05186883726152246,
+              0.013892244579783839
+            ],
+            "block_in_bowl": false,
+            "slow": true
+          },
+          "manipulation_success": false
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "64 training and 16 validation demos from a narrow randomization distribution; five new test scenes.",
+    "1000 microbatches / 250 optimizer updates, shorter than the official 10000-microbatch example.",
+    "The same staged teacher demos retain pauses; this experiment repairs coordinates, statistics and timing.",
+    "Simulation only. Success is independently checked contact, lift, release and stable placement."
+  ]
+}
