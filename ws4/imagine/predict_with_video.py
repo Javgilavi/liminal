@@ -187,45 +187,76 @@ def condition_latents(cond_tokens, latent_hw: tuple[int, int]):
 # Capturing the solver output
 # ---------------------------------------------------------------------------------------------
 _SOLVERS = ("euler", "cosmos_unipc_order2")
-_capture_state = threading.local()
+_STATE_ATTR = "_imagine_capture_state"
+_STATE_LOCK = threading.Lock()
 
 
-def _ensure_solver_hook(sampling_module) -> None:
-    """Wrap the module's solvers once. The wrapper records outputs only while this thread is capturing, so
-    concurrent policies in other threads (one model per arm) are unaffected."""
-    for name in _SOLVERS:
-        fn = getattr(sampling_module, name, None)
-        if fn is None or getattr(fn, "_imagine_hooked", False):
-            continue
+class _HookState:
+    """Lives on the sampling module (one per module, shared by copies of this file imported under two names)."""
 
-        def make(original):
-            @functools.wraps(original)
-            def wrapped(*args, **kwargs):
-                out = original(*args, **kwargs)
-                stack = getattr(_capture_state, "stack", None)
-                if stack:
-                    stack[-1].append(out)
-                return out
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.active = 0  # captures in flight, across threads
+        self.originals: dict[str, Any] = {}
+        self.local = threading.local()
 
-            wrapped._imagine_hooked = True  # type: ignore[attr-defined]
-            return wrapped
 
-        setattr(sampling_module, name, make(fn))
+def _hook_state(sampling_module) -> _HookState:
+    with _STATE_LOCK:
+        state = getattr(sampling_module, _STATE_ATTR, None)
+        if not isinstance(getattr(state, "lock", None), type(_STATE_LOCK)):
+            state = _HookState()
+            setattr(sampling_module, _STATE_ATTR, state)
+        return state
+
+
+def _wrap(original, state: _HookState):
+    @functools.wraps(original)
+    def wrapped(*args, **kwargs):
+        out = original(*args, **kwargs)  # unchanged call: the wrapper only keeps a reference to the result
+        stack = getattr(state.local, "stack", None)
+        if stack:
+            stack[-1].append(out)
+        return out
+
+    wrapped._imagine_hooked = True  # type: ignore[attr-defined]
+    return wrapped
 
 
 class _Capture:
+    """Wraps the module's solvers on entry and restores the originals when the last capture in flight exits, so
+    the sampling module is untouched whenever no imagination is being captured. While wrapped, the wrapper records
+    outputs only for the capturing thread; other threads (another model, a plain request) pass straight through."""
+
     def __init__(self, sampling_module):
-        _ensure_solver_hook(sampling_module)
+        self.module = sampling_module
+        self.state = _hook_state(sampling_module)
         self.outputs: list[dict] = []
 
     def __enter__(self) -> list[dict]:
-        if not hasattr(_capture_state, "stack"):
-            _capture_state.stack = []
-        _capture_state.stack.append(self.outputs)
+        st = self.state
+        with st.lock:
+            if st.active == 0:
+                for name in _SOLVERS:
+                    fn = getattr(self.module, name, None)
+                    if fn is not None and not getattr(fn, "_imagine_hooked", False):
+                        st.originals[name] = fn
+                        setattr(self.module, name, _wrap(fn, st))
+            st.active += 1
+        if not hasattr(st.local, "stack"):
+            st.local.stack = []
+        st.local.stack.append(self.outputs)
         return self.outputs
 
     def __exit__(self, *exc) -> None:
-        _capture_state.stack.pop()
+        st = self.state
+        st.local.stack.pop()
+        with st.lock:
+            st.active -= 1
+            if st.active == 0:
+                for name, fn in st.originals.items():
+                    setattr(self.module, name, fn)
+                st.originals.clear()
 
 
 def capture_solver_outputs(sampling_module) -> _Capture:
@@ -466,7 +497,9 @@ class Imagination:
             arrays["cond_frames"] = self.cond_frames
         if self.action is not None:
             arrays["action"] = np.asarray(self.action.float().cpu() if hasattr(self.action, "cpu") else self.action)
-        arrays["latents"] = np.asarray(self.latents.float().cpu() if hasattr(self.latents, "cpu") else self.latents)
+        if self.latents is not None:  # client-side records (from a policy server) carry frames only
+            lat = self.latents
+            arrays["latents"] = np.asarray(lat.float().cpu() if hasattr(lat, "cpu") else lat)
         np.savez_compressed(path, **arrays)
         return path
 
@@ -484,7 +517,7 @@ def load_imagination(path: str | Path) -> Imagination:
         spec=VideoSpec(**spec_d),
         task=meta["task"],
         seed=meta["seed"],
-        latents=data["latents"],
+        latents=data["latents"] if "latents" in data else None,
         step=meta["step"],
         index=meta["index"],
         t_request=meta["t_request"],
@@ -728,6 +761,11 @@ class Imaginer:
     # ---------------------------------------------------------------- one-shot API
     def imagine(self, batch, *, n_candidates: int | None = None) -> list[Imagination]:
         """Run ``predict_action_chunk`` on a preprocessed batch and return one record per item."""
+        return self.run(batch, n_candidates=n_candidates)[1]
+
+    def run(self, batch, *, n_candidates: int | None = None):
+        """``(actions, records)``: ``actions`` is exactly the tensor ``predict_action_chunk`` returned (same device
+        and dtype, so a postprocessor fed with it gives bit-identical commands); ``records`` as in ``imagine``."""
         was_installed = self._installed
         saved_n = self.n_candidates
         if n_candidates is not None:
@@ -736,8 +774,8 @@ class Imaginer:
             self.n_candidates = n_candidates
         self.install()
         try:
-            self.policy.predict_action_chunk(batch)
-            return list(self._last_records)
+            actions = self.policy.predict_action_chunk(batch)
+            return actions, list(self._last_records)
         finally:
             self.n_candidates = saved_n
             if not was_installed:

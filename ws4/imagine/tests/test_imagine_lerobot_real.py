@@ -126,3 +126,40 @@ def test_best_of_n_executes_the_chosen_seed(policy, batch):
     assert rec.chosen == 1 and rec.seed == 43
     policy.config.inference_seed = 43
     assert torch.equal(rec.action, policy.predict_action_chunk(batch)[0])
+
+
+def test_policy_server_imagination_is_bit_identical(policy):
+    """Real ``LeRobotFlux3Backend`` (real processors) behind the real ``flux.remote`` server: every imagine mode
+    returns exactly the plain request's commands, plus decodable frames."""
+    import threading
+
+    import numpy as np
+    from flux.backends import LeRobotFlux3Backend, PolicyRequest
+    from flux.remote import RemoteBackend, make_server
+    from lerobot.policies.flux3 import make_flux3_pre_post_processors
+
+    from ws4.imagine.serving import imagination_from_payload
+
+    pre, post = make_flux3_pre_post_processors(policy.config)
+    backend = LeRobotFlux3Backend(policy, pre, post, name="tiny")
+    server = make_server({"so101": backend}, port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        contract = backend.contract
+        rng = np.random.default_rng(0)
+        images = {k: rng.integers(0, 255, (2, 64, 64, 3), dtype=np.uint8) for k in contract.camera_keys}
+        states = rng.normal(0, 10, (8, 6))
+        req = PolicyRequest("pick up the cube", states, states + 1, images, contract.snapshots)
+        plain = RemoteBackend(url, "so101").predict(req)
+        for mode in ("sync", "async", "lazy"):
+            resp = RemoteBackend(url, "so101", imagine=mode).predict(req)
+            assert np.array_equal(plain.commands, resp.commands), mode
+            payload = resp.imagination
+            if mode != "sync":
+                payload = RemoteBackend(url, "so101").fetch_imagination(resp.info["imagination_id"])
+            rec = imagination_from_payload(payload["meta"], payload["arrays"])
+            assert rec.frames.shape == (41, 64, 128, 3) and rec.frame_offsets == tuple(range(2, 43))
+        assert "_sample" not in policy.__dict__  # the policy is pristine between requests
+    finally:
+        server.shutdown()

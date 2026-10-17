@@ -165,3 +165,16 @@ def test_decoder_moves_cpu_latents_to_the_vae_device():
     policy.frozen.video_vae = DeviceSpyVAE()
     (rec,) = Imaginer(policy).imagine(fake_batch())  # the default decoder, same GPU as the policy
     assert set(policy.frozen.video_vae.seen) == {"meta"} and rec.frames.shape[0] == 41
+
+
+def test_solver_hook_exists_only_during_capture():
+    original = sampling.euler
+    with capture_solver_outputs(sampling):
+        assert sampling.euler is not original and sampling.euler._imagine_hooked
+        with capture_solver_outputs(sampling):  # nested / concurrent captures share one wrapper
+            pass
+        assert sampling.euler is not original
+    assert sampling.euler is original  # the default path runs the untouched function
+    policy = FakeFluxPolicy()
+    Imaginer(policy).imagine(fake_batch())
+    assert sampling.euler is original and sampling.cosmos_unipc_order2.__name__ == "_unipc"

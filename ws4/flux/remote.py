@@ -10,6 +10,10 @@ the GPU box and reach it through ``ssh -L``. An optional shared token is checked
 
 GPU box:   python -m flux.remote --package so101=black-forest-labs/flux-3-action-so101 --port 8765
 Robot PC:  ssh -N -L 8765:127.0.0.1:8765 user@gpu-box   then RemoteBackend("http://127.0.0.1:8765", "so101")
+
+Imagination (opt-in, ws4/imagine/serving.py): ``RemoteBackend(..., imagine="sync" | "async" | "lazy")`` also gets
+each chunk's imagined frames, in the response (``sync``) or later via ``fetch_imagination(id)`` (``GET
+/imagination/<package>/<id>``). Actions are identical either way; requests without ``imagine`` are unchanged.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from .contract import ModelContract
 
 TOKEN_HEADER = "X-Flux-Token"
 _IMG_PREFIX = "image::"
+_IMAGINED_PREFIX = "imagined::"
 
 
 def _pack(arrays: dict[str, np.ndarray], meta: dict[str, Any]) -> bytes:
@@ -82,6 +87,8 @@ def encode_request(request: PolicyRequest, codec: str = "jpeg", quality: int = 9
         "codec": codec,
         "lengths": {},
     }
+    if request.imagine:  # absent by default, so plain requests are byte-identical to before
+        meta["imagine"] = request.imagine
     for key, frames in request.images.items():
         if codec == "jpeg":
             arrays[_IMG_PREFIX + key], meta["lengths"][key] = _jpeg_encode(frames, quality)
@@ -104,7 +111,18 @@ def decode_request(body: bytes) -> PolicyRequest:
         images=images,
         snapshot_ticks=tuple(int(t) for t in meta["snapshot_ticks"]),
         target=str(meta.get("target", "")),
+        imagine=str(meta.get("imagine", "")),
     )
+
+
+def _imagination_body(imagination: dict[str, Any]) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    arrays = {_IMAGINED_PREFIX + k: v for k, v in imagination["arrays"].items()}
+    return arrays, imagination["meta"]
+
+
+def _imagination_from_body(arrays: dict[str, np.ndarray], meta: dict[str, Any]) -> dict[str, Any]:
+    return {"meta": meta, "arrays": {k.removeprefix(_IMAGINED_PREFIX): v for k, v in arrays.items()
+                                     if k.startswith(_IMAGINED_PREFIX)}}  # fmt: skip
 
 
 def contract_to_json(contract: ModelContract) -> dict[str, Any]:
@@ -149,6 +167,8 @@ def make_server(backends: dict[str, FluxBackend], host: str = "127.0.0.1", port:
                 return self._error(401, "bad token")
             if self.path.rstrip("/") == "/packages":
                 return self._send(200, json.dumps(sorted(backends)).encode(), "application/json")
+            if self.path.startswith("/imagination/"):
+                return self._imagination()
             found = self._backend("/contract")
             if found is not None and self.path.startswith("/contract"):
                 self._send(200, json.dumps(contract_to_json(found[1].contract)).encode(), "application/json")
@@ -167,8 +187,35 @@ def make_server(backends: dict[str, FluxBackend], host: str = "127.0.0.1", port:
                 response = found[1].predict(request)
             except Exception as exc:  # report to the client instead of dropping the connection
                 return self._error(400, f"{type(exc).__name__}: {exc}")
-            body = _pack({"commands": response.commands}, {"latency_s": response.latency_s, "info": response.info})
-            self._send(200, body, "application/octet-stream")
+            arrays: dict[str, np.ndarray] = {"commands": response.commands}
+            meta: dict[str, Any] = {"latency_s": response.latency_s, "info": response.info}
+            if response.imagination is not None:
+                extra, meta["imagination"] = _imagination_body(response.imagination)
+                arrays.update(extra)
+            self._send(200, _pack(arrays, meta), "application/octet-stream")
+
+        def _imagination(self) -> None:
+            """GET /imagination/<package>/<id>[?wait=seconds]"""
+            from urllib.parse import parse_qs, urlparse
+
+            url = urlparse(self.path)
+            parts = url.path.strip("/").split("/")
+            if len(parts) != 3 or parts[1] not in backends:
+                return self._error(404, "GET /imagination/<package>/<id>")
+            fetch = getattr(backends[parts[1]], "fetch_imagination", None)
+            if fetch is None:
+                return self._error(404, f"package {parts[1]!r} has no imagination")
+            wait_s = float(parse_qs(url.query).get("wait", ["30"])[0])
+            try:
+                meta, arrays = fetch(parts[2], wait_s)
+            except KeyError as exc:
+                return self._error(404, str(exc))
+            except TimeoutError as exc:
+                return self._error(504, str(exc))
+            except Exception as exc:
+                return self._error(500, f"{type(exc).__name__}: {exc}")
+            body_arrays, body_meta = _imagination_body({"meta": meta, "arrays": arrays})
+            self._send(200, _pack(body_arrays, {"imagination": body_meta}), "application/octet-stream")
 
         def log_message(self, fmt: str, *args: Any) -> None:  # keep the control loop's terminal quiet
             pass
@@ -187,12 +234,14 @@ class RemoteBackend:
         timeout_s: float = 30.0,
         codec: str = "jpeg",
         quality: int = 95,
+        imagine: str = "",
     ):
         self.url = url.rstrip("/")
         self.package = package
         self.token = token
         self.timeout_s = timeout_s
         self.codec, self.quality = codec, quality
+        self.imagine = imagine  # "", "sync", "async" or "lazy" (ws4/imagine/serving.py)
         self.contract = contract_from_json(json.loads(self._call("GET", f"/contract/{package}")))
 
     def _call(self, method: str, path: str, body: bytes | None = None) -> bytes:
@@ -209,12 +258,25 @@ class RemoteBackend:
 
     def predict(self, request: PolicyRequest) -> PolicyResponse:
         start = time.perf_counter()
+        if self.imagine and not request.imagine:
+            request = dataclasses.replace(request, imagine=self.imagine)
         body = encode_request(request, self.codec, self.quality)
         arrays, meta = _unpack(self._call("POST", f"/predict/{self.package}", body))
         meta.setdefault("info", {})["request_bytes"] = len(body)
         info = dict(meta["info"])
         info["server_latency_s"] = meta.get("latency_s")
-        return PolicyResponse(arrays["commands"].astype(np.float64), time.perf_counter() - start, info)
+        imagination = None
+        if "imagination" in meta:
+            imagination = _imagination_from_body(arrays, meta["imagination"])
+            info["imagination_id"] = meta["imagination"].get("id")
+        return PolicyResponse(arrays["commands"].astype(np.float64), time.perf_counter() - start, info, imagination)
+
+    def fetch_imagination(self, imagination_id: str, wait_s: float = 60.0) -> dict[str, Any]:
+        """``{"meta", "arrays"}`` of an ``async`` / ``lazy`` imagination (the server decodes it if needed);
+        ``imagine.serving.imagination_from_payload(**...)`` turns it into frames."""
+        body = self._call("GET", f"/imagination/{self.package}/{imagination_id}?wait={wait_s:g}")
+        arrays, meta = _unpack(body)
+        return _imagination_from_body(arrays, meta["imagination"])
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -204,23 +204,54 @@ def write_gif(frames: Sequence[np.ndarray], path: str | Path, fps: float = 30.0)
     return path
 
 
-def write_mp4(frames: Sequence[np.ndarray], path: str | Path, fps: float = 30.0) -> Path:
+def write_mp4(frames: Sequence[np.ndarray], path: str | Path, fps: float = 30.0, crf: int = 18) -> Path:
+    """H.264 (yuv420p, +faststart) so browsers, the app and slide tools play it. Pipes RGB frames to the ``ffmpeg``
+    binary (libx264); falls back to imageio's ffmpeg, then to OpenCV ``mp4v`` with a warning (MPEG-4 Part 2, which
+    browsers do not play)."""
+    import shutil
+    import subprocess
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    h, w = frames[0].shape[:2]
+    ph, pw = h + h % 2, w + w % 2  # yuv420p needs even sides
+
+    def even(f: np.ndarray) -> np.ndarray:
+        if (ph, pw) == f.shape[:2]:
+            return np.ascontiguousarray(f, dtype=np.uint8)
+        out = np.zeros((ph, pw, 3), np.uint8)
+        out[: f.shape[0], : f.shape[1]] = f
+        return out
+
+    if shutil.which("ffmpeg"):
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{pw}x{ph}",
+               "-r", f"{fps:g}", "-i", "-", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", str(crf),
+               "-preset", "medium", "-movflags", "+faststart", str(path)]  # fmt: skip
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            for f in frames:
+                proc.stdin.write(even(f).tobytes())
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        if proc.wait() == 0:
+            return path
+        print(f"ffmpeg failed: {proc.stderr.read().decode(errors='replace')[-300:]}")
     try:
         import imageio.v2 as imageio
 
-        with imageio.get_writer(path, fps=fps, codec="libx264", quality=8, macro_block_size=8) as w:
+        with imageio.get_writer(path, fps=fps, codec="libx264", pixelformat="yuv420p", quality=8,
+                                macro_block_size=2, output_params=["-movflags", "+faststart"]) as wr:  # fmt: skip
             for f in frames:
-                w.append_data(f)
+                wr.append_data(even(f))
         return path
-    except Exception:  # no ffmpeg plugin: OpenCV
+    except Exception:
         import cv2
 
-        h, w = frames[0].shape[:2]
-        vw = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+        print(f"WARNING: no H.264 encoder; {path} is MPEG-4 Part 2 (mp4v), which browsers do not play")
+        vw = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (pw, ph))
         for f in frames:
-            vw.write(cv2.cvtColor(f, cv2.COLOR_RGB2BGR))
+            vw.write(cv2.cvtColor(even(f), cv2.COLOR_RGB2BGR))
         vw.release()
         return path
 

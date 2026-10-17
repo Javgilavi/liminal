@@ -150,3 +150,13 @@ def test_anticipate_and_compare_parse_json():
 def test_judge_construction_is_lazy():
     judge = ClaudeJudge()
     assert judge._client is None  # no SDK import, no key needed until the first call
+
+
+def test_speed_check_summary_ratios():
+    from ws4.imagine.speed_check import summarize
+
+    rows = [{"pred_path": [2, 1, 1, 1, 1, 0], "rec_path": [1, 2, 2, 1, 1, 0],
+             "pred_disp": [2, 1, 1, 1, 1, 0], "rec_disp": [1, 2, 2, 1, 1, 0]}] * 3  # fmt: skip
+    s = summarize(rows)
+    assert s["moving_chunks"] == 3 and s["ratio_path_model_over_demo"][:3] == [2.0, 0.5, 0.5]
+    assert s["median_arm_travel_deg"] == {"model": 6.0, "demo": 7.0} and s["fraction_model_travels_more"] == 0.0

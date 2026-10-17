@@ -83,3 +83,19 @@ def test_render_run_returns_surprise(records, tmp_path):
     surprise = render_run(records, frames(40), tmp_path / "run.gif", task="pick")
     assert surprise.shape == (40,) and np.isnan(surprise[0]) and np.isfinite(surprise[5])
     assert (tmp_path / "run.gif").exists()
+
+
+def test_mp4_is_h264_with_even_sides(tmp_path):
+    import shutil
+    import subprocess
+
+    if not shutil.which("ffprobe"):
+        pytest.skip("ffprobe not installed")
+    frames = [np.full((35, 49, 3), i, np.uint8) for i in range(10)]  # odd sides on purpose
+    from ws4.imagine.compose import write_mp4
+
+    path = write_mp4(frames, tmp_path / "x.mp4", fps=10)
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                          "stream=codec_name,pix_fmt,width,height", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True).stdout.strip()  # fmt: skip
+    assert set(out.split(",")) == {"h264", "yuv420p", "50", "36"}

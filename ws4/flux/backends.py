@@ -33,6 +33,7 @@ class PolicyRequest:
     images: dict[str, np.ndarray]  # model camera key -> (n_snapshots, H, W, 3) uint8
     snapshot_ticks: tuple[int, ...]
     target: str = ""
+    imagine: str = ""  # "" (off), "sync", "async" or "lazy": also return imagined frames (imagine/serving.py)
 
 
 @dataclass
@@ -40,6 +41,7 @@ class PolicyResponse:
     commands: np.ndarray  # (chunk_size, D) absolute commands, model units
     latency_s: float
     info: dict[str, Any] = field(default_factory=dict)
+    imagination: dict[str, Any] | None = None  # {"meta": ..., "arrays": ...} when the request asked for it
 
 
 class FluxBackend(Protocol):
@@ -154,6 +156,7 @@ class LeRobotFlux3Backend:
         if snapshot_indices(self.contract.n_obs_steps, self.contract.history_snapshots) != self.contract.snapshots:
             raise AssertionError("snapshot rule drifted from the model's packer")
         self._lock = threading.Lock()
+        self._imagine = None  # imagine.serving.ImagineService, built on the first request that asks for frames
 
     @classmethod
     def from_pretrained(
@@ -200,10 +203,16 @@ class LeRobotFlux3Backend:
         for key in contract.camera_keys:
             frames = expand_snapshots(request.images[key], tuple(request.snapshot_ticks), contract.n_obs_steps)
             batch[key] = torch.from_numpy(frames).permute(0, 3, 1, 2)[None]  # (1, n, 3, H, W) uint8
+        imagination = None
         with self._lock:
             start = time.perf_counter()
             prepared = self.pre(batch)
-            normalized = self.policy.predict_action_chunk(prepared)  # (1, chunk, D), normalized deltas
+            if request.imagine:
+                # Same predict_action_chunk call and output tensor, plus the video stream it already denoises.
+                normalized, meta, arrays = self.imagine_service().predict(prepared, request.imagine)
+                imagination = {"meta": meta, "arrays": arrays}
+            else:
+                normalized = self.policy.predict_action_chunk(prepared)  # (1, chunk, D), normalized deltas
             commands = self.post(normalized)  # (1, chunk, D), absolute, integrated onto the last command
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
@@ -212,4 +221,16 @@ class LeRobotFlux3Backend:
         if torch.cuda.is_available():
             info["max_memory_allocated_gib"] = torch.cuda.max_memory_allocated() / 2**30
         out = commands[0].detach().to("cpu", torch.float64).numpy()
-        return PolicyResponse(out, latency, info)
+        return PolicyResponse(out, latency, info, imagination)
+
+    def imagine_service(self):
+        """The imagination service of this model (ws4/imagine/serving.py; ws4/ is on sys.path)."""
+        if self._imagine is None:
+            from imagine.serving import ImagineService
+
+            self._imagine = ImagineService(self.policy, self._lock)
+        return self._imagine
+
+    def fetch_imagination(self, imagination_id: str, wait_s: float = 30.0):
+        """``(meta, arrays)`` of an ``async`` / ``lazy`` imagination, decoding it now if needed."""
+        return self.imagine_service().fetch(imagination_id, wait_s)

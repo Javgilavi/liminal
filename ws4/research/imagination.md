@@ -247,6 +247,46 @@ header check confirms the structure the frame timing rests on. `load_state_dict`
 One check remains, on the GPU box: `vaecheck` (runbook step 3). It confirms that the trained decoder reproduces
 each slot's frame in order (decoded frame d shows control step d + 2 for the 42-frame SO-101 clip).
 
+### 1.8 Were the pen demos too fast? (measured 2026-10-17 22:30 CEST)
+
+No. They are slower than FLUX's training data.
+
+**Speed tails.** Per-tick command deltas at the 1st..99th percentile (deg per tick at 30 Hz), stock SO-101 package
+(community data) vs `so101_haller_pen_B84` (our 84 train takes):
+
+| | pan | lift | elbow | wrist flex | roll |
+|---|---|---|---|---|---|
+| community | -3.6..3.3 | -2.6..4.1 | -3.4..4.1 | -5.1..5.4 | -3.3..3.2 |
+| ours | -0.7..1.4 | -1.9..1.8 | -1.7..1.9 | -1.3..2.4 | -0.8..1.3 |
+| spread ratio, ours / community | 0.31 | 0.54 | 0.47 | 0.34 | 0.33 |
+
+These are tails, not typical speeds. Variant B renormalizes with our quantiles, so it rescales speed anyway.
+
+**What the model does instead** (`outputs/speed/`). B84, guidance 1.0, zero-shot, 127 chunks of 12 held-out takes
+(101 to 103, 20 to 22, 36 to 38, 86 to 88), requests built like the runner's. Joint travel over the 32 executed
+steps, model / demo:
+
+| | pan | lift | elbow | wrist flex | roll | gripper |
+|---|---|---|---|---|---|---|
+| ratio | 1.49 | **0.32** | **0.55** | 1.06 | 0.99 | 1.00 |
+
+Median total arm travel per chunk is 40 deg for the model vs 53 deg for the demos, and the model moves more in only
+39 % of chunks.
+
+Same script on the overnight LoRA (`imagine/speed_check.py`; B84 rerun through it gives identical ratios):
+
+| model / demo travel | pan | lift | elbow | wrist flex | roll | gripper | median arm travel (demo 53.5 deg) |
+|---|---|---|---|---|---|---|---|
+| B84 zero-shot | 1.49 | 0.32 | 0.55 | 1.06 | 0.99 | 1.00 | 40.2 deg |
+| LoRA 3000 steps | **0.86** | **0.52** | 0.56 | 0.64 | 0.56 | 0.96 | 30.1 deg |
+
+At 3000 steps the LoRA stops over-swinging the pan and uses the lift more, but it moves more cautiously
+overall than the demos. 5000 steps: pending.
+
+The mismatch is which joints move, not speed. The model barely uses shoulder lift and elbow (the reach toward the
+pen) and swings the pan more. This fits the lift findings in `single_arm/README.md`. It is what the pen LoRA has
+to learn; compare its checkpoints with the same script.
+
 ## 2. Uses, ranked for Sunday
 
 The ranking weighs judging criteria (use of track tech 20%, originality 15%, demo video 10%), risk to the
@@ -370,7 +410,8 @@ observation -> saved preprocessor -> policy.select_action(batch)
 | Control pause per chunk | = stock inference (synchronous loop, no RTC) | LR `flux3.mdx` |
 | Capture of imagined latents | about 0 (540 KB device-to-host copy) | code |
 | Decode, async (same GPU idle during motion, or cuda:1) | **0 on the control path** | design |
-| Decode itself | **UNVERIFIED**, est. tens to a few hundred ms; must stay under 1.07 s for async to keep up | est. above; measure with `bench` |
+| Decode itself | **Measured 0.11 to 0.12 s** for 41 frames at 256 x 512 (RTX PRO 6000 Blackwell Server, 23 chunks of held-out pen takes, decoded after each take) | `imagine/README.md`, `/workspace/imagine/replay_ep10{1,2,3}/report.json` |
+| Round trip through `flux.remote`, B84 package, guidance 1.0, on the pod | **Measured median 0.39 s with imagination (`lazy`) vs 0.39 to 0.43 s plain; commands bit-identical on all 23 chunks** | same |
 | Decode VRAM | about 5 GB peak (est. from code constants) + 2.34 GiB if a second VAE copy is used | `video_vae.py:106-112`, HF API |
 | Best-of-N (seeds) | about N x stock inference + N x decode | code |
 | Alternatives (N instructions) | about N x stock inference + N x decode + 1 Claude call | code |
