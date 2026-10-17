@@ -28,8 +28,8 @@ Line citations below are for the checkout at `e39c443` (branch `ws4-handoff`).
 
 **Verified:** everything in the test suite on this laptop; the end-to-end sim run on 4 random layouts (seeds 0 to 3, all
 3/3 steps); e-stop freezes the sim (no physics step, no command, active time stops) and the run completes after release
-and resume with the intervention logged; the gate's cost (0.05 to 0.06 ms per frame); the concurrency model below with a
-fake model at the pod's measured latency.
+and resume with the intervention logged; the gate's cost (0.05 to 0.06 ms per frame); two-arm concurrency on the real pod (one shared FLUX
+model: the arms alternate, 30% / 28% motion each, never simultaneous, 1.76 s round trip per chunk).
 
 **Verified live against the Claude API (2026-10-17 15:06, `python -m orchestrator.live_check`, USD 0.04 in total):**
 the Opus 5.5 planner returns a valid plan from a 640x480 sim head frame in 12.1 s cold and 5.9 s with the cached system
@@ -37,14 +37,15 @@ prompt; Haiku 5.5 checks take 1.2 to 2.1 s and answered 4 of 4 correctly (apple 
 lid check takes 1.7 s and was correct. Request shapes were also checked against the real SDK (`anthropic` 1.15.0)
 through a mock transport. Details in "Claude: measured latency and cost" and "Claude API: docs and SDK".
 
-**Not verified:** no FLUX inference through the orchestrator (pod not used, needs Oscar's OK); nothing on the real
-robot; Claude's checks on real camera frames (only sim renders so far). The skill vocabulary is a placeholder (the
+**Not verified:** FLUX driving a whole orchestrated task (the pod measurement exercised the runner and policy server
+with both arms, not a plan); nothing on the real robot; Claude's checks on real camera frames (only sim renders so far). The skill vocabulary is a placeholder (the
 recording protocol's S1 to S5) until the demo task is final.
 
 **Next 3 steps:**
 1. Run backend (b) in the HMI with `--planner claude --verifier shadow --image-size 480x640` on several seeds to measure
    Claude's check accuracy against sim ground truth over whole runs (the shadow verifier logs every disagreement).
-2. With the pod up: backend (c) on the sim and `measure_concurrency --backend remote` to replace the modelled numbers.
+2. Backend (c) end to end: FLUX zero-shot driving the sim arms through the HMI (`--policy remote`), to see whether the
+   released checkpoint does anything sensible on the sim images, and to log it as a sim attempt.
 3. Replace `skills.yaml` with the final demo prompts (exact strings as trained and as in `/workspace/prompts.txt` on the
    pod), then run (d) zero-shot (A0, A0r) and with the LoRAs, logging every attempt.
 
@@ -213,34 +214,43 @@ Mismatches found:
 
 ## Concurrency on one shared model (backend c)
 
-Both arms run FLUX through the runner exactly as the executor does. Modelled with a fake model at the pod's measured
-1.46 s per chunk (`ws4/cloud/RUNPOD.md`), 32 of 42 actions executed per chunk (1.07 s of motion), 30 Hz, 30 s per run
-(`python -m orchestrator.measure_concurrency --backend fake ...`):
+Both arms run FLUX through `DualArmRunner` exactly as the executor does (`python -m orchestrator.measure_concurrency`),
+each with its own prompt ("Put the apple in the box" / "Put the yellow block in the box"), static 640x480 frames, 30 Hz.
+**Measured on the pod** on 2026-10-17 at 15:25 CEST: the RunPod RTX PRO 4500 32 GB, one `flux.remote` server with
+package `so101` (one loaded model, default guidance, text encoder on the CPU), reached through an SSH tunnel from the
+laptop, 20 s warm-up, then 60 s timed per mode (`runs/concurrency_remote_pod_{async,sync}.json`). Policy requests
+only; no change to the pod.
 
-| Configuration | Each arm moving | Both arms moving at once | Chunks per minute per arm | Longest control-loop stall |
-|---|---|---|---|---|
-| async, one shared model (the 32 GB RTX PRO 4500 pod) | 35% | **0%** | 20 | 0.04 s |
-| async, two model instances | 41% | 40% | 24 | 0.04 s |
-| sync, one shared model | 24% | 24% | 15.6 | 2.96 s |
-| (one arm alone, for reference: 1.07 / (1.07 + 1.46)) | 42% | | 23.6 | |
+| Configuration | Each arm moving | Both arms moving at once | Chunks per minute per arm | Round trip per chunk (median) | Longest control-loop stall |
+|---|---|---|---|---|---|
+| **Pod, async, one shared model (measured)** | **30% / 28%** | **0%** | **17 / 16** | **1.76 s** | **0.11 s** (29.6 Hz held) |
+| **Pod, sync, one shared model (measured)** | **20% / 20%** | 20% | **12 / 12** | 1.73 s / 1.75 s | **3.84 s** (6 ticks/s on average) |
+| Model: async, one shared model, 1.46 s per chunk | 35% | 0% | 20 | 1.46 s | 0.04 s |
+| Model: async, two model instances, 1.46 s each | 41% | 40% | 24 | 1.46 s | 0.04 s |
+| Model: sync, one shared model, 1.46 s | 24% | 24% | 15.6 | 1.46 s | 2.96 s |
+
+The model rows use a fake backend with the latency measured earlier on the same pod (RUNPOD.md) and match the
+measurements' shape; the measured numbers are lower because a round trip through the tunnel is 1.76 s, not 1.46 s
+(about 0.3 s of network, JPEG encode and decode, and server overhead per chunk).
 
 What this means:
-- On one shared model the arms take turns: one arm's 1.46 s inference fills the other arm's 1.07 s of motion and
-  more, so they settle into strict alternation and never move at the same instant. Total arm motion is 0.70 arm-equivalents
-  vs 0.82 with two instances. "Concurrent" plan steps still overlap in time and finish sooner than in sequence, and
-  "one arm holds while the other acts" loses nothing, but true simultaneous motion needs two model instances.
-- Synchronous inference is the worst case: each arm's inference freezes the whole loop, including the other arm, for up
-  to 2.96 s. The orchestrator uses async inference for remote backends by default (as `flux/run_xlerobot.py` does).
-- True parallelism needs two loaded models, each on its own lock: BF16 peak was 23.6 GiB per instance with Qwen on
-  the CPU (RUNPOD.md), so two instances need about 47 GiB plus decoding headroom: a 96 GB RTX PRO 6000 pod in EU-RO-1
-  (about USD 2.49/h, same network volume), or two GPUs. Serve it as two packages on different devices or two server
-  processes, then `--left-package` / `--right-package` select them. Not changed on the pod (that is the orchestrator
-  session's call).
-- If the guidance-1.0 and compile levers bring latency under the 1.07 s of motion (UNVERIFIED), a shared model starts to
-  overlap the arms' motion: with 0.73 s per chunk each arm's cycle would be max(1.07 + 0.73, 2 x 0.73) = 1.8 s, about
-  59% motion each (model, not measured).
-- Not yet measured on the pod: replace the table's first row with `measure_concurrency --backend remote` (the pod's
-  real latency distribution, network and JPEG transport included).
+- On one shared model the arms take turns. One arm's inference (1.76 s round trip) is longer than the other arm's
+  1.07 s of motion, so they settle into strict alternation and never move at the same instant (measured 0%). Each arm
+  moves about 29% of the time, so the station delivers about 0.58 arm-equivalents of motion. "Concurrent" plan steps
+  still overlap in time and finish sooner than in sequence, and "one arm holds while the other acts" loses nothing,
+  but simultaneous motion needs two model instances or a faster model.
+- Synchronous inference is the worst case: each arm's inference freezes the whole control loop, the other arm
+  included, for up to 3.84 s, and each arm moves 20% of the time. The orchestrator uses async inference for remote
+  backends by default (as `flux/run_xlerobot.py` does).
+- True parallelism needs two loaded models, each with its own lock: BF16 peak was 23.6 GiB per instance with Qwen on
+  the CPU (RUNPOD.md), so two instances need about 47 GiB plus decoding headroom. That means a 96 GB RTX PRO 6000 pod in
+  EU-RO-1 (about USD 2.49/h, same network volume) or two GPUs, served as two packages on different devices or two
+  server processes; `--left-package` / `--right-package` then select them. Modelled at 1.46 s: 41% motion per arm and
+  40% simultaneous. Not changed on the pod (that is the orchestrator session's call).
+- Faster inference also helps a shared model. With guidance 1.0 and compile (0.63 s per chunk measured on the pod by
+  the orchestrator session; effect on action quality still being tested), the round trip would be about 0.93 s, below
+  the 1.07 s of motion, so each arm's cycle becomes max(1.07 + 0.93, 2 x 0.93) = 2.0 s: about 53% motion per arm with
+  partial overlap (model, not measured).
 
 ## Laptop backend (a): the sim stand-in
 
