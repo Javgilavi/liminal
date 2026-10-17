@@ -34,7 +34,144 @@ unless marked UNVERIFIED. Graded attempts live in `ws4/eval/trials.jsonl` (`task
    calibration, same cameras, for the post-training LoRA.
 3. Train the LoRA from the A0r-normalized base and evaluate it under the same protocol (`condition=post_training`).
 
-## Hardware as used
+## Haller (XLeRobot tower): FLUX on the robot-left arm (red pen into its slot in a cardboard box)
+
+The red arm was retired (elbow servo damaged). The team demo moved to Oscar's green Haller station; demos come from VR
+teleop (ws4-vr2, haller_ws HMI), this workstream provides calibration, safety and the FLUX runs.
+
+| Item | Value (measured 2026-10-17 unless marked) |
+|---|---|
+| Servos | STS3215 7.4 V C001, Min/Max_Voltage_Limit 4.0/8.0 V, supply measured 7.2 to 7.3 V. Never 12 V |
+| Ports (haller ids are operator-frame) | `/dev/haller_arm_right` = robot LEFT arm (task arm), `/dev/haller_arm_left` = robot RIGHT arm |
+| Calibration | read-only EEPROM harvest (`ws4/teleop/calib.py harvest`), no servo writes: `haller_right.json` (robot left), `haller_left.json` (robot right) in `~/.cache/huggingface/lerobot/calibration/robots/so_follower/`, copies in `calibration/` |
+| Scene camera | D455 colour `/dev/video12` (`/dev/haller_cam_mast`), YUYV 640x480 at 30 fps |
+| Wrist cameras | Autodarts (OV2710), both report serial SN0001, so address them by USB path: robot-left (task) arm `/dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.2:1.0-video-index0` (was `/dev/video4`, sees the cup), robot-right arm `...usb-0:7.3...` (`/dev/video6`); mounted upside down |
+| Camera parity | the VR recording (ws4-vr2, haller_ws `hmi/backend/config.flux-real.yaml` at `ad21419`, lines 94-103 and 109-122; `haller_hmi/cameras.py:58-62, 142-146, 166-168`) reads both cameras through LeRobot `OpenCVCamera(path, fps=30, 640x480)` with default fourcc, no colour gains and no V4L2 writes; the task wrist cam is rotated 180 deg (`cv2.ROTATE_180`, mounted upside down), the head is not. The runner matches with `--scene-fourcc none --wrist-fourcc none --wrist-rotate 180` (LeRobot `Cv2Rotation.ROTATE_180`, the same `cv2.rotate`) and no `--parity-side`. Takes before `ad21419` were unrotated and moved to `ws4test/` |
+| Keep-out | `calibration/haller_right_workspace.json` from `keepout.py --haller left`, fitted to the VR demos: fin-ray TCP; table split by point (TCP z >= -0.005, since the pen is grasped lying on the mat with the TCP down to 0.002; wrist z >= +0.05, demos never below 0.124); station table z = 0 (UNVERIFIED until `--touch`); torso box + 2 cm; own-base cylinder 6 cm (turntable only) and fold-back zone off, because takes 17 and 20 grasp the pen 7 cm in front of the base with the gripper pointing back; mast; midline y >= -0.11 as a backstop (demos reach -0.074 measured / -0.084 commanded); the parked robot-right arm as link capsules (`ws4/kinematics/collision.py`) at its measured joints, re-read before each attempt with `--other-arm-port /dev/haller_arm_left`, 4 cm surface clearance (demos keep >= 8.5 cm). 0 refusals on all 24 good pen-in takes (layouts A and B, 15,833 steps) and the 9 pen-out takes (regression fixtures in `tests/fixtures/`) |
+
+Torque-safe connect: observe mode never writes a register or changes torque; a real run only switches torque off when
+calibration or registers differ, and refuses that while the arm holds a pose unless `--allow-torque-off`.
+
+```bash
+python ws4/single_arm/run_single_arm.py --observe --port /dev/haller_arm_right --robot-id haller_right \
+  --scene-cam /dev/haller_cam_mast --scene-fourcc none \
+  --wrist-cam /dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.2:1.0-video-index0 --wrist-fourcc none --wrist-rotate 180 \
+  --keepout-config ws4/single_arm/calibration/haller_right_workspace.json --other-arm-port /dev/haller_arm_left \
+  --start-pose 0 0 0 0 0 100 --backend fake --seconds 6 --yes
+```
+
+Every FLUX attempt on the Haller starts where the VR demos start: haller home `[0, 0, 0, 0, 0, 100]` in LeRobot
+degrees (arm joints at their calibration middle, gripper open), reached by a slow ramp that runs through the joint
+limits and the keep-out on every step (`--start-pose 0 0 0 0 0 100`); the target and the measured start pose go into
+each attempt's `meta.json`. Home is clear of every keep-out zone (TCP at station (0.362, 0.137, 0.317)). Not the sim
+park pose `HOME_DEG [0, -10, 10, 75, 0, 30]`. At session end torque is switched off only if it was off at launch.
+
+**Task and split (19:15):** the recorded task is "put the red pen in its slot in the cardboard box" (exact string from
+ws4-vr2's final dataset), possibly with a second dataset "take the red pen out of the box and put it on the mat". The
+held-out split (last 3 to 4 takes of each layout, 10 in total) is taken from ws4-vr2's take log once recording ends;
+the block-in-cup plan (episodes 17-19, 37-39, 56-59) was dropped with that task.
+
+Only one process may hold `/dev/haller_arm_*`: stop the haller HMI first (`fuser /dev/ttyACM*` must be empty).
+
+### Offline data-format diagnostic: which normalization for the LoRA base (2026-10-17, no robot)
+
+Question: with the released SO-101 weights unchanged, which joint convention / normalization lets FLUX best predict
+Oscar's own pen demos? Tool: [offline_diag.py](offline_diag.py), run on RunPod `so101-diag-4090` (RTX 4090 24 GB,
+EU-CZ-1, Qwen on the CPU).
+
+- Data: snapshot of `ws4/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box` at 19:52, episodes 0 to 9 (layout A,
+  none held out by the final split), converted per arm (`convert_bimanual --to per_arm --side right --src-units
+  degrees --task-suffix ""`). 200 frames sampled with a full 8-tick history (seed 0).
+- Each request is built exactly as the runner builds it: states s[t-7..t], the command issued before each
+  observation (recorded action a[k-1]), image snapshots at window ticks 0 and 7. The first 32 of the 42 predicted
+  absolute commands are compared with the recorded actions a[t..t+31]. Guidance 1.0 (video and action), fixed
+  `inference_seed` 42, `compile_model` off; 0.68 s per prediction.
+- Variants (same weights): **A** package statistics on our LeRobot degrees; **B** A0r, quantiles recomputed on these
+  episodes; **C** the experimental adapter of
+  [flux-action issue #2](https://github.com/black-forest-labs/flux-action/issues/2) (model = scale x ours + offset,
+  scales [+1, -1, +1, +1, -1] x 4095/4096, offsets [7.998, 90.220, 84.111, -4.482, -0.396] deg) with package
+  statistics; **D** sign flips only (shoulder_lift, wrist_roll) with quantiles recomputed on the flipped data.
+- Selection metric, as the orchestrator asked: moving frames only (the recorded chunk moves an arm joint by more than
+  5 deg or the gripper by more than 15 %; 151 of 200). Direction agreement counts a joint where its recorded move
+  exceeds 2 deg (gripper 5 %) and compares signs of predicted and recorded displacement over the chunk. Relative
+  displacement error = median |predicted - recorded displacement| / |recorded displacement|.
+
+| variant | MAE pan, lift, elbow, wrist flex, roll (deg); gripper (%) | direction agreement | median rel. displacement error |
+|---|---|---|---|
+| hold (repeat current command) | 1.9, 4.4, 4.7, 2.9, 2.0; 4.4 | - | 100 % |
+| A package stats | 4.3, **19.9**, 10.1, 11.2, 3.7; 6.6 | 42, 57, 53, 58, 34, 78 % | 195, 498, 242, 291, 177, 56 % |
+| B our quantiles (A0r) | 1.9, 3.2, 3.8, 3.7, 1.8; 8.4 | 80, 79, 68, 60, 73, 72 % | 46, 73, 86, 100, 68, 102 % |
+| C issue-2 adapter | 4.4, **16.8**, 6.0, 10.1, 1.9; 6.5 | 41, 43, 70, 64, 77, 82 % | 208, 476, 127, 283, 56, 57 % |
+| D flips + our quantiles | 1.9, 3.2, 3.9, 3.5, 1.6; 7.6 | **80, 83, 70, 62, 81, 80 %** | 52, 76, 87, 99, 58, 100 % |
+
+What it says:
+- **A and C fail for the same reason the red arm's A0 failed:** inputs land outside the package's normalization range
+  and the model drives the shoulder (lift MAE 20 and 17 deg, displacement errors of 200 to 500 %), at chance-level
+  direction agreement on lift. The issue-2 offsets belong to that reporter's calibration and do not transfer.
+- **B and D anticipate the demonstrated motion zero-shot**: direction agreement 60 to 83 % on every joint (chance is
+  about 50 %), lift and elbow errors below the hold baseline, displacement magnitudes still under- or overshot (about
+  50 to 100 % relative error), wrist flex and gripper not better than holding.
+- **D vs B:** D is ahead on direction for 5 of 6 joints (lift 83 vs 79 %, roll 81 vs 73 %, gripper 80 vs 72 %) and
+  on wrist flex, roll and gripper MAE; B is ahead on pan displacement. One sample seed: the robustness runs (guidance
+  3, second seed) are below.
+
+Robustness (same moving-frame metric):
+- Seed 1, 200 other frames (168 moving): B direction 86, 83, 70, 62, 83, 74 %; D 84, 81, 70, 60, 88, 70 %; MAE
+  within 0.1 to 0.2 deg of each other. Across both seeds neither is consistently ahead.
+- Guidance 3: not completed (stopped to free the GPU for variant E).
+- Variant **E** (Oscar's mapping lift_model = 90 - lift, elbow_model = elbow + 90, package statistics), seed 0:
+  MAE 4.3, 16.7, 5.9, 9.6, 3.2; 6.4; direction 41, 43, 69, 64, 33, 82 %; displacement error 205, 483, 134, 286,
+  158, 54 %. Nearly identical to C: lift direction at chance and five times too large.
+
+**Decision: the pen LoRA base is B** (package weights + history quantiles of the training takes,
+`a0r_stats.py` + `flux.package_tools.renormalize_package`). B and D tie, and B needs no transform: the dataset trains
+as recorded and deployment needs no `--scale`. D would need lift and roll negated in the training data and at
+deployment (`--scale 1 -1 1 1 -1 1`, supported and tested). C or E would need runtime transforms and lose anyway.
+
+### Real-arm zero-shot on the Haller (2026-10-17 evening, robot-left task arm)
+
+Served from RunPod `so101-serve-4090` with [serve_lowmem.py](serve_lowmem.py) (the stock `flux.remote` server's
+load peak does not fit 24 GB), guidance 1.0, 0.92 to 0.94 s per chunk round trip. Every attempt starts at haller
+home through a station-zone ramp; policy commands pass the keep-out (station zones, parked-arm capsules, and for the
+pen task the demonstrated envelope), the 1 deg/tick guard, the stall freeze and the 60 % torque cap. Soft limits
+(5 deg from the stops) and the load freeze were added after the first cup runs. Attempts were scored from their
+videos where the steps prompt got no digit. The prompt now takes a typed answer plus Enter in normal terminal mode,
+drops keys pressed during the attempt and ignores Ctrl-C (tested in a pty).
+
+| task | variant | attempts | result | what happened |
+|---|---|---|---|---|
+| put_pen_in_slot | A0-E (stock + Oscar's mapping) | 3 | 0/3 each | approached the pen; #3 closed beside it, then hovered with the pen between the open fingers when 40 s ran out |
+| grasp_cup | A0-E | 3 | 0/2 each | never approached the cup (two runs under the pen envelope), or folded to the end stops and swung outward |
+| grasp_cup | A0r-B | 3 | 0/2 each | #1 reached the cup (beside the fingers at 8 s), did not close, then ducked toward the torso, held by the keep-out; #2 and #3 (soft limits + load freeze on) drove wrist flex into its 93.5 deg soft limit and held it there for two thirds of the 60 s, gripper curled back toward the robot body, closed on nothing, cup untouched |
+| grasp_cup | A0r-D (lift + roll flipped) | 2 | 0/2 each | lift ran backward to -48 and -71 deg (robot frame, demos -8..74) until the keep-out froze it (mast and base); wrist flex again at its 93.5 deg soft limit; #2 stopped by Oscar at 26.5 s |
+
+**Is the shoulder lift mis-mapped in B? No.** In B #2 and #3 lift stayed between 4 and 62 deg, inside the
+demonstrated -8..74, and never ran toward a stop. With lift flipped (D, same quantile recipe on the flipped data)
+lift ran out of the demonstrated range to -48 and -71 deg and kept pushing until the keep-out held it: the closed-loop
+runaway a wrong sign produces (E's flipped lift did the same). Offline agreed, weakly: on the 53 moving lift samples
+where the joint was still or reversing (no momentum to copy), B predicts the lift direction 72 % of the time and D
+62 %. So the issue-2 adapter's lift flip (legacy SO-100 lift = 90 - new lift) does not hold for this package with
+A0r quantiles. The joint that runs away under both mappings is wrist flex: commanded at its 93.5 deg soft limit for
+most of each attempt (B 1,192 and 1,177 of 1,800 ticks, D 1,372 of 1,800), beyond the demos' 78.5 deg maximum, with
+the gripper curled back toward the robot. Offline flex direction is near chance for B and D alike (58 to 61 % on still
+or reversing frames). Whether flex is a convention problem or the zero-shot model not knowing the cup is UNVERIFIED;
+the LoRA on B is the next test.
+
+Load measured on the Haller during these runs never exceeded 29 % of max torque, also when E folded the arm to its
+end stops; the red arm's damaging attempts reached 92 % (uncapped) and a sustained 60 % (at the cap).
+
+
+### Imported by ws4-orchestrator (stable through Sunday)
+
+`ws4/orchestrator` drives the Haller task arm with these, imported read-only; only keyword arguments with defaults
+may be added: `connect_so101(args)`, `SingleArmRobot(so101, "left", send=, max_relative_target=)`,
+`build_guard(args, slot, calib_path, rest)`, `KeepOutGuard(cfg, keepout, slot, measured)`, `read_token(args)`,
+`warm_up(backend, robot, target, prompts)`, `move_to(robot, goal, guard_cfg, deg_per_tick, keys, keepout)`,
+`hold_here(robot)`, `disconnect_so101(robot, torque_off)`, `FakeSO101`, `keepout.KeepOut`. Callers must read the arm
+every tick before `guard.filter` (the keep-out compares against `robot.last_q`), call `hold_here` on any stop, and
+switch torque off at the end only if `so101.ws4_launch_torque` is False.
+
+## Hardware as used (red arm)
 
 | Item | Value |
 |---|---|
@@ -196,6 +333,10 @@ State on 2026-10-17 17:35 CEST: A0 halted after 3 attempts at 12 V because the e
 | `run_single_arm.py` | the runner (modes: fake / observe / real, `--home`), recording and trial logging |
 | `record_handguided.py` | torque-off hand-guided recording and A0r quantiles |
 | `keepout.py` | FK keep-out zones (table, base, fold-back); `--touch` calibrates the table height |
+| `haller_identify.py` | which port / wrist camera moves when one arm is moved by hand (read-only) |
+| `a0r_stats.py` | A0r quantiles from a recorded LeRobot dataset (per-arm or 12-D with `--arm`) |
+| `keepout_demos.py` | replay recorded demos through the keep-out: every demonstrated motion must pass (0 refusals) |
+| `compare_frames.py` | recorded dataset frame vs the runner's live camera path: orientation, colour, brightness |
 | `joint_test.py` | one joint, small slow motion at a low torque cap: does the output follow (gear check)? |
 | `calibration/` | `red_follower.json` (as used), `red_follower_rest.json` |
 | `frames/` | camera frames Oscar confirmed (`scene_final_L1.jpg`) and earlier placements |

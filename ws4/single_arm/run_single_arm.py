@@ -59,7 +59,7 @@ from flux.contract import (  # noqa: E402
 from flux.dual_arm_runner import ArmCalibration, DualArmRunner, per_arm_target  # noqa: E402
 from flux.history import HistoryBuffer  # noqa: E402
 from flux.safety import DEFAULT_MAX_STEP, SafetyConfig, SafetyGuard, limits_from_lerobot_calibration  # noqa: E402
-from keepout import ZONES, KeepOut  # noqa: E402
+from keepout import ZONES, KeepOut, read_arm_joints  # noqa: E402
 
 CHECKPOINT = "black-forest-labs/flux-3-action-so101@0713a7a"  # weights identical to c9e13b2 (flux/checkpoint_facts.md)
 STOP_FILE = HERE / "STOP"
@@ -68,7 +68,12 @@ RUNS = HERE / "runs"
 REST_FILE = HERE / "calibration" / "red_follower_rest.json"  # folded pose Oscar set at the first A0 session
 PHANTOM_STATE = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 50.0])  # the unused slot; constant, never sent
 # Steps of "stack the cups" for the trial log: grasp one cup, lift it clear, release it inside the other.
-STEPS = ("grasp a cup", "lift it clear of the table", "release it inside the other cup")
+# Graded steps per trial task (ws4/eval/trial_log.py steps_total / steps_done); --steps overrides.
+TASK_STEPS = {
+    "stack_cups": ("grasp a cup", "lift it clear of the table", "release it inside the other cup"),
+    "put_pen_in_slot": ("grasp the pen", "lift it clear of the mat", "put it in its slot"),
+}
+STEPS = TASK_STEPS["stack_cups"]
 
 
 # ---------------------------------------------------------------------- robot side
@@ -87,6 +92,7 @@ class SingleArmRobot:
         self.max_relative_target, self.retries = max_relative_target, retries
         self.direct = hasattr(robot, "bus")
         self.last_raw: dict[str, Any] = {}
+        self.transforms: dict[str, Any] = {}  # camera key -> frame transform (Haller recorder parity)
         self.last_q: np.ndarray | None = None
         self.last_sent: np.ndarray | None = None
         self.capped = 0  # ticks where LeRobot's cap changed the goal
@@ -105,7 +111,8 @@ class SingleArmRobot:
             q = self.joints()
             raw: dict[str, Any] = {f"{j}.pos": float(v) for j, v in zip(ARM_JOINTS, q, strict=True)}
             for key, cam in self.robot.cameras.items():
-                raw[key] = cam.read_latest()
+                frame = cam.read_latest()
+                raw[key] = self.transforms[key](frame) if key in self.transforms else frame
         else:
             raw = self.robot.get_observation()
             self.last_q = np.array([float(raw[f"{j}.pos"]) for j in ARM_JOINTS])
@@ -124,6 +131,17 @@ class SingleArmRobot:
             return min(self.robot.bus.sync_read("Present_Voltage", normalize=False, num_retry=1).values()) / 10
         except Exception:  # never let a diagnostic read end an attempt
             return None
+
+    def arm_load(self) -> np.ndarray | None:
+        """|Present_Load| of the five arm joints (0.1 % of max torque), read every tick for the load freeze."""
+        if not self.direct:
+            load = getattr(self.robot, "load", None)
+            return None if load is None else np.abs(np.asarray(load, dtype=float))
+        try:
+            values = self.robot.bus.sync_read("Present_Load", list(ARM_JOINTS[:-1]), normalize=False, num_retry=1)
+        except Exception:
+            return None
+        return np.abs(np.array([float(values[j]) for j in ARM_JOINTS[:-1]]))
 
     def health(self) -> dict[str, list[int]] | None:
         """Per-joint load (0.1 % of max torque, sign = direction), status error bits and temperature (C)."""
@@ -167,6 +185,7 @@ class FakeSO101:
 
     def __init__(self, start: np.ndarray | None = None):
         self.q = np.array([0.0, -95.0, 95.0, 70.0, 0.0, 2.0]) if start is None else np.asarray(start, float)
+        self.load = None  # tests set arm-joint loads (0.1 % of max torque) here
         self.rng = np.random.default_rng(0)
 
     def get_observation(self) -> dict[str, Any]:
@@ -195,67 +214,109 @@ def connect_so101(args: argparse.Namespace) -> Any:
     from lerobot.robots.so_follower.config_so_follower import SOFollowerRobotConfig
     from lerobot.robots.so_follower.so_follower import SOFollower
 
-    def cam(spec: str, rotate: int) -> OpenCVCameraConfig:
+    def cam(spec: str, rotate: int, fourcc: str | None = "MJPG") -> OpenCVCameraConfig:
         rotation = {0: Cv2Rotation.NO_ROTATION, 90: Cv2Rotation.ROTATE_90, 180: Cv2Rotation.ROTATE_180,
                     270: Cv2Rotation.ROTATE_270}[rotate]  # fmt: skip
         index = int(spec) if spec.isdigit() else Path(spec)
         # warmup_s=3: the global shutter scene camera needs more than LeRobot's 1 s default for its first frame.
-        return OpenCVCameraConfig(index_or_path=index, fps=30, width=640, height=480, rotation=rotation, fourcc="MJPG",
+        return OpenCVCameraConfig(index_or_path=index, fps=30, width=640, height=480, rotation=rotation, fourcc=fourcc,
                                   warmup_s=3)  # fmt: skip
+
+    if args.parity_side:  # the parity transform rotates, so the camera itself must not
+        args.scene_rotate = args.wrist_rotate = 0
 
     config = SOFollowerRobotConfig(
         id=args.robot_id,
         port=args.port,
         use_degrees=True,
         max_relative_target=float(args.max_relative_target),
-        cameras={"wrist": cam(args.wrist_cam, args.wrist_rotate)},
+        cameras={"wrist": cam(args.wrist_cam, args.wrist_rotate,
+                              None if args.wrist_fourcc.lower() == "none" else args.wrist_fourcc)},
     )
     if args.scene_cam != "blank":
-        config.cameras["scene"] = cam(args.scene_cam, args.scene_rotate)
+        fourcc = None if args.scene_fourcc.lower() == "none" else args.scene_fourcc
+        config.cameras["scene"] = cam(args.scene_cam, args.scene_rotate, fourcc)
     robot = SOFollower(config)
     if not robot.calibration:
         raise SystemExit(f"no calibration file {robot.calibration_fpath}; run lerobot-calibrate first")
     bus = robot.bus
     bus.connect()
-    bus.disable_torque()
-    if not bus.is_calibrated:
-        print(f"writing {robot.calibration_fpath.name} to the motors")
-        bus.write_calibration(robot.calibration)
     for camera in robot.cameras.values():
         camera.connect()
-    # Same register setup as SOFollower.configure (lerobot 0.5.1 so_follower.py), minus the final torque enable.
-    bus.configure_motors()
-    for motor in bus.motors:
-        bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
-        bus.write("P_Coefficient", motor, 16)
-        bus.write("I_Coefficient", motor, 0)
-        bus.write("D_Coefficient", motor, 32)
-        if motor == "gripper":
-            bus.write("Max_Torque_Limit", motor, 500)
-            bus.write("Protection_Current", motor, 250)
-            bus.write("Overload_Torque", motor, 25)
+    if args.parity_side:
+        print("camera parity controls:", station_parity(args)[1](), flush=True)
+    robot.ws4_launch_torque = any(bus.sync_read("Torque_Enable", normalize=False, num_retry=3).values())
+    if args.observe:
+        return robot  # observe: no register writes and no torque change (a holding arm keeps holding)
+    # LeRobot's connect() switches torque off to write calibration and its register setup, which drops an arm that
+    # holds a pose mid-air (the Haller's task arm did on 2026-10-17). Do that only when something actually differs.
+    wanted = {"Operating_Mode": OperatingMode.POSITION.value, "P_Coefficient": 16, "I_Coefficient": 0,
+              "D_Coefficient": 32, "Return_Delay_Time": 0, "Acceleration": 254}  # fmt: skip
+    gripper_wanted = {"Max_Torque_Limit": 500, "Protection_Current": 250, "Overload_Torque": 25}
+    differs = [f"{m}.{r}" for r, v in wanted.items() for m, x in bus.sync_read(r, normalize=False, num_retry=3).items()
+               if x != v]  # fmt: skip
+    differs += [f"gripper.{r}" for r, v in gripper_wanted.items()
+                if bus.read(r, "gripper", normalize=False, num_retry=3) != v]  # fmt: skip
+    if not bus.is_calibrated or differs:
+        torque_on = any(bus.sync_read("Torque_Enable", normalize=False, num_retry=3).values())
+        if torque_on and not args.allow_torque_off:
+            raise SystemExit(f"registers or calibration differ ({differs[:4]}...) and the arm holds with torque on: "
+                             "put it at rest and rerun with --allow-torque-off")  # fmt: skip
+        bus.disable_torque()
+        if not bus.is_calibrated:
+            print(f"writing {robot.calibration_fpath.name} to the motors")
+            bus.write_calibration(robot.calibration)
+        # Same register setup as SOFollower.configure (lerobot 0.5.1 so_follower.py), minus the torque enable.
+        bus.configure_motors()
+        for motor in bus.motors:
+            bus.write("Operating_Mode", motor, OperatingMode.POSITION.value)
+            bus.write("P_Coefficient", motor, 16)
+            bus.write("I_Coefficient", motor, 0)
+            bus.write("D_Coefficient", motor, 32)
+            if motor == "gripper":
+                for reg, value in gripper_wanted.items():
+                    bus.write(reg, motor, value)
     for motor in bus.motors:
         if motor != "gripper":
-            # RAM register (resets at power-off): caps the force of a collision with the table or a cup. The shoulder
-            # needed 6 to 9 % to lift the arm slowly at 12 V (measured 2026-10-17), so 60 % leaves ample margin.
+            # RAM register (resets at power-off): caps the force of a collision with the table or a cup. The red
+            # arm's shoulder needed 6 to 9 % to lift slowly at 12 V (measured 2026-10-17), so 60 % leaves margin.
             bus.write("Torque_Limit", motor, int(args.torque_limit * 10), num_retry=3)
-    if not args.observe:
-        # On this arm a Goal_Position write already switches torque on (observed 2026-10-17), so the goal is set
-        # to the measured position first: the arm then holds exactly where it rests.
-        present = bus.sync_read("Present_Position", normalize=False, num_retry=3)
-        bus.sync_write("Goal_Position", present, normalize=False, num_retry=3)
-        bus.enable_torque(num_retry=3)
-        torque = bus.sync_read("Torque_Enable", normalize=False, num_retry=3)
-        if not all(torque.values()):
-            bus.disable_torque(num_retry=3)
-            raise SystemExit(f"torque did not come on everywhere: {torque}")
+    # On these arms a Goal_Position write already switches torque on (observed 2026-10-17), so the goal is set to
+    # the measured position first: the arm then holds exactly where it is.
+    present = bus.sync_read("Present_Position", normalize=False, num_retry=3)
+    bus.sync_write("Goal_Position", present, normalize=False, num_retry=3)
+    bus.enable_torque(num_retry=3)
+    torque = bus.sync_read("Torque_Enable", normalize=False, num_retry=3)
+    if not all(torque.values()):
+        raise SystemExit(f"torque did not come on everywhere: {torque}")
     return robot
 
 
-def disconnect_so101(robot: Any) -> None:
+def station_parity(args: argparse.Namespace):
+    """Haller recorder parity (ws4/teleop/camera_parity.py, read-only use): per-key frame transforms (180 deg rotation
+    and colour gains of the wrist camera) and a function writing the recorder's fixed V4L2 controls to OUR device
+    paths (the haller_cam_* udev links do not exist on this laptop)."""
+    from teleop.camera_parity import StationCameras
+
+    cams = StationCameras.load()
+    wrist_key = f"{args.parity_side}_wrist"
+    transforms = {"scene": lambda f: cams.transform("head", f), "wrist": lambda f: cams.transform(wrist_key, f)}
+
+    def controls() -> dict:
+        sys.path.insert(0, str(Path.home() / "haller_ws/hmi/backend"))
+        from haller_hmi import v4l2_controls
+
+        spec = cams.specs[wrist_key]
+        return {args.wrist_cam: v4l2_controls.apply(args.wrist_cam, spec.controls)} if spec.controls else {}
+
+    return transforms, controls
+
+
+def disconnect_so101(robot: Any, torque_off: bool = True) -> None:
     for camera in robot.cameras.values():
         camera.disconnect()
-    robot.bus.disable_torque(num_retry=5)
+    if torque_off:
+        robot.bus.disable_torque(num_retry=5)
     robot.bus.disconnect(disable_torque=False)
 
 
@@ -426,8 +487,10 @@ def warm_up(backend: Any, robot: SingleArmRobot, target: Any, tasks: list[str]) 
 
 
 # ---------------------------------------------------------------------- one attempt
-def move_to(robot: SingleArmRobot, goal: np.ndarray, guard_cfg: SafetyConfig, deg_per_tick: float, keys: Keys) -> bool:
-    """Slow joint-space move to ``goal`` (robot units) through the same limits; False if a stop key interrupts."""
+def move_to(robot: SingleArmRobot, goal: np.ndarray, guard_cfg: SafetyConfig, deg_per_tick: float, keys: Keys,
+            keepout: KeepOut | None = None) -> bool:  # fmt: skip
+    """Slow joint-space move to ``goal`` (robot units) through the same limits and, when given, the FK keep-out on
+    every step; False if a stop key, a keep-out refusal or a missed goal interrupts it."""
     lo, hi = guard_cfg.lower[arm_slice(robot.slot)], guard_cfg.upper[arm_slice(robot.slot)]
     goal = np.clip(goal, lo, hi)
     # Start from the measured pose: after a stall the last command can be far from the arm (seen 2026-10-17).
@@ -438,17 +501,36 @@ def move_to(robot: SingleArmRobot, goal: np.ndarray, guard_cfg: SafetyConfig, de
     while True:
         if keys.poll() in STOP_KEYS:
             return False
-        cmd = cmd + np.clip(goal - cmd, -step, step)
+        nxt = cmd + np.clip(goal - cmd, -step, step)
+        if keepout is not None and robot.last_q is not None:
+            refuse, zone = keepout.refuse(nxt, robot.last_q)
+            if refuse:
+                hold_here(robot)
+                print(f"ramp refused by the keep-out ({zone}) at {np.round(nxt, 1)}; arm holds", flush=True)
+                return False
+        cmd = nxt
         robot.send_joints(cmd, measure=True)
         if np.allclose(cmd, goal):
             deadline = deadline or time.monotonic() + 5.0  # let the servos settle on the final goal
             err = np.abs(robot.joints() - goal)[: ARM_DIM - 1]
-            if err.max() < 4.0:
+            if err.max() < 6.0:  # the 7.4 V Haller's lift settles about 4 deg short against gravity at P=16
                 return True
             if time.monotonic() > deadline:
-                print(f"rest not reached, error per joint {np.round(err, 1)}", flush=True)
+                print(f"goal not reached, error per joint {np.round(err, 1)}", flush=True)
                 return False
         time.sleep(1 / 30)
+
+
+def load_trip(loads: np.ndarray, cap: float, sustain: float = 0.7, peak: float = 0.9, ticks: int = 9) -> int | None:
+    """First tick index at which the load freeze trips for per-tick |loads| (T, joints) in 0.1 % of max torque under
+    a torque cap ``cap`` (same units), or None."""
+    frac = np.abs(np.asarray(loads, dtype=float)) / cap
+    run = np.zeros(frac.shape[1], dtype=int)
+    for t, f in enumerate(frac):
+        run = np.where(f >= sustain, run + 1, 0)
+        if (f >= peak).any() or (run >= ticks).any():
+            return t
+    return None
 
 
 def hold_here(robot: SingleArmRobot) -> None:
@@ -464,6 +546,20 @@ def run_attempt(
 ) -> dict[str, Any]:
     rec = Recorder(out, video=not args.no_video)
     target = robot.slot
+    other_q = None
+    keepout = getattr(runner.guard, "keepout", None)
+    if args.other_arm_port and keepout is not None:
+        # Re-read the parked arm before every attempt, in case someone moved it (read-only, torque untouched).
+        other_q = read_arm_joints(args.other_arm_port, args.other_arm_id)
+        keepout.other_q = tuple(float(v) for v in other_q)
+        print(f"parked other arm at {np.round(other_q, 1)}", flush=True)
+    if args.start_pose is not None and args.robot == "so101" and not args.observe:
+        print(f"ramping to the start pose {args.start_pose} ...", flush=True)
+        ramp_ko = keepout.without_envelope() if keepout is not None else None  # envelope: policy commands only
+        if not move_to(robot, np.array(args.start_pose), getattr(runner, "ramp_config", runner.guard.config),
+                       args.return_speed, keys, ramp_ko):  # fmt: skip
+            raise KeyboardInterrupt
+        time.sleep(0.5)
     start_q = robot.joints()
     runner.guard.release()
     runner._command = None  # noqa: SLF001 - start every attempt from the measured pose
@@ -474,6 +570,8 @@ def run_attempt(
     server_latencies: list[float] = []
     n_chunks0 = runner._targets[target].n_chunks  # noqa: SLF001
     guard_ticks, capped0 = 0, robot.capped
+    load_run = np.zeros(ARM_DIM - 1, dtype=int)
+    load_cap = 10.0 * (args.torque_limit if args.robot == "so101" else 100.0)  # load units at the torque cap
     keep_run, keep0 = 0, dict(getattr(runner.guard, "counts", {}))
     stall = np.zeros(ARM_DIM - 1, dtype=int)
     volts: list[float] = []
@@ -521,6 +619,19 @@ def run_attempt(
             end_reason = f"stop (stall: {ARM_JOINTS[j]} lagged {lag[j]:.0f} deg for {stall[j]} ticks)"
             hold_here(robot)
             break
+        # Load freeze: a command clamped at a limit can sit at low lag while the servo pushes into an end stop,
+        # which the stall check never sees. Thresholds are fractions of the active torque cap (the reading cannot
+        # exceed it): sustained >= --load-sustain for --load-ticks, or >= --load-peak on any tick.
+        load = robot.arm_load()
+        if load is not None:
+            frac = load / load_cap
+            load_run = np.where(frac >= args.load_sustain, load_run + 1, 0)  # same rule as load_trip()
+            if (frac >= args.load_peak).any() or (load_run >= args.load_ticks).any():
+                j = int(np.argmax(frac))
+                runner.guard.estop()
+                end_reason = f"stop (load: {ARM_JOINTS[j]} at {100 * frac[j]:.0f}% of the torque cap)"
+                hold_here(robot)
+                break
         rec.rows.append({"t": time.monotonic() - t0, "state": q, "command": report.command[arm_slice(target)],
                          "guard": report.guard_intervened, "status": report.status.get(target, ""),
                          "keepout": zone})  # fmt: skip
@@ -541,6 +652,8 @@ def run_attempt(
     print(f"attempt ended: {end_reason} after {duration:.1f} s", flush=True)
     meta = {
         "task": task, "end_reason": end_reason, "duration_s": duration, "start_q": start_q.tolist(),
+        "start_pose_target": args.start_pose,
+        "other_arm_q": None if other_q is None else other_q.tolist(),
         "chunks": runner._targets[target].n_chunks - n_chunks0,  # noqa: SLF001
         "chunk_round_trip_s": chunk_latencies, "server_latency_s": server_latencies, "guard_ticks": guard_ticks,
         "lerobot_capped_ticks": robot.capped - capped0, "ticks": len(rec.rows),
@@ -555,31 +668,61 @@ def run_attempt(
 
 
 def finish_attempt(args: argparse.Namespace, robot: SingleArmRobot, keys: Keys, guard_cfg: SafetyConfig,
-                   rest: np.ndarray, meta: dict[str, Any]) -> None:  # fmt: skip
-    """Bring the arm back to the rest pose slowly (or on request after a stop)."""
+                   rest: np.ndarray, meta: dict[str, Any], keepout: KeepOut | None = None) -> None:  # fmt: skip
+    """Bring the arm back slowly to the start pose (or the rest pose), or on request after a stop."""
     if args.observe or args.robot == "fake":
         return
     if meta["end_reason"].startswith("stop"):
         key = keys.wait("rx", "STOPPED, arm holds. r = return slowly to rest, x = keep holding and quit")
         if key != "r":
             raise KeyboardInterrupt
-    print("returning to rest pose (slow) ...", flush=True)
-    if not move_to(robot, rest, guard_cfg, args.return_speed, keys):
+    goal = np.array(args.start_pose) if args.start_pose is not None else rest
+    print(f"returning slowly to {'the start pose' if args.start_pose is not None else 'rest'} ...", flush=True)
+    if not move_to(robot, goal, guard_cfg, args.return_speed, keys, keepout):
         print("return interrupted; arm holds", flush=True)
         raise KeyboardInterrupt
+
+
+def ask_line(keys: Keys, prompt: str, valid: tuple[str, ...]) -> str:
+    """Typed answer + Enter, asked again until valid. Single cbreak keys at this prompt went missing on the Haller
+    runs (the prompt printed, then "saved" with nothing logged, cause never reproduced), so the terminal is back in
+    normal line mode here, keys pressed during the attempt are dropped first, and Ctrl-C cannot skip the question."""
+    import termios
+
+    fd = sys.stdin.fileno()
+    cbreak = termios.tcgetattr(fd)
+    termios.tcflush(fd, termios.TCIFLUSH)
+    if keys._old is not None:
+        termios.tcsetattr(fd, termios.TCSADRAIN, keys._old)
+    try:
+        while True:
+            try:
+                answer = input(f"{prompt}, then Enter: ").strip().lower()
+            except EOFError:
+                answer = ""
+            if answer in valid:
+                return answer
+            print(f"    not understood: {answer!r}. Type one of {', '.join(valid)} and press Enter.", flush=True)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, cbreak)
+        keys.pressed.clear()  # a Ctrl-C typed at the question must not quit the next prompt
 
 
 def ask_result(keys: Keys, meta: dict[str, Any]) -> dict[str, Any] | None:
     if not sys.stdin.isatty():
         return None
-    key = keys.wait("0123n", f"steps done 0..{len(STEPS)} ({'; '.join(STEPS)}). Every real attempt counts, even "
-                    "when you stopped it; n = do not log (false start only)")
-    if key not in "0123":
-        return None
-    steps = int(key)
-    key = keys.wait("0123", "human interventions during the attempt (0..3; your stop key counts as 1)")
-    interventions = int(key) if key in "0123" else 0
-    return {"steps_done": steps, "interventions": interventions}
+    digits = tuple(str(i) for i in range(len(STEPS) + 1))
+    while True:
+        answer = ask_line(keys, f">>> steps done 0..{len(STEPS)} ({'; '.join(STEPS)}), or skip", (*digits, "skip"))
+        if answer != "skip":
+            break
+        if ask_line(keys, ">>> really skip logging this attempt (false start only)? yes/no", ("yes", "no")) == "yes":
+            print(">>> not logged", flush=True)
+            return None
+    steps = int(answer)
+    answer = ask_line(keys, ">>> human interventions (0..9; your stop key counts as 1)", tuple("0123456789"))
+    print(f">>> logging {steps}/{len(STEPS)} steps, {answer} interventions", flush=True)
+    return {"steps_done": steps, "interventions": int(answer)}
 
 
 def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result: dict[str, Any], out: Path) -> None:
@@ -592,7 +735,8 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
         steps_total=len(STEPS), steps_done=result["steps_done"],
         success=result["steps_done"] == len(STEPS) and result["interventions"] == 0,
         interventions=result["interventions"], layout=args.layout, failure=failure,
-        notes=f"prompt={task!r}; guidance {args.guidance_note}; safety: {args.max_step} deg/tick guard, LeRobot cap "
+        notes=f"{args.note + '; ' if args.note else ''}prompt={task!r}; guidance {args.guidance_note}; "
+        f"safety: {args.max_step} deg/tick guard, LeRobot cap "
         f"{args.max_relative_target} deg, torque limit {args.torque_limit:.0f}%; "
         f"min supply {meta.get('min_supply_v')} V; keep-out refusals {meta.get('keepout_refusals')}; "
         f"end={meta['end_reason']}; chunks={meta['chunks']}; "
@@ -606,13 +750,23 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
 
 
 # ---------------------------------------------------------------------- main
-def build_guard(args: argparse.Namespace, slot: str, calib_path: Path | None, rest: np.ndarray) -> SafetyConfig:
+def build_guard(args: argparse.Namespace, slot: str, calib_path: Path | None, rest: np.ndarray,
+                ramp: bool = False) -> SafetyConfig:  # fmt: skip
+    """Joint limits and per-tick steps in robot units.
+
+    Policy (``ramp=False``): soft limits, the calibrated range shrunk by ``--limit-margin`` (5 deg) at each end, so no
+    policy command ever reaches a mechanical end stop. When the policy starts from ``--start-pose`` the limits are
+    NOT widened to the rest pose (E's fold drove the Haller to within 1 to 2 deg of its stops otherwise). Without a
+    start pose the policy starts at rest, so the limits must include it or the first tick would yank the arm.
+    Scripted ramps (``ramp=True``): ``--ramp-margin`` (1 deg) from the stops, widened to include the rest pose.
+    """
     cfg = SafetyConfig()
     if calib_path is not None:
-        lower, upper = limits_from_lerobot_calibration(calib_path, margin_deg=args.limit_margin)
-        # The folded rest pose sits on the lift and elbow end stops, inside the margin; the clamp must not yank
-        # the arm out of it on the first tick, so the limits always include the measured start pose.
-        cfg = cfg.with_arm_limits(slot, np.minimum(lower, rest), np.maximum(upper, rest))
+        margin = args.ramp_margin if ramp else args.limit_margin
+        lower, upper = limits_from_lerobot_calibration(calib_path, margin_deg=margin)
+        if ramp or args.start_pose is None:
+            lower, upper = np.minimum(lower, rest), np.maximum(upper, rest)
+        cfg = cfg.with_arm_limits(slot, lower, upper)
     step = np.tile(DEFAULT_MAX_STEP, 2)
     s = arm_slice(slot)
     step[s] = [args.max_step] * (ARM_DIM - 1) + [args.max_gripper_step]
@@ -628,6 +782,18 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--scene-cam", default="", help="/dev/videoN of the scene camera; 'blank' = black (plumbing only)")
     p.add_argument("--wrist-cam", default="/dev/video4")
     p.add_argument("--scene-rotate", type=int, choices=(0, 90, 180, 270), default=0)
+    p.add_argument("--scene-fourcc", default="MJPG", help="'none' = OpenCV default (what the haller recorder uses)")
+    p.add_argument("--wrist-fourcc", default="MJPG", help="'none' = OpenCV default (what the haller recorder uses)")
+    p.add_argument("--parity-side", choices=("left", "right"), default=None,
+                   help="old haller_ws recorder transforms (rotation, gains, V4L2); the 2026-10-17 VR recording uses "
+                        "none of them, so leave this off for it")  # fmt: skip
+    p.add_argument("--other-arm-port", default=None, help="parked other arm, read before each attempt (Haller)")
+    p.add_argument("--other-arm-id", default="haller_left", help="calibration id of the parked other arm")
+    p.add_argument("--start-pose", type=float, nargs=ARM_DIM, default=None,
+                   help="ramp here before every attempt (Haller demos: 0 0 0 0 0 100)")  # fmt: skip
+    p.add_argument("--allow-torque-off", action="store_true",
+                   help="allow switching torque off to (re)write calibration or registers; arm must be at rest")
+    p.add_argument("--keepout-config", default=None, help="workspace JSON (keepout.py); default red_follower's")
     p.add_argument("--wrist-rotate", type=int, choices=(0, 90, 180, 270), default=0)
     p.add_argument("--slot", choices=("left", "right"), default="left", help="runner slot; no effect on the model")
     p.add_argument("--backend", choices=("fake", "remote"), default="fake")
@@ -647,23 +813,35 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--max-gripper-step", type=float, default=5.0, help="guard: percent per tick on the gripper")
     p.add_argument("--max-relative-target", type=float, default=20.0,
                    help="LeRobot cap vs measured pos, deg; 5 starved the shoulder of torque at P=16")  # fmt: skip
-    p.add_argument("--limit-margin", type=float, default=5.0, help="deg inside the calibrated range")
+    p.add_argument("--limit-margin", type=float, default=5.0, help="policy: deg inside the calibrated range")
+    p.add_argument("--ramp-margin", type=float, default=1.0, help="scripted ramps: deg inside the calibrated range")
     p.add_argument("--return-speed", type=float, default=1.0, help="deg per tick when returning to rest")
     p.add_argument("--torque-limit", type=float, default=60.0, help="percent of max servo torque, arm joints")
     p.add_argument("--stall-deg", type=float, default=8.0, help="arm joint lag behind command = stall, deg")
+    p.add_argument("--load-sustain", type=float, default=0.7, help="load freeze: fraction of the torque cap ...")
+    p.add_argument("--load-ticks", type=int, default=9, help="... held this many ticks (9 = 0.3 s)")
+    p.add_argument("--load-peak", type=float, default=0.9, help="load freeze: fraction of the cap on any tick")
     p.add_argument("--keepout-ticks", type=int, default=45, help="consecutive keep-out refusals that end an attempt")
     p.add_argument("--no-keepout", action="store_true", help="disable the FK keep-out (fake-arm tests only)")
     p.add_argument("--stall-ticks", type=int, default=15, help="consecutive stalled ticks before freezing (15 = 0.5 s)")
-    p.add_argument("--offset", type=float, nargs=ARM_DIM, default=None, help="model = robot + offset (A0m tests)")
+    p.add_argument("--offset", type=float, nargs=ARM_DIM, default=None, help="model = scale * robot + offset")
+    p.add_argument("--scale", type=float, nargs=ARM_DIM, default=None,
+                   help="model = scale * robot + offset; must match the package's training data (D: 1 -1 1 1 -1 1)")
     p.add_argument("--variant", default="A0")
     p.add_argument("--layout", default="")
-    p.add_argument("--trial-task", default="stack_cups")
+    p.add_argument("--note", default="", help="free text prepended to every logged trial's notes")
+    p.add_argument("--trial-task", default="stack_cups", help=f"one of {sorted(TASK_STEPS)} or any with --steps")
+    p.add_argument("--steps", nargs="+", default=None, help="graded steps of the task, in order")
     p.add_argument("--operator", default="oscar")
     p.add_argument("--no-log", action="store_true", help="never write to ws4/eval/trials.jsonl")
     p.add_argument("--no-video", action="store_true")
     p.add_argument("--yes", action="store_true", help="start attempts without waiting for Enter")
-    p.add_argument("--home", action="store_true", help="only move slowly to the saved rest pose, then torque off")
+    p.add_argument("--home", action="store_true", help="red arm: move slowly to its saved rest pose, then torque off")
+    p.add_argument("--park-pose", type=float, nargs=ARM_DIM, default=None,
+                   help="only move slowly to this pose (station keep-out on), then torque off (Haller folded rest)")
     args = p.parse_args(argv)
+    global STEPS
+    STEPS = tuple(args.steps) if args.steps else TASK_STEPS.get(args.trial_task, STEPS)
     tasks = args.task or ["stack the cups"]
     import logging
 
@@ -680,29 +858,38 @@ def main(argv: list[str] | None = None) -> None:
     else:
         so101 = FakeSO101()
     robot = SingleArmRobot(so101, args.slot, send=not args.observe, max_relative_target=args.max_relative_target)
+    if args.parity_side:
+        robot.transforms = station_parity(args)[0]
     rest = robot.joints()
     guard_cfg = build_guard(args, args.slot, calib_path, rest)
+    ramp_cfg = build_guard(args, args.slot, calib_path, rest, ramp=True)
     s = arm_slice(args.slot)
     print(f"guard limits {np.round(guard_cfg.lower[s], 1)} .. {np.round(guard_cfg.upper[s], 1)}, "
           f"max step {guard_cfg.max_step[s]}, LeRobot max_relative_target {args.max_relative_target}",
           flush=True)  # fmt: skip
-    calibration = ArmCalibration(offset=np.array(args.offset)) if args.offset else ArmCalibration()
+    # model = scale * robot + offset per joint (the LoRA base's convention, e.g. variant D: --scale 1 -1 1 1 -1 1)
+    calibration = ArmCalibration(scale=np.array(args.scale) if args.scale else np.ones(ARM_DIM),
+                                 offset=np.array(args.offset) if args.offset else np.zeros(ARM_DIM))  # fmt: skip
     target = per_arm_target(args.slot, "policy", scene=CameraView(IMG_HEAD), calibration=calibration)
     backend = build_backend(args)
     if args.no_keepout and args.robot == "so101" and not args.observe:
         raise SystemExit("the FK keep-out stays on for the real arm")
-    keepout = KeepOut.load()
+    keepout = KeepOut.load(Path(args.keepout_config)) if args.keepout_config else KeepOut.load()
     if args.robot == "so101" and not keepout.calibrated:
         print("NOTE: table height not calibrated (keepout.py --touch); using the UNVERIFIED default", flush=True)
     guard = SafetyGuard(guard_cfg) if args.no_keepout else KeepOutGuard(
         guard_cfg, keepout, args.slot, lambda: robot.last_q)
     runner = DualArmRunner(robot, [target], {"policy": backend}, guard, async_inference=True)
-    if args.home:
-        home = np.array(json.loads(REST_FILE.read_text())["rest"])
+    runner.ramp_config = ramp_cfg  # scripted ramps (start pose, return, park) use the ramp limits
+    if args.home or args.park_pose is not None:
+        home = np.array(args.park_pose if args.park_pose is not None else json.loads(REST_FILE.read_text())["rest"])
         print(f"moving slowly from {np.round(rest, 1)} to the saved rest {np.round(home, 1)}", flush=True)
-        guard_cfg = build_guard(args, args.slot, calib_path, home)
+        guard_cfg = build_guard(args, args.slot, calib_path, home, ramp=True)
+        ko = keepout.without_envelope() if not args.no_keepout else None
+        if ko is not None and args.other_arm_port:
+            ko.other_q = tuple(float(v) for v in read_arm_joints(args.other_arm_port, args.other_arm_id))
         with Keys() as keys:
-            ok = move_to(robot, home, guard_cfg, args.return_speed, keys)
+            ok = move_to(robot, home, guard_cfg, args.return_speed, keys, ko)
         print("at rest" if ok else "NOT at rest", flush=True)
         if ok and args.robot == "so101":
             disconnect_so101(so101)
@@ -730,22 +917,31 @@ def main(argv: list[str] | None = None) -> None:
                     (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))
                     log_trial(args, task, meta, result, out)
                 print(f"saved {out}", flush=True)
-                finish_attempt(args, robot, keys, guard_cfg, rest, meta)
+                ko = getattr(runner.guard, "keepout", None)
+                finish_attempt(args, robot, keys, ramp_cfg, rest, meta, ko.without_envelope() if ko else None)
+            ko = getattr(runner.guard, "keepout", None)
+            if args.start_pose is not None and args.robot == "so101" and not args.observe \
+                    and not getattr(so101, "ws4_launch_torque", True):
+                # The arm was resting with torque off at launch: park it there again before torque goes off.
+                print("parking slowly at the launch pose ...", flush=True)
+                move_to(robot, rest, ramp_cfg, args.return_speed, keys, ko.without_envelope() if ko else None)
     except KeyboardInterrupt:
         print("quit requested", flush=True)
     finally:
         runner.close()
         if args.robot == "so101":
-            at_rest = args.observe or np.allclose(robot.joints()[:5], rest[:5], atol=8.0)
-            if at_rest:
+            at_rest = np.allclose(robot.joints()[:5], rest[:5], atol=8.0)
+            if args.observe:
+                disconnect_so101(so101, torque_off=False)  # observe never changes torque
+            elif at_rest and not getattr(so101, "ws4_launch_torque", False):
                 disconnect_so101(so101)
             else:
                 # Dropping an extended arm onto the cups is worse than holding it: leave torque on.
                 for camera in so101.cameras.values():
                     camera.disconnect()
                 so101.bus.disconnect(disable_torque=False)
-                print("WARNING: arm is NOT at rest and still holds with torque on. Support it, then switch the "
-                      "power off, or rerun and return it to rest.", flush=True)  # fmt: skip
+                print("arm still holds with torque on (it was holding at launch, or is not at its launch pose). "
+                      "Support it before switching the power off.", flush=True)  # fmt: skip
     print(f"session folder {session}")
 
 

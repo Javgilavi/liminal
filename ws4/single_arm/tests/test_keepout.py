@@ -13,7 +13,7 @@ FIX = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
-from keepout import KeepOut  # noqa: E402
+from keepout import ZONES, KeepOut  # noqa: E402
 
 REST = np.array([-13.8, -102.0, 96.7, 38.0, -99.2, 0.4])  # measured folded rest pose of red_follower
 
@@ -78,3 +78,55 @@ def test_guard_holds_the_measured_pose_when_refusing():
     bad[1], bad[2] = -40.0, 90.0
     out, report = guard.filter(bad, measured)
     assert np.allclose(out[:5], REST[:5]) and report.intervened and guard.counts[guard.last_zone] == 1
+
+
+@pytest.mark.parametrize("fixture", ["haller_pen_out_task_arm", "haller_pen_in_task_arm"])
+def test_haller_pen_task_demos_pass_the_station_keepout(fixture):
+    # Robot-left task arm. VR takes of "take the red pen out of its slot" (junk 9 and 10 dropped) and graded-task takes
+    # 0-3, 17, 20 (pen grasped right in front of the base) and 24-25 (layout B). The slot is near the robot's centre
+    # line and the pen is grasped from the mat: a midline at y >= 0.03, a 2 cm TCP table margin, the red arm's 12 cm
+    # base cylinder or its fold-back zone would each refuse the task itself (all four did).
+    d = np.load(FIX / f"{fixture}.npz")
+    ko = KeepOut.load(HERE / "calibration" / "haller_right_workspace.json")
+    s, a, ep = d["state"].astype(float), d["action"].astype(float), d["episode_index"]
+    other = d["other_state"].astype(float)
+    assert np.ptp(other, axis=0).max() < 0.5  # the robot-right arm stayed parked through these takes
+    ko.other_q = tuple(other[0])
+    if fixture == "haller_pen_out_task_arm":  # the demonstrated envelope is task-specific (built from pen-in takes)
+        ko.env_joint_lo = ko.env_joint_hi = ko.env_cells = None
+    same = ep[1:] == ep[:-1]
+    for traj in (s, a):
+        assert not any(ko.refuse(traj[i + 1], s[i])[0] for i in np.flatnonzero(same))
+    assert ko.depths(np.array([0, 0, 0, 0, 0, 100.0])).sum() == 0  # haller home, where every attempt starts
+
+
+def test_other_arm_zone_refuses_a_reach_into_the_parked_arm():
+    ko = KeepOut.load(HERE / "calibration" / "haller_right_workspace.json")
+    ko.other_q = (3.0, -102.6, 96.7, 78.3, 12.9, 1.4)  # robot-right arm parked folded, as in the pen takes
+    home = np.array([0, 0, 0, 0, 0, 100.0])
+    reach = np.array([60.0, 0, 0, 80.0, 0, 50.0])  # pan toward the right arm, wrist down: only this zone sees it
+    depths = ko.depths(reach)
+    assert depths[ZONES.index("other_arm")] > 0 and depths[: ZONES.index("other_arm")].sum() == 0
+    assert ko.refuse(reach, home) == (True, "other_arm")
+    assert not ko.refuse(home, reach)[0]  # moving away is always allowed
+
+
+def test_demonstrated_envelope_admits_a_left_out_take_and_refuses_far_poses(tmp_path):
+    d = np.load(FIX / "haller_pen_in_task_arm.npz")
+    s, a, ep = d["state"].astype(float), d["action"].astype(float), d["episode_index"]
+    ko = KeepOut.load(HERE / "calibration" / "haller_right_workspace.json")
+    ko.other_q = tuple(d["other_state"][0].astype(float))
+    ko.build_envelope(a[ep != 25], source="fixture minus take 25")
+    path = tmp_path / "ws.json"
+    ko.save(path)
+    ko = KeepOut.load(path)  # round trip, voxel list included
+    ko.other_q = tuple(d["other_state"][0].astype(float))
+    held = np.flatnonzero(ep == 25)
+    for traj in (s, a):
+        assert not any(ko.refuse(traj[i + 1], s[i])[0] for i in held[:-1])
+    home = np.array([0, 0, 0, 0, 0, 100.0])
+    assert ko.depths(home).sum() == 0
+    flail = np.array([-60.0, 0, 0, 0, 0, 50])  # far outside what was demonstrated
+    depths = ko.depths(flail)
+    assert depths[ZONES.index("joint_env")] > 10 and depths[ZONES.index("tcp_env")] > 0.1
+    assert ko.refuse(flail, home)[0] and not ko.refuse(home, flail)[0]
