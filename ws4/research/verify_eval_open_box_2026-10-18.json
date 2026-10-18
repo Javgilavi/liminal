@@ -1,0 +1,1246 @@
+{
+ "note": "orchestrator/verify_eval.py --dataset haller_open_the_box --skill open_box --mid 0.35 --end-false 3,7,16,19,21 on a snapshot of the first 25 takes (2026-10-18 ~01:30). Frames: start (closed), 35% (arm at the lid, closed, checked by eye), end (kept takes open; rejects 3, 7, 16, 19, 21 closed). threshold 0.7. dev = even takes, test = odd.",
+ "runs": {
+  "eval_openbox_1": {
+   "samples": 15,
+   "total_usd": 0.0067,
+   "variants": {
+    "generic": {
+     "checks": {
+      "open_box": {
+       "n": 15,
+       "tp": 3,
+       "fp": 0,
+       "tn": 11,
+       "fn": 1,
+       "accuracy": 0.9333,
+       "latency_s": {
+        "median": 2.3,
+        "p90": 2.76,
+        "max": 2.97
+       },
+       "usd_per_check": 0.000119
+      }
+     },
+     "sweep": {
+      "open_box": {
+       "all": {
+        "0.5": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 15,
+         "tp": 3,
+         "fp": 0,
+         "tn": 11,
+         "fn": 1,
+         "accuracy": 0.9333
+        },
+        "0.7": {
+         "n": 15,
+         "tp": 3,
+         "fp": 0,
+         "tn": 11,
+         "fn": 1,
+         "accuracy": 0.9333
+        },
+        "0.8": {
+         "n": 15,
+         "tp": 3,
+         "fp": 0,
+         "tn": 11,
+         "fn": 1,
+         "accuracy": 0.9333
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 9,
+         "tp": 2,
+         "fp": 0,
+         "tn": 6,
+         "fn": 1,
+         "accuracy": 0.8889
+        },
+        "0.7": {
+         "n": 9,
+         "tp": 2,
+         "fp": 0,
+         "tn": 6,
+         "fn": 1,
+         "accuracy": 0.8889
+        },
+        "0.8": {
+         "n": 9,
+         "tp": 2,
+         "fp": 0,
+         "tn": 6,
+         "fn": 1,
+         "accuracy": 0.8889
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       }
+      }
+     },
+     "wrong": {
+      "open_box": [
+       {
+        "id": "open_box_004_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.5,
+        "observation": "The white box sits open on the table with its lid appearing folded back or removed, showing the interior with small white parts inside, though the lid itself is not clearly visible."
+       }
+      ]
+     }
+    },
+    "live": {
+     "checks": {
+      "open_box": {
+       "n": 15,
+       "tp": 4,
+       "fp": 0,
+       "tn": 11,
+       "fn": 0,
+       "accuracy": 1.0,
+       "latency_s": {
+        "median": 1.29,
+        "p90": 1.41,
+        "max": 1.63
+       },
+       "usd_per_check": 0.000143
+      }
+     },
+     "sweep": {
+      "open_box": {
+       "all": {
+        "0.5": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       }
+      }
+     },
+     "wrong": {
+      "open_box": []
+     }
+    },
+    "live_wrist": {
+     "checks": {
+      "open_box": {
+       "n": 15,
+       "tp": 4,
+       "fp": 0,
+       "tn": 11,
+       "fn": 0,
+       "accuracy": 1.0,
+       "latency_s": {
+        "median": 1.55,
+        "p90": 1.75,
+        "max": 1.77
+       },
+       "usd_per_check": 0.000185
+      }
+     },
+     "sweep": {
+      "open_box": {
+       "all": {
+        "0.5": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 15,
+         "tp": 4,
+         "fp": 0,
+         "tn": 11,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 9,
+         "tp": 3,
+         "fp": 0,
+         "tn": 6,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 6,
+         "tp": 1,
+         "fp": 0,
+         "tn": 5,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       }
+      }
+     },
+     "wrong": {
+      "open_box": []
+     }
+    }
+   }
+  },
+  "eval_openbox_25": {
+   "samples": 75,
+   "total_usd": 0.0342,
+   "variants": {
+    "generic": {
+     "checks": {
+      "open_box": {
+       "n": 75,
+       "tp": 3,
+       "fp": 0,
+       "tn": 55,
+       "fn": 17,
+       "accuracy": 0.7733,
+       "latency_s": {
+        "median": 1.28,
+        "p90": 2.33,
+        "max": 2.82
+       },
+       "usd_per_check": 0.000122
+      }
+     },
+     "sweep": {
+      "open_box": {
+       "all": {
+        "0.5": {
+         "n": 75,
+         "tp": 4,
+         "fp": 0,
+         "tn": 55,
+         "fn": 16,
+         "accuracy": 0.7867
+        },
+        "0.6": {
+         "n": 75,
+         "tp": 4,
+         "fp": 0,
+         "tn": 55,
+         "fn": 16,
+         "accuracy": 0.7867
+        },
+        "0.7": {
+         "n": 75,
+         "tp": 3,
+         "fp": 0,
+         "tn": 55,
+         "fn": 17,
+         "accuracy": 0.7733
+        },
+        "0.8": {
+         "n": 75,
+         "tp": 3,
+         "fp": 0,
+         "tn": 55,
+         "fn": 17,
+         "accuracy": 0.7733
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 39,
+         "tp": 3,
+         "fp": 0,
+         "tn": 27,
+         "fn": 9,
+         "accuracy": 0.7692
+        },
+        "0.6": {
+         "n": 39,
+         "tp": 3,
+         "fp": 0,
+         "tn": 27,
+         "fn": 9,
+         "accuracy": 0.7692
+        },
+        "0.7": {
+         "n": 39,
+         "tp": 2,
+         "fp": 0,
+         "tn": 27,
+         "fn": 10,
+         "accuracy": 0.7436
+        },
+        "0.8": {
+         "n": 39,
+         "tp": 2,
+         "fp": 0,
+         "tn": 27,
+         "fn": 10,
+         "accuracy": 0.7436
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 36,
+         "tp": 1,
+         "fp": 0,
+         "tn": 28,
+         "fn": 7,
+         "accuracy": 0.8056
+        },
+        "0.6": {
+         "n": 36,
+         "tp": 1,
+         "fp": 0,
+         "tn": 28,
+         "fn": 7,
+         "accuracy": 0.8056
+        },
+        "0.7": {
+         "n": 36,
+         "tp": 1,
+         "fp": 0,
+         "tn": 28,
+         "fn": 7,
+         "accuracy": 0.8056
+        },
+        "0.8": {
+         "n": 36,
+         "tp": 1,
+         "fp": 0,
+         "tn": 28,
+         "fn": 7,
+         "accuracy": 0.8056
+        }
+       }
+      }
+     },
+     "wrong": {
+      "open_box": [
+       {
+        "id": "open_box_004_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The white cardboard box sits open on the table with its lid folded back and no lid covering its interior, which shows small white pieces inside."
+       },
+       {
+        "id": "open_box_005_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box appears open with its interior visible, but no lid is clearly seen, so whether a lid exists and is open is ambiguous from this view."
+       },
+       {
+        "id": "open_box_006_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box appears to be open with its lid either absent or not visible as a separate open flap, and the view is ambiguous about whether a lid exists or is raised."
+       },
+       {
+        "id": "open_box_008_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the table has no visible lid, and its open top shows three small white items inside, so it is unclear whether a separate lid exists or is open."
+       },
+       {
+        "id": "open_box_009_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box in the center is open with no lid visible, and it contains two small white pieces inside a tray-like insert, though the lid's location is unclear and may be out of frame."
+       },
+       {
+        "id": "open_box_010_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the right has no lid visible in the frame, and its open top shows three small white pieces inside, so it is unclear whether a separate lid exists or is open or off to the side."
+       },
+       {
+        "id": "open_box_011_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.5,
+        "observation": "The white box on the right is open-topped with three small white pieces inside and no lid visible, so there is no evidence of a lid being opened, though a lid may be out of view."
+       },
+       {
+        "id": "open_box_012_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.35,
+        "observation": "The white box is visible with its interior exposed and no separate lid apparent, so it is unclear whether a lid exists or is open; the box appears uncovered in this view."
+       },
+       {
+        "id": "open_box_013_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the table has no visible lid, and it appears to be an open tray with its interior exposed, so it is unclear whether any separate lid exists or is open."
+       },
+       {
+        "id": "open_box_014_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the right has no visible lid, and its open top shows three small white items inside, so it is unclear whether a separate lid exists or is open."
+       },
+       {
+        "id": "open_box_015_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the right is open-topped with no lid visible, though a lid may be out of view or lying elsewhere, so the condition cannot be clearly confirmed."
+       },
+       {
+        "id": "open_box_017_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box sits open with no visible lid, and no lid is shown resting open beside or behind it, so the condition that the lid is open is not clearly confirmed."
+       },
+       {
+        "id": "open_box_018_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the right appears open with its interior visible and no lid apparent, though the box's top flaps are not clearly seen, so the lid state is ambiguous."
+       },
+       {
+        "id": "open_box_020_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box is visible with its interior showing three small white blocks, but no lid is visible in the frame, so I cannot tell whether a lid is open or absent."
+       },
+       {
+        "id": "open_box_022_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the right appears to be an open tray with no lid visible, and there is no clearly identifiable lid resting open beside it, so the condition is ambiguous at best."
+       },
+       {
+        "id": "open_box_023_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box is visible with no lid apparent, but it is unclear whether a lid exists or is simply placed elsewhere, and the box's rim is partly hidden by the robot arm."
+       },
+       {
+        "id": "open_box_024_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the right is open-topped with no lid visible, and no lid appears to be placed beside it, so the condition about a lid being open is ambiguous and not clearly satisfied."
+       }
+      ]
+     }
+    },
+    "live": {
+     "checks": {
+      "open_box": {
+       "n": 75,
+       "tp": 18,
+       "fp": 0,
+       "tn": 55,
+       "fn": 2,
+       "accuracy": 0.9733,
+       "latency_s": {
+        "median": 1.29,
+        "p90": 1.61,
+        "max": 2.93
+       },
+       "usd_per_check": 0.000145
+      }
+     },
+     "sweep": {
+      "open_box": {
+       "all": {
+        "0.5": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        },
+        "0.6": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        },
+        "0.7": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        },
+        "0.8": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        },
+        "0.6": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        },
+        "0.7": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        },
+        "0.8": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        },
+        "0.6": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        },
+        "0.7": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        },
+        "0.8": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        }
+       }
+      }
+     },
+     "wrong": {
+      "open_box": [
+       {
+        "id": "open_box_006_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.1,
+        "observation": "The box on the right shows its white inside with two small white holders visible, but the lid is not clearly visible standing up or leaning back in this frame, so it is unclear whether the lid is fully open, partly open, or positioned out of view."
+       },
+       {
+        "id": "open_box_011_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.3,
+        "observation": "The box's white interior with two small white holders is visible from above, and the flat lid appears swung up and standing behind the box, so the lid looks open."
+       }
+      ]
+     }
+    },
+    "live_wrist": {
+     "checks": {
+      "open_box": {
+       "n": 75,
+       "tp": 18,
+       "fp": 0,
+       "tn": 55,
+       "fn": 2,
+       "accuracy": 0.9733,
+       "latency_s": {
+        "median": 1.31,
+        "p90": 1.72,
+        "max": 2.73
+       },
+       "usd_per_check": 0.000189
+      }
+     },
+     "sweep": {
+      "open_box": {
+       "all": {
+        "0.5": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        },
+        "0.6": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        },
+        "0.7": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        },
+        "0.8": {
+         "n": 75,
+         "tp": 18,
+         "fp": 0,
+         "tn": 55,
+         "fn": 2,
+         "accuracy": 0.9733
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        },
+        "0.6": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        },
+        "0.7": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        },
+        "0.8": {
+         "n": 39,
+         "tp": 11,
+         "fp": 0,
+         "tn": 27,
+         "fn": 1,
+         "accuracy": 0.9744
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        },
+        "0.6": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        },
+        "0.7": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        },
+        "0.8": {
+         "n": 36,
+         "tp": 7,
+         "fp": 0,
+         "tn": 28,
+         "fn": 1,
+         "accuracy": 0.9722
+        }
+       }
+      }
+     },
+     "wrong": {
+      "open_box": [
+       {
+        "id": "open_box_009_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.1,
+        "observation": "The head camera shows the white box with its interior and two small white holders visible, but the lid is not clearly standing up behind or beside the box; a green gripper with a white/red lid edge is at the right, so the lid state is ambiguous, and the lid appears to be lifted only partly or held by the arm, so the box is not confirmed as fully open."
+       },
+       {
+        "id": "open_box_024_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.2,
+        "observation": "The head camera shows the white box with its inside and two small white holders visible, but the lid is not clearly visible as standing up or leaning back, so the lid's state is ambiguous; the right gripper camera shows only the box's edge and a wall, not the lid position."
+       }
+      ]
+     }
+    }
+   }
+  },
+  "eval_openbox_25_v2": {
+   "samples": 75,
+   "total_usd": 0.0112,
+   "variants": {
+    "live": {
+     "checks": {
+      "open_box": {
+       "n": 75,
+       "tp": 20,
+       "fp": 0,
+       "tn": 55,
+       "fn": 0,
+       "accuracy": 1.0,
+       "latency_s": {
+        "median": 1.31,
+        "p90": 2.39,
+        "max": 3.13
+       },
+       "usd_per_check": 0.000149
+      }
+     },
+     "sweep": {
+      "open_box": {
+       "all": {
+        "0.5": {
+         "n": 75,
+         "tp": 20,
+         "fp": 0,
+         "tn": 55,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 75,
+         "tp": 20,
+         "fp": 0,
+         "tn": 55,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 75,
+         "tp": 20,
+         "fp": 0,
+         "tn": 55,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 75,
+         "tp": 20,
+         "fp": 0,
+         "tn": 55,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       },
+       "dev": {
+        "0.5": {
+         "n": 39,
+         "tp": 12,
+         "fp": 0,
+         "tn": 27,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 39,
+         "tp": 12,
+         "fp": 0,
+         "tn": 27,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 39,
+         "tp": 12,
+         "fp": 0,
+         "tn": 27,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 39,
+         "tp": 12,
+         "fp": 0,
+         "tn": 27,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       },
+       "test": {
+        "0.5": {
+         "n": 36,
+         "tp": 8,
+         "fp": 0,
+         "tn": 28,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.6": {
+         "n": 36,
+         "tp": 8,
+         "fp": 0,
+         "tn": 28,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.7": {
+         "n": 36,
+         "tp": 8,
+         "fp": 0,
+         "tn": 28,
+         "fn": 0,
+         "accuracy": 1.0
+        },
+        "0.8": {
+         "n": 36,
+         "tp": 8,
+         "fp": 0,
+         "tn": 28,
+         "fn": 0,
+         "accuracy": 1.0
+        }
+       }
+      }
+     },
+     "wrong": {
+      "open_box": []
+     }
+    }
+   }
+  },
+  "eval_openbox_25_48_heldout": {
+   "note": "takes 25 to 48 (fragments 28, 46, 47 left out; 41 ends closed), never seen while writing the prompt; labels checked by eye on the eval's own contact sheet",
+   "samples": 63,
+   "total_usd": 0.0171,
+   "variants": {
+    "live": {
+     "checks": {
+      "open_box": {
+       "n": 63,
+       "tp": 20,
+       "fp": 0,
+       "tn": 43,
+       "fn": 0,
+       "accuracy": 1.0,
+       "latency_s": {
+        "median": 1.36,
+        "p90": 2.13,
+        "max": 3.51
+       },
+       "usd_per_check": 0.000149
+      }
+     },
+     "wrong": {
+      "open_box": []
+     }
+    },
+    "generic": {
+     "checks": {
+      "open_box": {
+       "n": 63,
+       "tp": 2,
+       "fp": 0,
+       "tn": 43,
+       "fn": 18,
+       "accuracy": 0.7143,
+       "latency_s": {
+        "median": 1.19,
+        "p90": 1.58,
+        "max": 4.28
+       },
+       "usd_per_check": 0.000122
+      }
+     },
+     "wrong": {
+      "open_box": [
+       {
+        "id": "open_box_025_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box sits open with its interior visible and no lid apparent, but the lid's position is ambiguous since it may be out of frame or lying flat behind the box."
+       },
+       {
+        "id": "open_box_026_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The white box on the table has no lid visible on it, and its interior with small white pieces is exposed, with the box's flaps appearing folded back or absent, which suggests the lid is open or removed."
+       },
+       {
+        "id": "open_box_027_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.5,
+        "observation": "The white box sits open with no lid visible on it, but the lid is not clearly seen anywhere in the frame, so whether it is open or removed is ambiguous."
+       },
+       {
+        "id": "open_box_030_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the table has no visible lid at all, so I cannot confirm whether a lid is open; the box appears to be an open-top tray with no lid attached."
+       },
+       {
+        "id": "open_box_031_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the table is open with no lid visible attached, and it is unclear whether a separate lid exists or is positioned elsewhere, so the condition is ambiguous from this view."
+       },
+       {
+        "id": "open_box_032_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the right appears open-topped with no lid visible, though a lid could be out of frame or lying elsewhere, so the condition is ambiguous."
+       },
+       {
+        "id": "open_box_033_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The white box on the table has no lid visible on it and appears open, with its interior and two small white items showing, though the lid itself is not clearly seen."
+       },
+       {
+        "id": "open_box_034_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.5,
+        "observation": "The white box on the right appears to be open with no lid visible on it, though the lid may be lying out of view or behind the box."
+       },
+       {
+        "id": "open_box_035_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "A white box with an open top sits on the table holding two small white pieces, but no lid is visible either open or closed, so the lid condition cannot be confirmed."
+       },
+       {
+        "id": "open_box_036_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the table has no lid visible beside or on it, and its open top shows small white inserts, so it is unclear whether a lid exists or is open, making the condition ambiguous."
+       },
+       {
+        "id": "open_box_037_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.35,
+        "observation": "The white box sits open with its interior visible and no lid apparent, though the lid may be off-camera or hidden, so the condition is ambiguous."
+       },
+       {
+        "id": "open_box_038_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box on the table has no visible lid; it appears open with its interior foam insert showing, but no separate lid is clearly visible to confirm its state."
+       },
+       {
+        "id": "open_box_039_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.5,
+        "observation": "The white box is visible with its interior showing and no lid appears to be present or open beside it, but the box edges are partly cut off so the lid status is ambiguous."
+       },
+       {
+        "id": "open_box_040_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.3,
+        "observation": "The white box in the center has no visible lid placed on or beside it, and its open-top tray shape with small white blocks suggests it is an open container, though the lid's status is not clearly shown."
+       },
+       {
+        "id": "open_box_043_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The white box sits open on the table with its lid not covering it, showing the empty interior with small white pieces visible inside."
+       },
+       {
+        "id": "open_box_044_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.4,
+        "observation": "The white box is visible with its interior exposed and no lid visible, but the lid's state is ambiguous since it may be out of frame or lying elsewhere."
+       },
+       {
+        "id": "open_box_045_end",
+        "truth": true,
+        "done": false,
+        "confidence": 0.5,
+        "observation": "The white box is visible with its interior exposed and no lid visible on top of it, but the box's back and lid area are partly hidden by the robot arm, so whether a lid is open cannot be clearly confirmed."
+       },
+       {
+        "id": "open_box_048_end",
+        "truth": true,
+        "done": true,
+        "confidence": 0.6,
+        "observation": "The white box sits open on the table with its lid folded back or removed, exposing the interior with three small white blocks visible inside."
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}

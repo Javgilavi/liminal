@@ -8,11 +8,12 @@ from typing import Any
 
 from . import PACKAGE_DIR
 
-DEFAULT_VOCABULARY = PACKAGE_DIR / "skills.yaml"  # the real demo task (Haller, pen in its slot)
+DEFAULT_VOCABULARY = PACKAGE_DIR / "skills.yaml"  # the final demo: 4-skill chain on the Haller, both arms
+PEN_VOCABULARY = PACKAGE_DIR / "skills_haller_pen.yaml"  # the red pen alone, robot-left arm only (2026-10-17)
 SIM_VOCABULARY = PACKAGE_DIR / "skills_sim_pack_box.yaml"  # the sim pack-box stand-in
 ARMS = ("left", "right")
 KINDS = ("flux", "primitive", "operator")  # operator: the arm waits while a person does it, then confirms
-PRIMITIVES = ("hold", "home", "open_gripper", "close_gripper")
+PRIMITIVES = ("hold", "home", "tuck", "open_gripper", "close_gripper")
 VERIFIER_MODELS = ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5")
 
 
@@ -31,9 +32,17 @@ class Skill:
     max_attempts: int = 2
     package: str | None = None
     hold_after: bool = False
-    start_pose: str | None = None  # "home": the executor ramps to station.home_pose before the FLUX policy starts
+    start_pose: str | None = None  # a station pose name ("home"): the executor ramps the arm there before the policy
+    other_arm_pose: str = ""  # a station pose name ("tucked"): the other arm is ramped there first and stays
+    precheck: str = ""  # a skill whose success check must still hold before this one starts (else: e-stop, hold)
     instruction: str = ""  # operator skills: what the operator does before pressing Done
     verify_hint: str = ""  # appended to the success check for the vision model: what counts as done and not done
+    verify_scene: str = ""  # this skill's own verifier system prompt (else station.verify_scene)
+    # The check names the state it sees, one of these (the first one = done), instead of answering done yes / no:
+    # Haiku described a pen in its slot correctly and still answered done=false (green pen, 2026-10-18).
+    verify_states: tuple[str, ...] = ()
+    park_after: bool = False  # after a verified success: open the gripper, ramp to home, check again, then done
+    keepout: str = ""  # keep-out config with this skill's demonstrated envelope (else the arm's station zones only)
     keywords: tuple[str, ...] = ()
     sim: dict | None = None
     sim_check: dict | None = None
@@ -66,6 +75,19 @@ class Station:
     verify_scene: str = ""
     verify_crop: tuple[float, float, float, float] | None = None
     verify_max_side: int = 640
+    home_poses: dict[str, tuple[float, ...]] = field(default_factory=dict)  # per-arm override of home_pose
+    poses: dict[str, dict[str, tuple[float, ...]]] = field(default_factory=dict)  # arm -> pose name -> joints
+    demo_goal: str = ""  # what the HMI and the CLI propose when the operator has typed nothing
+
+    def home_for(self, arm: str) -> tuple[float, ...] | None:
+        return self.poses.get(arm, {}).get("home") or self.home_poses.get(arm, self.home_pose)
+
+    def poses_for(self, arm: str) -> dict[str, tuple[float, ...]]:
+        """Named poses of one arm ("home" always, when known)."""
+        out = dict(self.poses.get(arm, {}))
+        if "home" not in out and self.home_for(arm) is not None:
+            out["home"] = self.home_for(arm)
+        return out
 
 
 @dataclass
@@ -103,10 +125,15 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
     st = data.get("station") or {}
     available = tuple(st.get("arms_available") or ARMS)
     home = st.get("home_pose")
+    per_arm = home if isinstance(home, dict) else {}  # home_pose: {left: [...], right: [...]} or one list for all
+    home = None if isinstance(home, dict) else home
     if any(a not in ARMS for a in available):
         errors.append(f"station.arms_available must be a subset of {ARMS}")
-    if home is not None and len(home) != 6:
-        errors.append("station.home_pose needs 6 values (5 joints in LeRobot degrees + gripper 0..100)")
+    for where, pose in [("", home)] + [(f".{a}", p) for a, p in per_arm.items()]:
+        if pose is not None and len(pose) != 6:
+            errors.append(f"station.home_pose{where} needs 6 values (5 joints in LeRobot degrees + gripper 0..100)")
+    if any(a not in ARMS for a in per_arm):
+        errors.append(f"station.home_pose keys must be among {ARMS}")
     crop = st.get("verify_crop")
     if crop is not None and not (len(crop) == 4 and 0 <= crop[0] < crop[2] <= 1 and 0 <= crop[1] < crop[3] <= 1):
         errors.append("station.verify_crop must be [x0, y0, x1, y1] fractions with x0 < x1 and y0 < y1")
@@ -114,6 +141,17 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
                       None if home is None else tuple(float(v) for v in home), str(st.get("notes") or "").strip(),
                       str(st.get("verify_scene") or "").strip(),
                       None if crop is None else tuple(float(v) for v in crop), int(st.get("verify_max_side", 640)))
+    station.home_poses = {a: tuple(float(v) for v in p) for a, p in per_arm.items() if len(p) == 6}
+    for arm, named in (st.get("poses") or {}).items():
+        if arm not in ARMS:
+            errors.append(f"station.poses: unknown arm {arm!r}")
+            continue
+        for pose, q in (named or {}).items():
+            if len(q) != 6:
+                errors.append(f"station.poses.{arm}.{pose} needs 6 values (5 joints + gripper)")
+            else:
+                station.poses.setdefault(arm, {})[str(pose)] = tuple(float(v) for v in q)
+    station.demo_goal = str(st.get("demo_goal") or "").strip()
     for name, spec in (data.get("skills") or {}).items():
         spec = {**defaults, **(spec or {})}
         kind = spec.get("kind")
@@ -129,8 +167,14 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             errors.append(f"{name}: unknown primitive (have {PRIMITIVES})")
         if kind == "operator" and not str(spec.get("instruction") or "").strip():
             errors.append(f"{name}: an operator skill needs an instruction for the operator")
-        if spec.get("start_pose") not in (None, "home"):
-            errors.append(f"{name}: start_pose must be home or absent")
+        for key in ("start_pose", "other_arm_pose"):
+            pose = spec.get(key)
+            if not pose:
+                continue
+            on = arms if key == "start_pose" else tuple(a for a in available if a not in arms)
+            missing = [a for a in on if pose not in station.poses_for(a)]
+            if missing:
+                errors.append(f"{name}: {key} {pose!r} is not a station pose of the {', '.join(missing)} arm")
         if spec.get("verifier_model") not in VERIFIER_MODELS:
             errors.append(f"{name}: verifier_model must be one of {VERIFIER_MODELS}")
         skills[name] = Skill(
@@ -148,12 +192,21 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             package=spec.get("package"),
             hold_after=bool(spec.get("hold_after", False)),
             start_pose=spec.get("start_pose"),
+            other_arm_pose=str(spec.get("other_arm_pose") or ""),
+            precheck=str(spec.get("precheck") or ""),
             instruction=str(spec.get("instruction") or ""),
             verify_hint=str(spec.get("verify_hint") or "").strip(),
+            verify_scene=str(spec.get("verify_scene") or "").strip(),
+            verify_states=tuple(str(x) for x in spec.get("verify_states") or ()),
+            park_after=bool(spec.get("park_after", False)),
+            keepout=str(spec.get("keepout") or ""),
             keywords=tuple(str(k).lower() for k in spec.get("keywords") or ()),
             sim=spec.get("sim"),
             sim_check=spec.get("sim_check"),
         )
+    for s in skills.values():
+        if s.precheck and (s.precheck not in skills or not skills[s.precheck].success_check):
+            errors.append(f"{s.name}: precheck {s.precheck!r} must name a skill with a success_check")
     prompts = [s.prompt for s in skills.values() if s.is_flux]
     if len(prompts) != len(set(prompts)):
         errors.append("two flux skills share one prompt")

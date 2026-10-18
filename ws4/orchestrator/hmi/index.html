@@ -102,6 +102,17 @@
                background: linear-gradient(90deg, var(--left-soft), var(--right-soft)); }
   .rationale:empty { display: none; }
   .lanes { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 10px 0; }
+  .chainstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; }
+  .chainstrip:empty { display: none; }
+  .chainstrip .lk { padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; border: 1.5px solid var(--line2);
+    background: var(--panel); color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .chainstrip .lk b { font-family: var(--mono); font-size: 11px; opacity: .7; }
+  .chainstrip .lk.arm-left { border-color: var(--left); } .chainstrip .lk.arm-right { border-color: var(--right); }
+  .chainstrip .lk.running { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); }
+  .chainstrip .lk.done { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+  .chainstrip .lk.failed { background: var(--red-soft); color: var(--red); border-color: var(--red); }
+  .chainstrip .ar { color: var(--faint); font-weight: 800; }
+  #imaginesec .cams { grid-template-columns: 1fr; } #imaginesec .cams img { aspect-ratio: 2 / 1; object-fit: contain; }
   .lanehead { font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: .9px; padding: 6px 12px;
               border-radius: 10px; display: flex; align-items: center; gap: 8px; }
   .lanehead::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
@@ -201,7 +212,7 @@
   <div>
     <section>
       <h2><span class="dot" style="background:var(--left)"></span>Goal</h2>
-      <textarea id="goal" placeholder="Describe the task, e.g. put the apple and the yellow block in the box, then close the lid">put the apple and the yellow block in the box, then close the lid</textarea>
+      <textarea id="goal" placeholder="Describe the task" oninput="goalTouched = true"></textarea>
       <div class="row">
         <button class="primary" id="planbtn">Plan</button>
         <span id="planstatus" class="muted small"></span>
@@ -218,6 +229,7 @@
       <div id="banners"></div>
       <div id="rationale" class="rationale"></div>
       <div id="errors" class="err small"></div>
+      <div id="chain" class="chainstrip"></div>
       <div id="lanes" class="lanes"></div>
       <div class="row approve-row">
         <span class="muted small">A human approves every plan. Claude only picks skills from the vocabulary; nothing it writes reaches the motors.</span>
@@ -241,9 +253,10 @@
     <section id="imaginesec" style="display:none">
       <h2><span class="dot" style="background:var(--yellow)"></span>Imagined vs actual</h2>
       <div class="cams">
-        <figure class="lw"><img id="cam-imagined" alt="imagined"><figcaption>FLUX imagined</figcaption></figure>
-        <figure class="rw"><img id="cam-actual" alt="actual"><figcaption>actual</figcaption></figure>
+        <figure class="lw"><img id="cam-imagined" alt="imagined"><figcaption>FLUX imagined: head | wrist</figcaption></figure>
+        <figure class="rw"><img id="cam-actual" alt="actual"><figcaption>actual: head | wrist</figcaption></figure>
       </div>
+      <div class="c" id="imcap" style="margin-top:8px"></div>
     </section>
     <section>
       <h2><span class="dot" style="background:var(--teal)"></span>Events</h2>
@@ -253,7 +266,7 @@
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-let S = null, lastSeq = 0, proposalVersion = null, seedSynced = false;
+let S = null, lastSeq = 0, proposalVersion = null, seedSynced = false, goalTouched = false;
 const TERMINAL = ["succeeded", "failed", "aborted"];
 
 async function post(path, body = {}) {
@@ -307,10 +320,17 @@ function card(st, isRun) {
   return html + "</div>";
 }
 
+function renderChain(steps, lv) {
+  // the chain in execution order: one numbered chip per step (hold steps left out), coloured by arm and status
+  const order = steps.filter(s => s.skill !== "hold").slice().sort((a, b) => lv(a) - lv(b));
+  $("chain").innerHTML = order.map((s, i) => `<span class="lk arm-${esc(s.arm)} ${esc(s.status || "")}" title="${esc(s.arm)} arm: ${esc(s.skill)}"><b>${i + 1}</b>${esc(s.skill.replaceAll("_", " "))}${s.status === "done" ? " &#10003;" : s.status === "failed" ? " &#10007;" : ""}</span>`).join('<span class="ar">&#8594;</span>');
+}
+
 function renderLanes(steps, levels, pairs, isRun) {
   const lanes = $("lanes");
-  if (!steps || !steps.length) { lanes.innerHTML = '<div class="empty">No plan yet. Type a goal and press <b>Plan</b>.</div>'; return; }
+  if (!steps || !steps.length) { $("chain").innerHTML = ""; lanes.innerHTML = '<div class="empty">No plan yet. Type a goal and press <b>Plan</b>.</div>'; return; }
   const lv = (s) => (levels && levels[s.id] != null) ? levels[s.id] : (s.level ?? 0);
+  renderChain(steps, lv);
   const maxL = Math.max(...steps.map(lv));
   const pairSet = new Set((pairs || []).map(p => p[0] + "|" + p[1]));
   let html = '<div class="lanehead left">left arm</div><div></div><div class="lanehead right">right arm</div>';
@@ -333,6 +353,7 @@ function render() {
   $("cfg").innerHTML = [["env", c.env], ["policy", c.policy], ["planner", c.planner_model || c.planner], ["verifier", c.verifier], ["gate", c.gate ? "on" : "off"]]
     .map(([k, v]) => `<span class="chip"><i style="background:${dots[k]}"></i>${k} <b>${esc(v)}</b></span>`).join("");
   $("simctl").style.display = c.env === "sim" ? "" : "none";
+  if (!goalTouched && c.demo_goal && !$("goal").value) { $("goal").value = c.demo_goal; $("goal").placeholder = "Describe the task, e.g. " + c.demo_goal; }
   if (!seedSynced && c.seed != null && document.activeElement !== $("seed")) { $("seed").value = c.seed; $("lidonbox").checked = !!c.lid_on_box; seedSynced = true; }
   const run = S.run, active = run && !TERMINAL.includes(run.state), p = S.proposal;
   let state = S.estopped && !active ? "estopped" : (run ? run.state : "idle");
@@ -361,6 +382,9 @@ function render() {
     $("planmeta").textContent = `running plan v${run.plan_version}`; $("errors").innerHTML = ""; $("rationale").textContent = "";
     renderLanes(run.steps, null, run.concurrent_pairs, true);
   } else { proposalVersion = null; $("approve").disabled = true; renderLanes([], null, [], false); }
+  const im = S.imagination || {};
+  $("imaginesec").style.display = im.enabled ? "" : "none";
+  if (im.enabled) $("imcap").textContent = im.ready ? `${im.arm} arm, imagined ${im.ahead_s} s ahead of its chunk, fetched ${im.age_s} s ago (${im.fetched} chunks)` : (im.error ? "imagination: " + im.error : "waiting for the first chunk's imagination");
   const rows = [];
   if (run) {
     const cc = run.concurrency || {};
@@ -391,7 +415,9 @@ async function poll() {
 }
 function cams() {
   const t = Date.now();
-  for (const n of ["head", "left_wrist", "right_wrist"]) { const img = new Image(); img.onload = () => { $("cam-" + n).src = img.src; }; img.src = `/api/frame/${n}.jpg?t=${t}`; }
+  const names = ["head", "left_wrist", "right_wrist"];
+  if (S && S.imagination && S.imagination.ready) names.push("imagined", "actual");
+  for (const n of names) { const img = new Image(); img.onload = () => { $("cam-" + n).src = img.src; }; img.src = `/api/frame/${n}.jpg?t=${t}`; }
   setTimeout(cams, 250);
 }
 poll(); cams();

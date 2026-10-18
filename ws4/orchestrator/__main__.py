@@ -23,8 +23,8 @@ from . import WS4  # noqa: F401  (sets sys.path for flux, sim, kinematics)
 def _session_args(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("backend")
     g.add_argument("--env", choices=("sim", "haller", "xlerobot"), default="sim",
-                   help="sim = laptop sim; haller = Sunday demo (robot-left arm via ws4/single_arm); "
-                        "xlerobot = both arms")
+                   help="sim = laptop sim; haller = the Haller via ws4/single_arm (the vocabulary's station picks "
+                        "the arms: both for the final chain); xlerobot = both arms via LeRobot")
     g.add_argument("--policy", choices=("scripted", "fake", "remote"), default=None,
                    help="scripted = sim stand-in (default in sim), remote = FLUX policy server (default on the robot)")
     g.add_argument("--planner", choices=("stub", "claude"), default="stub")
@@ -40,6 +40,10 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--package", default="so101", help="policy server package for both arms")
     g.add_argument("--left-package", default=None)
     g.add_argument("--right-package", default=None)
+    g.add_argument("--skill-package", action="append", default=[], metavar="SKILL=PACKAGE",
+                   help="repeatable: the policy server package of one skill (one LoRA per skill)")
+    g.add_argument("--imagine", choices=("lazy",), default=None,
+                   help="the server keeps FLUX's imagined frames per chunk; the HMI shows imagined vs actual")
     g.add_argument("--sync-inference", action="store_true", help="block the control loop during inference")
     s = p.add_argument_group("sim")
     s.add_argument("--seed", type=int, default=0)
@@ -60,7 +64,13 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     h.add_argument("--wrist-rotate", type=int, choices=(0, 90, 180, 270), default=180)
     h.add_argument("--scene-fourcc", default="none")
     h.add_argument("--wrist-fourcc", default="none")
-    h.add_argument("--keepout-config", default=None, help="default single_arm/calibration/haller_right_workspace.json")
+    h.add_argument("--keepout-config", default=None,
+                   help="robot-left arm's station zones (default single_arm/calibration/"
+                        "haller_right_workspace_noenv.json)")
+    h.add_argument("--right-arm-port", default="/dev/haller_arm_left", help="serial port of the ROBOT's right arm")
+    h.add_argument("--right-robot-id", default="haller_left")
+    h.add_argument("--right-keepout-config", default="", help="robot-right arm's zones (default: station geometry)")
+    h.add_argument("--keepout-window", type=int, default=60)
     h.add_argument("--max-relative-target", type=float, default=20.0)
     h.add_argument("--torque-limit", type=float, default=60.0)
     h.add_argument("--max-step", type=float, default=2.0)
@@ -108,6 +118,8 @@ def _config(a: argparse.Namespace):
             max_gripper_step=a.max_gripper_step, stall_deg=a.stall_deg, stall_ticks=a.stall_ticks,
             keepout_ticks=a.keepout_ticks, home_speed=a.home_speed, allow_torque_off=a.allow_torque_off,
             read_other_arm=not a.no_other_arm, limit_margin=a.limit_margin, ramp_margin=a.ramp_margin,
+            right_arm_port=a.right_arm_port, right_robot_id=a.right_robot_id,
+            right_keepout_config=a.right_keepout_config, keepout_window=a.keepout_window,
             token_cmd=a.token_cmd,
         )
     return SessionConfig(
@@ -116,6 +128,7 @@ def _config(a: argparse.Namespace):
         verifier=a.verifier, planner_model=a.planner_model, planner_effort=a.planner_effort,
         verifier_wrist=a.verifier_wrist, verifier_thinking=a.verifier_thinking, budget_usd=a.budget_usd,
         server=a.server, token_file=a.token_file, package=a.package, left_package=a.left_package,
+        skill_packages=dict(_pair(x, "--skill-package") for x in a.skill_package), imagine=a.imagine or "",
         right_package=a.right_package, async_inference=False if a.sync_inference else None, seed=a.seed,
         image_size=(h, w), randomize=not a.no_randomize, lid_on_box=a.lid_on_box,
         robot_id=a.robot_id or ("haller_right" if haller else "xlerobot"), left_port=a.left_port,
@@ -124,7 +137,7 @@ def _config(a: argparse.Namespace):
         left_wrist_cam=a.left_wrist_cam, right_wrist_cam=a.right_wrist_cam, calibration_limits=a.calibration_limits,
         gate=not a.no_gate, realtime=not a.fast, max_replans=a.max_replans,
         auto_approve_replans=a.auto_approve_replans, trial_log=a.trial_log,
-        task=a.task or ("pen_chain" if haller else "pack_box"), condition=a.condition, variant=a.variant,
+        task=a.task or ("haller_chain" if haller else "pack_box"), condition=a.condition, variant=a.variant,
         checkpoint=a.checkpoint, layout=a.layout, operator=a.operator, vocabulary=a.vocabulary,
     )
 
@@ -165,12 +178,19 @@ def cmd_plan(a: argparse.Namespace) -> int:
     from .session import Session
 
     session = Session(_config(a))
-    proposal = session.plan(a.goal)
+    proposal = session.plan(a.goal or session.demo_goal())
     _print_plan(proposal)
     if a.out and proposal.result.ok:
         Path(a.out).write_text(proposal.result.plan.dumps())
         print(f"wrote {a.out}")
     return 0 if proposal.result.ok else 1
+
+
+def _pair(item: str, flag: str) -> tuple[str, str]:
+    key, sep, value = item.partition("=")
+    if not sep or not key or not value:
+        raise SystemExit(f"{flag} wants NAME=VALUE, got {item!r}")
+    return key.strip(), value.strip()
 
 
 def _confirm_operator_steps(session: Any) -> None:
@@ -199,7 +219,7 @@ def cmd_run(a: argparse.Namespace) -> int:
     if a.plan_file:
         proposal = session.load_plan_json(Path(a.plan_file).read_text(), a.goal or "")
     else:
-        proposal = session.plan(a.goal)
+        proposal = session.plan(a.goal or session.demo_goal())
     _print_plan(proposal)
     if not proposal.result.ok:
         return 1
@@ -252,13 +272,13 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_hmi)
     p = sub.add_parser("run", help="plan and run a goal headless")
     _session_args(p)
-    p.add_argument("--goal", default="put the apple and the yellow block in the box, then close the lid")
+    p.add_argument("--goal", default=None, help="default: the vocabulary's station.demo_goal")
     p.add_argument("--plan-file", default=None, help="run this plan JSON instead of planning")
     p.add_argument("--yes", action="store_true", help="approve without asking")
     p.set_defaults(func=cmd_run)
     p = sub.add_parser("plan", help="plan a goal and print it")
     _session_args(p)
-    p.add_argument("--goal", default="put the apple and the yellow block in the box, then close the lid")
+    p.add_argument("--goal", default=None, help="default: the vocabulary's station.demo_goal")
     p.add_argument("--out", default=None)
     p.set_defaults(func=cmd_plan)
     p = sub.add_parser("validate", help="validate a plan JSON file")

@@ -13,7 +13,7 @@ from orchestrator.monitors import KeepOutMonitor, LoadMonitor, StallMonitor
 from orchestrator.plan import Plan, Step, validate_plan
 from orchestrator.planner import StubPlanner
 from orchestrator.session import Session, SessionConfig, load_trial_log
-from orchestrator.skills import DEFAULT_VOCABULARY, load_vocabulary
+from orchestrator.skills import PEN_VOCABULARY, load_vocabulary
 from orchestrator.verifier import Verdict
 
 PUT = "put the red pen in its slot in the cardboard box"
@@ -22,7 +22,7 @@ TAKE = "take the red pen out of its slot and put it on the mat"
 
 @pytest.fixture(scope="module")
 def pen():
-    return load_vocabulary(DEFAULT_VOCABULARY)
+    return load_vocabulary(PEN_VOCABULARY)
 
 
 def test_vocabulary_is_the_final_demo_task(pen):
@@ -55,7 +55,7 @@ def test_right_arm_is_refused(pen):
 
 
 def short_vocab(tmp_path, timeout=1.5):
-    data = yaml.safe_load(DEFAULT_VOCABULARY.read_text())
+    data = yaml.safe_load(PEN_VOCABULARY.read_text())
     for name in ("put_pen_in_slot", "take_pen_out"):
         data["skills"][name]["timeout_s"] = timeout
         data["skills"][name]["verify_every_chunks"] = 1
@@ -167,7 +167,7 @@ def test_stall_and_keepout_monitors():
 
 def test_fake_arm_never_writes_the_graded_log(tmp_path):
     cfg = SessionConfig(env="haller", robot="fake", policy="fake", verifier="manual", realtime=False,
-                        runs_dir=str(tmp_path / "runs"))
+                        runs_dir=str(tmp_path / "runs"), vocabulary=str(PEN_VOCABULARY))
     s = Session(cfg)
     try:
         assert s.trial_log_path().name == "trials_mock.jsonl"
@@ -180,11 +180,11 @@ def test_fake_arm_never_writes_the_graded_log(tmp_path):
 def test_keepout_monitor_stops_the_ramp_at_the_first_refusal():
     guard = SimpleNamespace(last_zone="base")
     ramp = {"on": True}
-    keep = KeepOutMonitor(guard, ticks=45, ramping=lambda: ramp["on"])
+    keep = KeepOutMonitor(guard, ticks=45, ramping=lambda slot: ramp["on"])
     assert "refused the ramp" in keep(None, {})  # move_to semantics: one refusal ends the ramp
     ramp["on"] = False
     assert all(keep(None, {}) is None for _ in range(44))  # under the policy, 45 in a row are needed
-    assert "45 ticks" in keep(None, {})
+    assert "45 of the last" in keep(None, {})
 
 
 def test_other_arm_pose_is_read_only_when_the_port_is_free(monkeypatch):
@@ -193,17 +193,21 @@ def test_other_arm_pose_is_read_only_when_the_port_is_free(monkeypatch):
     haller_mod.import_single_arm()
     import keepout
 
-    ko = SimpleNamespace(other_q=None)
     now = {"t": 1000.0}
-    rig = haller_mod.HallerRig(sar=None, so101=None, robot=None, guard=SimpleNamespace(keepout=ko), monitors=[],
-                               rest=np.zeros(6), real=True, observe=False, clock=lambda: now["t"])
+    arm = haller_mod.Arm("left", None, None, np.zeros(6), None, None, None)
+
+    def other_q():
+        return rig.guard.fixed_other_q.get("left")
+
+    rig = haller_mod.HallerRig(sar=None, arms={"left": arm}, robot=None, guard=SimpleNamespace(fixed_other_q={}),
+                               monitors=[], real=True, observe=False, clock=lambda: now["t"])
     reads = []
     good = np.arange(6.0)
     monkeypatch.setattr(keepout, "read_arm_joints", lambda port, rid: reads.append((port, rid)) or good)
     monkeypatch.setattr(haller_mod, "port_users", lambda port: [])
     pose = rig.refresh_other_arm()
     assert not pose.block and pose.note == "read"
-    assert reads == [("/dev/haller_arm_left", "haller_left")] and ko.other_q == (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    assert reads == [("/dev/haller_arm_left", "haller_left")] and other_q() == (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
 
     def broken(port, rid):
         raise OSError("no such device")
@@ -211,21 +215,21 @@ def test_other_arm_pose_is_read_only_when_the_port_is_free(monkeypatch):
     monkeypatch.setattr(keepout, "read_arm_joints", broken)
     now["t"] += 120  # a failed read reuses a pose younger than 180 s
     pose = rig.refresh_other_arm()
-    assert not pose.block and pose.note == "cached 120 s" and ko.other_q == (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    assert not pose.block and pose.note == "cached 120 s" and other_q() == (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
     now["t"] += 61  # ... and blocks once it is older
     pose = rig.refresh_other_arm()
-    assert "OSError" in pose.block and "181 s old" in pose.block and ko.other_q is None
+    assert "OSError" in pose.block and "181 s old" in pose.block and other_q() is None
     monkeypatch.setattr(keepout, "read_arm_joints", lambda port, rid: good)
     assert not rig.refresh_other_arm().block
     monkeypatch.setattr(haller_mod, "port_users", lambda port: [4242])  # someone may be driving the parked arm
     pose = rig.refresh_other_arm()
-    assert "held by pid [4242]" in pose.block and ko.other_q is None
+    assert "held by pid [4242]" in pose.block and other_q() is None
     monkeypatch.setattr(haller_mod, "port_users", lambda port: [])
     monkeypatch.setattr(keepout, "read_arm_joints", broken)  # a held port also drops the cached pose
     assert "no earlier pose" in rig.refresh_other_arm().block
     rig.read_other_arm = False
     pose = rig.refresh_other_arm()
-    assert not pose.block and pose.note.startswith("DISABLED") and ko.other_q is None
+    assert not pose.block and pose.note.startswith("DISABLED") and other_q() is None
     rig.real = False  # the fake arm never touches a bus
     assert rig.refresh_other_arm().note == "fake arm"
 
@@ -299,7 +303,8 @@ def test_unknown_other_arm_pose_blocks_the_attempt_until_resumed(haller):
 
 def test_keepout_refusal_during_the_ramp_stops_and_holds(haller):
     haller.verifier = PassOnAttempt()
-    haller.rig.full_keepout.without_envelope = lambda: SimpleNamespace(refuse=lambda target, q: (True, "table"))
+    pen_ko = haller.rig.skill_keepout("left", haller.vocab["put_pen_in_slot"])
+    pen_ko.without_envelope = lambda: SimpleNamespace(refuse=lambda target, q: (True, "table"), other_q=None)
     holds = []
     haller.rig.hold = lambda reason="": holds.append(reason)
     plan = haller.plan("put the pen in the box").result.plan
@@ -310,7 +315,7 @@ def test_keepout_refusal_during_the_ramp_stops_and_holds(haller):
     while (haller.executor is None or haller.executor.state != "estopped") and time.time() < deadline:
         time.sleep(0.01)
     assert haller.executor.state == "estopped"
-    assert holds and "refused the ramp" in holds[0]
+    assert holds and "ramp to its start pose" in holds[0]
     (run,) = haller.executor.runs.values()
     assert run.homing and not run.policy_started  # FLUX never started
     haller.abort()
@@ -338,11 +343,12 @@ def ramp_refusal(keepout, start, goal, step=1.0):
 def test_ramp_from_the_folded_rest_uses_the_station_zones_only(haller):
     """The demonstrated envelope bounds the policy, not the ramp: unfolding from the folded rest leaves the demonstrated
     TCP workspace for a moment (so101-zeroshot, 2026-10-17). The policy still runs under every zone."""
-    full = haller.rig.full_keepout
+    full = haller.rig.skill_keepout("left", haller.vocab["put_pen_in_slot"])
     if getattr(full, "env_cells", None) is None:
         pytest.skip("workspace file without a demonstrated envelope")
     home = [0, 0, 0, 0, 0, 100]
-    assert ramp_refusal(full, FOLDED_REST, home) is not None
+    # (the layout A/B envelope refused this ramp at step 20; the all-layouts one of haller_right_workspace_final.json
+    # happens not to, so only the station-zones half is asserted)
     assert ramp_refusal(full.without_envelope(), FOLDED_REST, home) is None
     haller.verifier = PassOnAttempt()
     haller.rig.so101.q = np.array(FOLDED_REST)
@@ -350,7 +356,7 @@ def test_ramp_from_the_folded_rest_uses_the_station_zones_only(haller):
     original = haller.runner.start
 
     def spy(target, task):
-        guard_ko = haller.rig.guard.keepout
+        guard_ko = haller.rig.guard.keepouts["left"]
         seen[task] = (guard_ko is full, getattr(guard_ko, "env_cells", None) is None)
         return original(target, task)
 
@@ -359,7 +365,7 @@ def test_ramp_from_the_folded_rest_uses_the_station_zones_only(haller):
     assert haller.execute(plan).status == "succeeded"
     assert seen["home"] == (False, True)  # ramp: station zones only
     assert seen[PUT] == (True, False)  # policy: the full keep-out with the envelope
-    assert haller.rig.guard.keepout is full
+    assert haller.rig.guard.keepouts["left"] is full
     assert not any("refused the ramp" in e["msg"] for e in haller.events.recent())
 
 
@@ -381,7 +387,7 @@ def test_observe_mode_skips_the_ramp(tmp_path):
         s.close()
 
 
-HALLER_CALIB = DEFAULT_VOCABULARY.parent.parent / "single_arm" / "calibration" / "haller_right.json"
+HALLER_CALIB = PEN_VOCABULARY.parent.parent / "single_arm" / "calibration" / "haller_right.json"
 
 
 def test_policy_and_ramp_limits_as_run_single_arm_builds_them():
@@ -406,15 +412,15 @@ def test_policy_and_ramp_limits_as_run_single_arm_builds_them():
 def test_load_monitor():
     load = {"v": np.zeros(5)}
     ramp = {"on": False}
-    mon = LoadMonitor(lambda: load["v"], cap=600.0, ticks=3, ramping=lambda: ramp["on"])
+    mon = LoadMonitor(lambda: load["v"], cap=600.0, ticks=3, ramping=lambda slot: ramp["on"])
     tick = iter(range(1, 1000))
     call = lambda: mon(SimpleNamespace(tick=next(tick)), {})  # noqa: E731
     load["v"] = np.array([0, 450, 0, 0, 0])  # 75% of the cap on the shoulder lift
     assert call() is None and call() is None and "shoulder_lift at 75%" in call()
     load["v"] = np.array([0, 0, 0, 550, 0])  # 92% on one tick
     assert "wrist_flex at 92%" in call()
-    ramp["on"] = True  # ramps have no load freeze (run_single_arm.move_to)
-    assert all(call() is None for _ in range(5))
+    ramp["on"] = True  # ramps freeze on load too (parent, 2026-10-18)
+    assert "wrist_flex at 92%" in call()
     ramp["on"] = False
     load["v"] = None
     assert call() is None  # no reading (bus hiccup): nothing to judge
@@ -438,21 +444,28 @@ def test_ramp_from_the_folded_rest_under_real_limits(tmp_path):
         seen = {}
         original = s.runner.start
 
+        arm, pen_ko = s.rig.arms["left"], s.rig.skill_keepout("left", s.vocab["put_pen_in_slot"])
+
+        def limits_are(cfg):
+            return np.allclose(s.rig.guard.config.lower[:6], cfg.lower[:6]) and np.allclose(
+                s.rig.guard.config.upper[:6], cfg.upper[:6])
+
         def spy(target, task):
-            seen[task] = (s.rig.guard.config is s.rig.ramp_limits, s.rig.guard.keepout is s.rig.full_keepout)
+            seen[task] = (limits_are(arm.ramp_limits), s.rig.guard.keepouts["left"] is pen_ko)
             return original(target, task)
 
         s.runner.start = spy
         plan = s.plan("put the pen in the box").result.plan
         assert s.execute(plan).status == "succeeded"
         assert seen == {"home": (True, False), PUT: (False, True)}
-        assert s.rig.guard.config is s.rig.policy_limits and s.rig.guard.keepout is s.rig.full_keepout
+        assert limits_are(arm.policy_limits) and s.rig.guard.keepouts["left"] is pen_ko
         assert not any("E-STOP" in e["msg"] for e in s.events.recent())
     finally:
         s.close()
 
 
-def test_load_freeze_stops_the_policy_not_the_ramp(tmp_path):
+def test_load_freeze_stops_ramps_too(tmp_path):
+    """The parent asked for the runner's load freeze on the scripted ramps as well (2026-10-18)."""
     s = haller_session(tmp_path)
     try:
         s.verifier = PassOnAttempt({"put_pen_in_slot": 99})  # keep the policy running
@@ -466,9 +479,9 @@ def test_load_freeze_stops_the_policy_not_the_ramp(tmp_path):
         deadline = time.time() + 20
         while (s.executor is None or s.executor.state != "estopped") and time.time() < deadline:
             time.sleep(0.01)
-        assert s.executor.state == "estopped" and holds and "load: shoulder_lift at 80%" in holds[0]
-        msgs = [e["msg"] for e in s.events.recent()]
-        assert any("at the start pose" in m for m in msgs)  # the ramp finished under the same load
+        assert s.executor.state == "estopped" and holds and "load: left arm shoulder_lift at 80%" in holds[0]
+        (run,) = s.executor.runs.values()
+        assert run.homing and not run.policy_started  # stopped on the ramp, before FLUX
         s.abort()
         thread.join(timeout=10)
         assert out["r"].status == "aborted"

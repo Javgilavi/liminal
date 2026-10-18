@@ -161,11 +161,11 @@ def test_image_tokens_follow_the_patch_formula():
 def test_verify_eval_measures_exactly_what_the_live_verifier_sends():
     """verify_eval's tuned variant and ClaudeVerifier build the same request from skills.yaml (no drift)."""
     from orchestrator.plan import Step
-    from orchestrator.skills import DEFAULT_VOCABULARY, load_vocabulary
+    from orchestrator.skills import PEN_VOCABULARY, load_vocabulary
     from orchestrator.verifier import HEAD, ClaudeVerifier
     from orchestrator.verify_eval import CHECKS, VARIANTS, Sample
 
-    vocab = load_vocabulary(DEFAULT_VOCABULARY)
+    vocab = load_vocabulary(PEN_VOCABULARY)
     frame = np.random.default_rng(0).integers(0, 255, (480, 640, 3), dtype=np.uint8)
     live = ClaudeVerifier(llm=None, station=vocab.station)
     tuned = VARIANTS["live"]
@@ -176,3 +176,40 @@ def test_verify_eval_measures_exactly_what_the_live_verifier_sends():
         step = Step("s", "left", skill_name, success_check=skill.success_check)
         sample = Sample("x", frame, None, {check: True})
         assert live.content(step, {HEAD: frame}, skill) == tuned.content(check, sample)
+
+
+def test_chain_keeps_the_tuned_red_pen_check():
+    """The final chain's red-pen step sends the prompt tuned on the pen frames (skill-level scene + hint), while the
+    new skills use the station's scene."""
+    from orchestrator.skills import DEFAULT_VOCABULARY, PEN_VOCABULARY, load_vocabulary
+    from orchestrator.verifier import ClaudeVerifier
+
+    chain, pen = load_vocabulary(DEFAULT_VOCABULARY), load_vocabulary(PEN_VOCABULARY)
+    live = ClaudeVerifier(llm=None, station=chain.station)
+    red = chain["put_pen_in_slot"]
+    assert live.system_for(red) == pen.station.verify_scene
+    assert red.verify_hint == pen["put_pen_in_slot"].verify_hint
+    assert red.success_check == pen["put_pen_in_slot"].success_check
+    for name in ("put_green_pen_in_slot", "put_yellow_cutter_in_slot"):  # each new skill has its own scene prompt
+        assert live.system_for(chain[name]) == chain[name].verify_scene != pen.station.verify_scene
+    assert live.system_for(chain["home"]) == chain.station.verify_scene  # the station default for the rest
+    assert live.system_for(chain["open_box"]) == chain["open_box"].verify_scene
+
+
+def test_state_based_checks():
+    """A skill with verify_states is answered with a state; done = the first state (kept for skills it suits)."""
+    import dataclasses
+
+    from orchestrator.skills import DEFAULT_VOCABULARY, load_vocabulary
+    from orchestrator.verifier import VERIFY_SCHEMA, verdict_done, verify_schema
+
+    v = load_vocabulary(DEFAULT_VOCABULARY)
+    box = v["open_box"]
+    green = dataclasses.replace(v["put_green_pen_in_slot"], verify_states=("in the slot", "on the mat"))
+    schema = verify_schema(green)
+    assert schema["properties"]["state"]["enum"] == ["in the slot", "on the mat"]
+    assert "done" not in schema["properties"]
+    assert verdict_done(green, {"state": "in the slot"})
+    assert not verdict_done(green, {"state": "on the mat", "done": True})
+    assert verify_schema(box) is VERIFY_SCHEMA
+    assert verdict_done(box, {"done": True}) and not verdict_done(box, {"done": False})

@@ -5,7 +5,63 @@ vocabulary; a human approves it in a localhost HMI; a DAG executor runs it on bo
 allows, verifies every step with a vision check, retries or replans, and logs the attempt for the graded evaluation.
 Design, plan format, measurements and open items: [`../research/orchestrator.md`](../research/orchestrator.md).
 
-## Sunday demo: the green Haller, one arm, the red pen (run this)
+## FINAL demo: the 4-skill chain on the Haller, both arms (2026-10-18, run this)
+
+Oscar's plan: the robot RIGHT arm opens the closed box by pulling its handle, then the robot LEFT arm puts the green
+pen in the green slot, the yellow cutter in the yellow slot and the red pen in its slot. Vocabulary: `skills.yaml`
+(version 3, the default). One process holds both arms: robot left = `/dev/haller_arm_right` (calibration
+haller_right, wrist camera USB 7.2), robot right = `/dev/haller_arm_left` (haller_left, wrist camera USB 7.3), head =
+`/dev/haller_cam_mast`. One LoRA per skill, served on 8790 (package names from ws4-datasets).
+
+```bash
+# 0. One process per arm: nothing else may hold either arm (this must print nothing).
+fuser /dev/haller_arm_right /dev/haller_arm_left
+# 1. Tunnel to the 8790 policy server (pod host and SSH port from ws4-datasets / the RunPod console).
+ssh -N -L 8790:127.0.0.1:8790 -o ExitOnForwardFailure=yes -i ~/.ssh/id_ed25519_osrdvs root@<pod-ip> -p <ssh-port>
+# 2. Dry run on the real arms: observe (torque never enabled, nothing sent): cameras, plan, checks, imagination.
+cd ws4 && python -m orchestrator hmi --open --env haller --observe --planner claude --server http://127.0.0.1:8790 \
+    --skill-package open_box=<pkg> --skill-package put_green_pen_in_slot=<pkg> \
+    --skill-package put_yellow_cutter_in_slot=<pkg> --skill-package put_pen_in_slot=<pkg> --imagine lazy \
+    --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token"
+# 3. The demo: the same without --observe, plus what the trial log records.
+#    --condition post_training --variant lora_chain --checkpoint <hf-repo>@<rev> --layout L1 --operator oscar
+```
+
+The goal box is pre-filled with the chain (`station.demo_goal`): press **Plan** (Claude: right arm first, then the three
+left-arm steps; checked live, 6.4 s, USD 0.02), check the lanes and the numbered chain strip, **Approve and run**.
+
+What runs, so each skill starts from the state its demos had (`station.poses`, measured in the datasets): the pen arm
+ramps to its tucked pose, the box arm to its home `[0, 0.8, 2.0, 0.4, 0, 99.7]`, and `open_box` runs until the lid
+check passes; then the box arm FREEZES and keeps holding the lid open (the lid closes if it lets go; no ramp, the
+runner holds its last command). Before each pen skill the lid check runs again (`precheck: open_box`); if the lid is
+not open, the e-stop latches and every arm holds (Resume checks again, Abort ends). Then the pen arm ramps tucked ->
+home `[0, 0, 0, 0, 0, 100]` with the holding box arm as a live collision capsule, its skill's package runs FLUX with
+the exact task string, a Haiku 5.5 check every 2 chunks ends it, and the pen arm lets go, parks at home and must pass
+the check again. One arm moves at a time; ramps run under the ramp limits, the keep-out without the demonstrated
+envelope and the load freeze. The tuck <-> home ramps were checked offline: no keep-out zone touched, inside both
+calibrated ramp limits. An optional `tuck the arm` at the end puts the pen arm away; the box arm keeps holding the lid.
+Safety per arm: soft limits from each calibration, the FK keep-out with each arm's `other_arm` zone following
+the other arm's live pose every tick, stall (only for a driven arm: the box arm holding the lid lags its command by
+design), keep-out (45 of 60 policy ticks) and load freezes; an e-stop freezes both arms' joints at their measured pose
+but keeps each gripper's last command, so the lid stays held. The HMI shows the 4-step chain with per-step status, both arm lanes, and with `--imagine lazy` FLUX's
+imagined head | wrist view next to the real one (ws4/imagine serving: no added latency, 0.12 s decode per chunk).
+
+Checks (research/orchestrator.md, "Final chain"; re-run with `python -m orchestrator.verify_eval --snapshot <dir>
+--dataset <name> --skill <skill>`): `open_box` 63/63 on 21 held-out takes (75/75 on the 25 it was written on), no
+false pass; green pen 114/119 held out (2 false passes in 82); yellow cutter 91/91 on 31 takes, no false
+pass; the red pen check was tuned on the old pen scene (97 %) and needs a re-check in the new one.
+
+Tested without hardware (`tests/test_chain.py`): both fake arms, flux.remote's real HTTP server with one fake package
+per skill and a token, the whole chain end to end (the box arm frozen holding the lid from open_box on, the lid
+prechecked before each pen skill, each pen skill at home on its own package, one arm moving at a time, one trial line
+per attempt), a closed lid holding everything before the pen arm moves, holds that keep the grip, the live other-arm
+keep-out, the imagination panel against a fake imagining backend, and the CLI. Not verified: anything on the arms or the pod; the right arm's
+start pose and table height (VERIFY with ws4-vr2 / so101-zeroshot); the new checks on the full datasets.
+
+Rehearsal without hardware: `python -m orchestrator hmi --open --env haller --robot fake --policy fake --planner stub
+--verifier manual`.
+
+## Pen-only runs: the green Haller, one arm, the red pen (2026-10-17)
 
 Task (final, `skills.yaml`): the robot's LEFT arm puts the red pen in its slot in the cardboard box and takes it out
 again, on a chain Claude plans. The robot-RIGHT arm stays parked and holding; this process never commands it and only
@@ -33,10 +89,12 @@ fuser /dev/ttyACM* /dev/haller_arm_right /dev/haller_arm_left
 # 1. Tunnel to the policy server. Pod host and SSH port: ask the orchestrator session or read them in the RunPod console.
 ssh -N -L 8765:127.0.0.1:8765 -o ExitOnForwardFailure=yes -i ~/.ssh/id_ed25519_osrdvs root@<pod-ip> -p <ssh-port>
 # 2. Dry run on the real arm: observe mode, torque never enabled, nothing sent (check cameras, plan, checks).
-cd ws4 && python -m orchestrator hmi --open --env haller --observe --planner claude \
+cd ws4 && python -m orchestrator hmi --open --env haller --vocabulary orchestrator/skills_haller_pen.yaml \
+    --task pen_chain --observe --planner claude \
     --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token"
 # 3. The demo, zero-shot (graded attempts go to ws4/eval/trials.jsonl).
-cd ws4 && python -m orchestrator hmi --open --env haller --planner claude --package so101 \
+cd ws4 && python -m orchestrator hmi --open --env haller --vocabulary orchestrator/skills_haller_pen.yaml \
+    --task pen_chain --planner claude --package so101 \
     --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token" \
     --condition zero_shot --variant A0 --checkpoint black-forest-labs/flux-3-action-so101@0713a7a --layout L1 \
     --operator oscar
@@ -49,7 +107,8 @@ on the pod; the server's `GET /packages` lists them, with the token header as fo
 `--package` and the logging fields change; the token, tunnel and arm are the same:
 
 ```bash
-cd ws4 && python -m orchestrator hmi --open --env haller --planner claude --package <lora-package> \
+cd ws4 && python -m orchestrator hmi --open --env haller --vocabulary orchestrator/skills_haller_pen.yaml \
+    --task pen_chain --planner claude --package <lora-package> \
     --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token" \
     --condition post_training --variant lora_A --checkpoint <hf-repo>@<rev> --layout L1 --operator oscar
 ```
@@ -81,7 +140,8 @@ Logging: one `trial_log.py` line per FLUX attempt (task = the skill: `put_pen_in
 the check passed, the failure reason otherwise, interventions counted) plus one line per chain (task `pen_chain`,
 steps done / total). Summary for the slides: `python eval/trial_log.py summary --markdown`.
 
-Rehearsal without hardware: `python -m orchestrator hmi --open --env haller --robot fake --policy fake --planner claude
+Rehearsal without hardware: `python -m orchestrator hmi --open --env haller --vocabulary
+orchestrator/skills_haller_pen.yaml --robot fake --policy fake --planner claude
 --verifier manual` (run_single_arm's fake arm and a fake policy; mark steps done by hand; logs go to
 `runs/trials_mock.jsonl`, never to the graded log).
 

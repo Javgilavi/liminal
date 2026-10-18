@@ -83,6 +83,22 @@ VERIFY_SCHEMA = {
 }
 
 
+def verify_schema(skill: Skill | None) -> dict:
+    """The verdict schema: done yes / no, or, for a skill with ``verify_states``, the state the model sees."""
+    states = getattr(skill, "verify_states", ()) if skill is not None else ()
+    if not states:
+        return VERIFY_SCHEMA
+    return {"type": "object",
+            "properties": {"state": {"type": "string", "enum": list(states)}, "confidence": {"type": "number"},
+                           "observation": {"type": "string"}},
+            "required": ["state", "confidence", "observation"], "additionalProperties": False}
+
+
+def verdict_done(skill: Skill | None, data: dict) -> bool:
+    states = getattr(skill, "verify_states", ()) if skill is not None else ()
+    return data.get("state") == states[0] if states else bool(data.get("done"))
+
+
 class ClaudeVerifier:
     name = "claude"
     fast = False
@@ -91,7 +107,7 @@ class ClaudeVerifier:
                  haiku_thinking: str = "adaptive", station: Station | None = None):
         self.llm = llm
         self.station = station or Station()
-        self.system = self.station.verify_scene or VERIFY_SYSTEM
+        self.system = self.station.verify_scene or VERIFY_SYSTEM  # default; a skill's own verify_scene wins
         self.use_wrist = use_wrist
         self.effort = effort
         self.max_side = max_side
@@ -110,8 +126,16 @@ class ClaudeVerifier:
             content += [{"type": "text", "text": f"{step.arm} gripper camera:"},
                         image_block(obs[WRIST[step.arm]], self.max_side)]
         hint = f" {skill.verify_hint}" if skill is not None and skill.verify_hint else ""
+        states = getattr(skill, "verify_states", ()) if skill is not None else ()
+        if states:
+            listed = "; ".join(f'"{x}"' for x in states)
+            hint += (f" Answer with the state that matches the image, one of: {listed}. The condition holds only for "
+                     f'"{states[0]}".')
         content.append({"type": "text", "text": f"Condition to check: {step.success_check}{hint}"})
         return content
+
+    def system_for(self, skill: Skill | None) -> str:
+        return (skill.verify_scene if skill is not None and skill.verify_scene else "") or self.system
 
     def check(self, step: Step, skill: Skill, obs: dict) -> Verdict:
         model = skill.verifier_model
@@ -119,10 +143,10 @@ class ClaudeVerifier:
         spent0 = self.llm.meter.total_usd
         thinking = {"type": self.haiku_thinking} if model == "claude-haiku-5-5" else None
         try:
-            data, _ = self.llm.call(purpose="verify", model=model, system=self.system,
+            data, _ = self.llm.call(purpose="verify", model=model, system=self.system_for(skill),
                                     messages=[{"role": "user", "content": self.content(step, obs, skill)}],
-                                    schema=VERIFY_SCHEMA, effort=self.effort, max_tokens=4000, cache_system=False,
-                                    thinking=thinking)
+                                    schema=verify_schema(skill), effort=self.effort, max_tokens=4000,
+                                    cache_system=False, thinking=thinking)
         except (BudgetExceeded, ClaudeRefused, ClaudeUnavailable) as exc:
             return Verdict(False, 0.0, "verifier unavailable", model, time.perf_counter() - start,
                            error=f"{type(exc).__name__}: {exc}")
@@ -130,8 +154,11 @@ class ClaudeVerifier:
             return Verdict(False, 0.0, "verifier call failed", model, time.perf_counter() - start,
                            self.llm.meter.total_usd - spent0, f"{type(exc).__name__}: {str(exc)[:200]}")
         conf = float(np.clip(float(data.get("confidence", 0.0)), 0.0, 1.0))
-        return Verdict(bool(data.get("done")), conf, str(data.get("observation", "")), model,
-                       time.perf_counter() - start, self.llm.meter.total_usd - spent0)
+        obs = str(data.get("observation", ""))
+        if "state" in data:
+            obs = f"[{data['state']}] {obs}"
+        return Verdict(verdict_done(skill, data), conf, obs, model, time.perf_counter() - start,
+                       self.llm.meter.total_usd - spent0)
 
 
 def crop_frac(img: np.ndarray, box: tuple[float, float, float, float]) -> np.ndarray:

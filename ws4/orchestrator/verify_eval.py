@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -33,7 +34,7 @@ import numpy as np
 from . import PACKAGE_DIR
 from .claude import ClaudeJSON, image_block
 from .cost import CostMeter, cost_of
-from .verifier import VERIFY_SCHEMA, VERIFY_SYSTEM, crop_frac, upscale
+from .verifier import VERIFY_SYSTEM, crop_frac, upscale, verdict_done, verify_schema
 
 PUT_DS = "haller_put_the_red_pen_in_its_slot_in_the_cardboard_box"
 TAKE_DS = "haller_take_the_red_pen_out_of_its_slot"
@@ -76,8 +77,18 @@ def _episodes(root: Path) -> list[dict[str, Any]]:
     return df.sort_values("episode_index").to_dict("records")
 
 
-def _frame(root: Path, ep: dict[str, Any], key: str, which: str) -> np.ndarray:
+def _cv2():
+    """OpenCV with one decoder thread: the eval samples a few frames per take and must not compete with a 30 Hz
+    recording on the same laptop (frames dropped when other jobs spike the CPU, 2026-10-18)."""
+    os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "threads;1")
     import cv2
+
+    cv2.setNumThreads(1)
+    return cv2
+
+
+def _frame(root: Path, ep: dict[str, Any], key: str, which: str) -> np.ndarray:
+    cv2 = _cv2()
 
     path = root / "videos" / key / (f"chunk-{int(ep[f'videos/{key}/chunk_index']):03d}/"
                                     f"file-{int(ep[f'videos/{key}/file_index']):03d}.mp4")
@@ -158,9 +169,9 @@ SCENE_HINTS = {
 
 def _station_checks() -> tuple[str, dict[str, str], tuple[float, float, float, float] | None, int]:
     """The tuned checks as configured in skills.yaml, so "scene2*" measures exactly what the live verifier sends."""
-    from .skills import DEFAULT_VOCABULARY, load_vocabulary
+    from .skills import PEN_VOCABULARY, load_vocabulary
 
-    v = load_vocabulary(DEFAULT_VOCABULARY)
+    v = load_vocabulary(PEN_VOCABULARY)
     hints = {"put": v["put_pen_in_slot"].verify_hint, "take": v["take_pen_out"].verify_hint}
     return v.station.verify_scene, hints, v.station.verify_crop, v.station.verify_max_side
 
@@ -217,21 +228,114 @@ VARIANTS = {
 }
 
 
+# ---------------------------------------------------------------------------------------------- any skill's dataset
+def _video_episodes(root: Path, key: str) -> list[tuple[int, Path]]:
+    """(episode, video file) pairs. LeRobot flushes episode metadata in batches while recording, so a dataset that is
+    still being recorded is read from its video files: one file per episode, file index = episode index (true for
+    every Haller dataset recorded with ws4's recorder; checked against the metadata of the finished pen datasets)."""
+    files = sorted((root / "videos" / key).glob("chunk-*/file-*.mp4"))
+    return [(int(f.stem.split("-")[1]) + 1000 * int(f.parent.name.split("-")[1]), f) for f in files]
+
+
+def _file_frame(path: Path, frac: float) -> np.ndarray | None:
+    cv2 = _cv2()
+
+    cap = cv2.VideoCapture(str(path))
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if n <= 0:
+        return None
+    cap.set(cv2.CAP_PROP_POS_FRAMES, min(n - 1, max(0, round(frac * (n - 1)))))
+    ok, bgr = cap.read()
+    cap.release()
+    return bgr[:, :, ::-1].copy() if ok else None
+
+
+def load_skill_samples(root: Path, check: str, wrist_key: str | None = None, mid: tuple[float, ...] = (),
+                       end_false: tuple[int, ...] = (), skip: tuple[int, ...] = ()) -> list[Sample]:
+    """Start frame = not done, end frame = done for kept takes; review.json rejects are edge cases unless listed in
+    ``end_false`` (end state checked by eye: not done, e.g. the lid fell back closed). ``mid``: fractions of each take
+    where the step is surely not done yet (checked by eye), scored as not done."""
+    review = json.loads((root / "review.json").read_text())["episodes"] if (root / "review.json").exists() else {}
+    wrists = dict(_video_episodes(root, wrist_key)) if wrist_key else {}
+    out = []
+    for ep, path in _video_episodes(root, HEAD_KEY):
+        if ep in skip:
+            continue
+        rejected = review.get(str(ep), {}).get("status") == "reject"
+        end_truth = False if ep in end_false else (None if rejected else True)
+        moments = [("start", 0.0, False), ("end", 1.0, end_truth)]
+        moments += [(f"m{round(f * 100):02d}", f, False) for f in mid]
+        for which, frac, truth in moments:
+            head = _file_frame(path, frac)
+            if head is None:
+                continue
+            wrist = _file_frame(wrists[ep], frac) if ep in wrists else None
+            out.append(Sample(f"{check}_{ep:03d}_{which}", head, wrist, {check: truth},
+                              review.get(str(ep), {}).get("note", "")))
+    return out
+
+
+class SkillVariant:
+    """A variant built from a vocabulary skill. ``live``: exactly the request ClaudeVerifier sends (the skill's or the
+    station's scene, its hint, the station crop); ``generic``: the generic prompt with the bare success check."""
+
+    def __init__(self, mode: str, vocab: Any, skill: str, wrist: bool = False):
+        from .plan import Step
+        from .verifier import ClaudeVerifier
+
+        self.mode, self.name, self.skill = mode, mode + ("_wrist" if wrist else ""), vocab[skill]
+        self.model, self.effort, self.thinking, self.wrist = self.skill.verifier_model, "low", "adaptive", wrist
+        self.crop, self.max_side, self.hints = vocab.station.verify_crop, vocab.station.verify_max_side, {}
+        self._verifier = ClaudeVerifier(llm=None, station=vocab.station, use_wrist=wrist)
+        self._step = Step("eval", self.skill.arms[0], skill, success_check=self.skill.success_check)
+        self.system = self._verifier.system_for(self.skill) if mode == "live" else VERIFY_SYSTEM
+        self.schema_skill = self.skill if mode == "live" else None
+
+    def content(self, check: str, sample: Sample) -> list[dict]:
+        from .verifier import WRIST
+
+        obs = {HEAD_KEY: sample.head}
+        if sample.wrist is not None:
+            obs[WRIST[self._step.arm]] = sample.wrist
+        if self.mode == "live":
+            return self._verifier.content(self._step, obs, self.skill)
+        return [{"type": "text", "text": "Head camera:"}, image_block(sample.head, 640),
+                {"type": "text", "text": f"Condition to check: {self.skill.success_check}"}]
+
+
+def write_sheet(samples: list[Sample], path: Path, cols: int = 6, size: tuple[int, int] = (240, 180)) -> None:
+    """A labelled contact sheet of the frames the eval decoded, for checking the truth labels by eye without decoding
+    the videos a second time."""
+    from PIL import Image, ImageDraw
+
+    rows = -(-len(samples) // cols)
+    sheet = Image.new("RGB", (cols * size[0], rows * size[1]), "black")
+    for i, s in enumerate(samples):
+        tile = Image.fromarray(s.head).resize(size)
+        truth = next(iter(s.truth.values()))
+        ImageDraw.Draw(tile).text((4, 4), f"{s.id} truth={truth}", fill=(255, 0, 0))
+        sheet.paste(tile, ((i % cols) * size[0], (i // cols) * size[1]))
+    sheet.save(path, quality=85)
+
+
 # ---------------------------------------------------------------------------------------------- scoring
 def judge(llm: ClaudeJSON, v: Variant, check: str, s: Sample, threshold: float = 0.7) -> dict[str, Any]:
     thinking = {"type": v.thinking} if v.model == "claude-haiku-5-5" else None
     start = time.perf_counter()
     try:
         data, resp = llm.call(purpose=f"verify_eval:{v.name}", model=v.model, system=v.system,
-                              messages=[{"role": "user", "content": v.content(check, s)}], schema=VERIFY_SCHEMA,
+                              messages=[{"role": "user", "content": v.content(check, s)}],
+                              schema=verify_schema(getattr(v, "schema_skill", None)),
                               effort=v.effort, max_tokens=4000, cache_system=False, thinking=thinking)
     except Exception as exc:  # scored as an error, never as a verdict
         return {"id": s.id, "check": check, "error": f"{type(exc).__name__}: {str(exc)[:160]}",
                 "latency_s": time.perf_counter() - start}
     conf = float(np.clip(float(data.get("confidence", 0.0)), 0.0, 1.0))
     usage = getattr(resp, "usage", None)
-    return {"id": s.id, "check": check, "truth": s.truth[check], "done": bool(data.get("done")), "confidence": conf,
-            "pass": bool(data.get("done")) and conf >= threshold, "observation": str(data.get("observation", "")),
+    done = verdict_done(getattr(v, "schema_skill", None), data)
+    obs = (f"[{data['state']}] " if "state" in data else "") + str(data.get("observation", ""))
+    return {"id": s.id, "check": check, "truth": s.truth[check], "done": done, "confidence": conf,
+            "pass": done and conf >= threshold, "observation": obs,
             "latency_s": time.perf_counter() - start, "cost_usd": cost_of(getattr(resp, "model", v.model), usage),
             "input_tokens": getattr(usage, "input_tokens", 0), "output_tokens": getattr(usage, "output_tokens", 0)}
 
@@ -260,12 +364,17 @@ def score(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _ep(sample_id: str) -> int:
+    """Episode index of a sample id ``<check>_<episode>_<moment>`` (the check name may contain underscores)."""
+    return int(sample_id.rsplit("_", 2)[1])
+
+
 def sweep(rows: list[dict[str, Any]], thresholds=(0.5, 0.6, 0.7, 0.8)) -> dict[str, dict[str, Any]]:
     """Confusion counts per confidence threshold, overall and for the dev (even) / test (odd) episode split."""
     out: dict[str, dict[str, Any]] = {}
     for split in ("all", "dev", "test"):
         part = [r for r in rows if "done" in r and r["truth"] is not None
-                and (split == "all" or (int(r["id"].split("_")[1]) % 2 == 0) == (split == "dev"))]
+                and (split == "all" or (_ep(r["id"]) % 2 == 0) == (split == "dev"))]
         for t in thresholds:
             p = [r["done"] and r["confidence"] >= t for r in part]
             tp = sum(x and r["truth"] for x, r in zip(p, part, strict=True))
@@ -281,13 +390,14 @@ def evaluate(samples: list[Sample], variants: list[str], checks: list[str], llm:
              threshold: float = 0.7) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for name in variants:
-        v = VARIANTS[name]
+        v = name if isinstance(name, SkillVariant) else VARIANTS[name]
+        name = v.name
         jobs = [(c, s) for c in checks for s in samples if not (s.id.endswith("m50") and s.truth[c] is None)]
         t0 = time.time()
         with ThreadPoolExecutor(max_workers=workers) as pool:
             rows = list(pool.map(lambda job, v=v: judge(llm, v, job[0], job[1], threshold), jobs))
         out[name] = {"variant": {k: getattr(v, k) for k in ("model", "effort", "thinking", "crop", "max_side",
-                                                             "wrist")} | {"hints": bool(v.hints)},
+                                                             "wrist")} | {"hints": bool(v.hints), "system": v.system},
                      "wall_s": round(time.time() - t0, 1),
                      "checks": {c: score([r for r in rows if r["check"] == c]) for c in checks},
                      "sweep": {c: sweep([r for r in rows if r["check"] == c]) for c in checks},
@@ -303,6 +413,14 @@ def evaluate(samples: list[Sample], variants: list[str], checks: list[str], llm:
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--snapshot", required=True, type=Path)
+    p.add_argument("--dataset", default="", help="any skill's dataset under --snapshot (with --skill)")
+    p.add_argument("--skill", default="", help="the vocabulary skill whose check is measured on --dataset")
+    p.add_argument("--vocabulary", default=None, help="default: orchestrator/skills.yaml (the final chain)")
+    p.add_argument("--wrist-key", default=None, help="dataset wrist camera key to send too (--variants live_wrist)")
+    p.add_argument("--mid", default="", help="comma-separated fractions where the step is surely not done (by eye)")
+    p.add_argument("--end-false", default="", help="comma-separated rejected episodes whose end is surely not done")
+    p.add_argument("--skip", default="", help="comma-separated episodes to leave out (e.g. one still being written)")
+    p.add_argument("--sheet", type=Path, default=None, help="also write a labelled contact sheet of the frames")
     p.add_argument("--variants", default="current,scene")
     p.add_argument("--checks", default="put,take")
     p.add_argument("--only", default="", help="comma-separated sample ids or prefixes (e.g. put_0,take_)")
@@ -310,23 +428,42 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--split", choices=("all", "dev", "test"), default="all",
                    help="dev = even episode indices (prompt tuning), test = odd ones (held out)")
     p.add_argument("--budget", type=float, default=1.0, help="USD cap for this evaluation")
-    p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--workers", type=int, default=2, help="parallel Claude calls (I/O bound; keep low while recording)")
     p.add_argument("--out", type=Path, default=None)
     a = p.parse_args(argv)
-    samples = load_samples(a.snapshot)
+    ints = lambda s: tuple(int(x) for x in s.split(",") if x.strip())  # noqa: E731
+    if a.dataset:
+        from .skills import load_vocabulary
+
+        vocab = load_vocabulary(a.vocabulary)
+        samples = load_skill_samples(a.snapshot / a.dataset, a.skill, a.wrist_key,
+                                     tuple(float(x) for x in a.mid.split(",") if x.strip()), ints(a.end_false),
+                                     ints(a.skip))
+        variants = []
+        for v in a.variants.split(","):  # live | generic, optionally _wrist and @<model> (e.g. live@claude-sonnet-5-5)
+            name, _, model = v.partition("@")
+            sv = SkillVariant(name.removesuffix("_wrist"), vocab, a.skill, wrist=name.endswith("_wrist"))
+            if model:
+                sv.model, sv.name = model, f"{sv.name}@{model}"
+            variants.append(sv)
+        checks = [a.skill]
+        if a.sheet:
+            write_sheet(samples, a.sheet)
+    else:
+        samples = load_samples(a.snapshot)
+        variants, checks = a.variants.split(","), a.checks.split(",")
     if a.every > 1:
         samples = [s for s in samples if int(s.id.split("_")[1]) % a.every == 0
                    or (s.id.startswith("put") and int(s.id.split("_")[1]) in PUT_REJECTS) or s.id.startswith("take")]
     if a.split != "all":
-        samples = [s for s in samples if (int(s.id.split("_")[1]) % 2 == 0) == (a.split == "dev")]
+        samples = [s for s in samples if (_ep(s.id) % 2 == 0) == (a.split == "dev")]
     if a.only:
         keys = a.only.split(",")
         samples = [s for s in samples if any(s.id.startswith(k) for k in keys)]
     meter = CostMeter(a.budget)
     report = {"time": datetime.now().isoformat(timespec="seconds"), "snapshot": str(a.snapshot),
               "samples": len(samples), "threshold": 0.7,
-              "results": evaluate(samples, a.variants.split(","), a.checks.split(","), ClaudeJSON(meter),
-                                  a.workers)}
+              "results": evaluate(samples, variants, checks, ClaudeJSON(meter), a.workers)}
     report["total_usd"] = round(meter.total_usd, 4)
     out = a.out or PACKAGE_DIR / "runs" / f"verify_eval_{datetime.now():%Y%m%d_%H%M%S}.json"
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -98,6 +98,100 @@ recording protocol's S1 to S5) until the demo task is final.
   VR demos, so look at a few checks in the observe dry run.
 - **Run command**: `orchestrator/README.md`, "Sunday demo".
 
+## Final chain: 4 skills, both Haller arms (2026-10-18 night)
+
+**What changed for Oscar's final demo** (right arm opens the box, then the left arm puts the green pen, the yellow
+cutter and the red pen in their slots; `orchestrator/skills.yaml` version 3, the pen-only vocabulary moved to
+`skills_haller_pen.yaml`):
+- **Both arms in one process** (`haller.py`): one `SingleArmRobot` per arm from run_single_arm.py, merged by `PairRobot`
+  into the runner's 12-D interface (head camera from the left arm's connection, each arm's own wrist camera: USB 7.2 /
+  7.3, both rotated 180, from haller_ws' recorder config). `ArmsKeepOutGuard` applies run_single_arm's keep-out rule to
+  each arm; with both arms connected, each arm's `other_arm` zone follows the other arm's measured pose every tick, so
+  the bus read of a parked arm (and its fail-closed block) is only used by the pen-only vocabulary. Limits, ramp
+  limits and the stall / keep-out / load monitors are per arm; the e-stop holds both.
+- **Per-skill packages** (`--skill-package SKILL=PACKAGE`, one LoRA per skill on 8790) and per-skill keep-out
+  envelopes (`keepout:` in the vocabulary; the red pen keeps its 84-take envelope, the new skills run under station
+  zones until theirs exist). Warm-up encodes each prompt once per (arm, package).
+- **Transitions from the demos' start states** (`station.poses`, measured in the datasets; parent's corrected chain,
+  2026-10-18): `open_box` tucks the pen arm, ramps the box arm home and runs until the lid check passes; then the box
+  arm FREEZES holding the lid open (no ramp: the runner holds its last command; the lid closes if it lets go). Each pen
+  skill (re-recorded with the box arm holding the lid) first runs the lid check again (`precheck: open_box`): a closed
+  lid latches the e-stop before the pen arm moves (all arms hold; Resume re-checks); then the pen arm ramps tucked ->
+  home with the holding box arm as a live collision capsule, runs its skill and parks at home (`park_after`: let go,
+  ramp home, the same check again; a pen dragged out fails and retries). One arm moves at a time, ramps under the ramp
+  limits, the station keep-out (other arm's capsules included) and the load freeze. Offline check of the tuck <-> home
+  ramps at 1 deg/tick: no keep-out zone touched (deepest 0.0 m in torso, mast, midline, other_arm), inside both arms'
+  calibrated ramp limits (about 103 steps, 3.4 s each). An optional final `tuck` puts the pen arm away.
+- **Holds keep the grip**: an e-stop freezes each arm's joints at the measured pose (run_single_arm's hold_here) but
+  keeps each gripper's last command, so the box arm keeps squeezing the lid's tab (and a carried pen is not dropped);
+  the stall stop only watches arms that a target drives (the holding box arm lags its command under the lid's weight by
+  design); the load freeze watches every arm.
+- **Keep-out stop** now so101-zeroshot's rule: 45 refusals among the last 60 policy ticks, "waiting" holds neither count
+  nor clear (the consecutive count never fired with FLUX's chunks).
+- **HMI**: a numbered chain strip with per-step status above the two arm lanes, the goal pre-filled from
+  `station.demo_goal`, and with `--imagine lazy` an imagined-vs-actual panel (`imagination_panel.py`: for each new chunk
+  the server's lazily decoded imagination is fetched in the background and the frame imagined for the next replan,
+  +32 steps = 1.07 s ahead, is shown next to the real head | wrist pair recorded closest to that moment).
+- **Verified offline**: `tests/test_chain.py` (9 tests): the whole chain end to end on both fake arms against
+  flux.remote's real HTTP server (one fake package per skill, token): the exact sequence of 12 ramps and skills, never
+  two targets moving at once, the box arm frozen from the end of open_box on, the lid prechecked before each pen
+  skill, each pen skill at home on its own package and prompt and checked twice (before and after parking), one trial
+  line per attempt; a closed lid holding everything before the pen arm moves, then Resume; the final tuck; the lid-falls-back retry; the live
+  other-arm keep-out; the imagination panel against a fake imagining server; the CLI. The Claude planner plans the chain
+  with the right arms (live: 6.4 s, USD 0.020).
+
+**Success checks for the new skills** (`verify_eval.py --dataset <name> --skill <skill>`, the same method as the pen:
+start frames = not done, end frames of kept takes = done, rejects by note, by-eye mid frames = not done, measured
+exactly as `ClaudeVerifier` sends it):
+
+| Skill | Takes so far | Frames | Live prompt | Generic prompt | Status |
+|-------|--------------|--------|-------------|----------------|--------|
+| open_box: "The lid of the box is open." | 25 (01:30) + 21 held out (takes 25 to 48) | 75 + 63 | 75/75 and 63/63 held out, no false pass, 1.3 s median, USD 0.00015 | 58/75 and 45/63 (71 %) | done |
+| put_green_pen_in_slot | 6 (tuned) + 37 held out (takes 6 to 45) | 18 + 119 | held out: 114/119 (96 %), 2 false passes in 82 not-done frames | 39/56 (passes no end) | shipped; see below |
+| put_yellow_cutter_in_slot | 31 (prompt written before any frame was seen: all held out) | 91 | 91/91, no false pass, 1.2 s median, USD 0.00014 | 15/21 (first 7) | done |
+| put_pen_in_slot | old scene only | 282 | 97.1 % | 62.2 % | re-check in the new scene |
+
+open_box in detail (`research/verify_eval_open_box_2026-10-18.json`): frames = start (closed), 35 % (the arm at the
+lid, still closed; checked by eye on all 25), end (kept takes open; rejects 3, 7, 16, 19, 21 end closed). The scene
+prompt written on takes 0 to 4 scored 73/75 on all 25 (held-out odd takes 35/36), no false pass; both misses said the
+lid was "not visible" (it swings back out of the frame), as did all 17 misses of the generic prompt. The hint now
+says the lid may be out of the picture: 75/75 on those, and **63/63 on takes 25 to 48, which it never saw** (21 takes:
+start, 35 % and end; fragments 28, 46, 47 left out; take 41 ends closed and was not passed), no false pass, median
+1.36 s; the generic prompt got 45/63 there. Not covered: half-open lids (no labelled frames). The review notes call the box takes' intended end state
+"the box arm holding the lid open", and the lid closes if the arm lets go (take 3 shows it):
+the corrected chain (parent, 2026-10-18) keeps the box arm holding it, and checks the lid again before each pen skill.
+
+put_green_pen_in_slot (first 6 takes, box arm holding the lid): frames = start (pen on the mat), 35 % (pen being picked
+up from the mat, slot empty; checked by eye), end (pen standing in the green-strip holder). The generic prompt passed
+none of the 6 ends ("lies flat", "no green slot visible"). The scene prompt says the pen in its slot covers the green
+strip and that seating cannot be judged from this camera: 4/6 ends passed, the other 2 said done at confidence 0.6
+(threshold 0.7 kept: a miss only costs another check two chunks later, a false pass stops FLUX early), every not-done
+frame was answered not done at 0.7 to 0.9. Held out on takes 6 to 24 (take 14 a hand in the box: edge case; take 18
+ends with the pen lying diagonally across the slot: not done, and not passed): 53/56 (15/17 done, 38/39 not done), one
+false pass: take 17 at 35 %, the pen still in the gripper over the mat, the EMPTY slot's vertical green strip taken
+for a standing pen. Two fixes were tried and dropped: (1) a hint warning about that strip: no false pass on takes 6 to
+24 but on the clean takes 25 to 45 only 54/63, and its misses described the pen in its slot and still answered
+done=false (too skeptical); (2) a location answer (`verify_states`: the model names where the pen is, done = "standing
+in the green slot"): it read the empty slot's strip as the pen on most start frames (17 to 22 false passes per set).
+Shipped: the plain prompt, clean on takes 25 to 45: 61/63, one false pass (take 44's end: the pen stands BESIDE the
+slot; a yes / no check from this camera cannot tell), one miss at confidence 0.6. Held out over takes 6 to 45:
+114/119, 2 false passes in 82 not-done frames, median 1.3 s, USD 0.00018 per check. Sonnet 5.5 on takes 6 to 24: the
+same accuracy, median 2.0 s, USD 0.0032 per check (18x Haiku): Haiku stays. A false pass with the pen still in the
+gripper costs one attempt (the arm lets go, parks, the re-check fails, the step retries); a pen left beside the slot
+is not caught.
+
+put_yellow_cutter_in_slot: the "yellow slot" is the LOWER WHITE rectangle in the box, left unpainted on purpose (Oscar);
+the check is written around "the yellow cutter lies in the lower white slot of the box" and says the green pen standing
+in its painted slot says nothing about the cutter. Frames: start (cutter on the mat), 35 % (the gripper taking it from
+the mat; checked by eye), end (cutter flat in the lower white slot). The FLUX task string stays "put the yellow cutter
+in the yellow slot". All four task strings are now confirmed by the recordings. Takes 0 to 30: 91/91 correct, no false
+pass (takes 29 and 30 end with the cutter still on the mat and were not passed; rejects 10 and 27, the pen arm saved
+over the box, scored as edge cases).
+
+The new scene differs from the pen recordings: the pens and the cutter lie on the black mat, the box (closed at the
+start, a tape handle on the lid's front edge) stands to its right and the box arm swings the lid up and back. The
+open_box prompt describes that scene; the red pen's prompt still describes the old one.
+
 ## Success checks on real frames (2026-10-17 night, offline, Haiku 5.5)
 
 **Result.** The check as first configured (generic verifier prompt plus the skill's sentence) almost never passes a

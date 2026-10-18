@@ -20,18 +20,22 @@ class PrimitiveBackend:
     contract = SO101_CONTRACT
 
     def __init__(self, home: np.ndarray | None = None, joint_step: float = 2.0, gripper_step: float = 5.0,
-                 release_first: bool = False):
+                 release_first: bool = False, poses: dict | None = None):
         self.home = np.asarray(HOME_DEG if home is None else home, dtype=float)
+        # named poses of this arm (station.poses): a task with that name ramps there; "tuck" goes to "tucked"
+        self.poses = {k: np.asarray(v, dtype=float) for k, v in (poses or {}).items()}
         self.joint_step = joint_step
         self.gripper_step = gripper_step
-        # ``home`` opens the gripper in place before the arm moves: a FLUX step can end (its check passed) with the
-        # pen still gripped in its slot, and moving while the gripper opens would drag the pen out (Haller)
+        # a ramp that opens the gripper (``home``) opens it in place before the arm moves: a FLUX step can end (its
+        # check passed) with the pen still gripped in its slot, and moving while it opens would drag the pen out
         self.release_first = release_first
 
     def goal(self, task: str, anchor: np.ndarray) -> np.ndarray:
         goal = np.asarray(anchor, dtype=float).copy()
         if task == "home":
             goal = self.home.copy()
+        elif task in self.poses or (task == "tuck" and "tucked" in self.poses):
+            goal = self.poses[task if task in self.poses else "tucked"].copy()
         elif task == "open_gripper":
             goal[5] = GRIPPER_OPEN
         elif task == "close_gripper":
@@ -54,7 +58,7 @@ class PrimitiveBackend:
         frames, cur = [], anchor
         for _ in range(self.contract.chunk_size):
             step = np.clip(goal - cur, -limit, limit)
-            if self.release_first and request.task == "home" and goal[5] > cur[5] + 1e-6:
+            if self.release_first and goal[5] > cur[5] + 1e-6 and request.task not in ("open_gripper",):
                 step[:5] = 0.0  # gripper first, arm still
             cur = cur + step
             frames.append(cur)

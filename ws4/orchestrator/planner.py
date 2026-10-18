@@ -56,7 +56,7 @@ class StubPlanner:
     def _clause_skills(self, clause: str) -> list[Skill]:
         found: list[tuple[int, Skill]] = []
         for skill in self.vocab.skills.values():
-            if skill.kind not in ("flux", "operator"):
+            if skill.kind not in ("flux", "operator") and not skill.keywords:  # e.g. "tuck" has keywords
                 continue
             hits = [clause.find(k) for k in skill.keywords if k in clause]
             if hits:

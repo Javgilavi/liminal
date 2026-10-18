@@ -64,7 +64,7 @@ def load_trial_log():
 
 @dataclass
 class SessionConfig:
-    env: str = "sim"  # sim | haller (Sunday demo: robot-left arm via ws4/single_arm) | xlerobot (both arms)
+    env: str = "sim"  # sim | haller (the Haller via ws4/single_arm: arms per the vocabulary's station) | xlerobot
     policy: str = "scripted"  # scripted (sim only) | fake | remote
     planner: str = "stub"  # stub | claude
     verifier: str = "auto"  # auto | truth | claude | shadow | manual
@@ -80,6 +80,8 @@ class SessionConfig:
     package: str = "so101"
     left_package: str | None = None
     right_package: str | None = None
+    skill_packages: dict[str, str] = field(default_factory=dict)  # skill -> policy server package (one LoRA per skill)
+    imagine: str = ""  # "lazy": the server keeps FLUX's imagined frames per chunk; the HMI shows them
     async_inference: bool | None = None  # default: True for remote
     # Sim
     seed: int | None = 0
@@ -102,7 +104,14 @@ class SessionConfig:
     wrist_rotate: int = 180
     scene_fourcc: str = "none"
     wrist_fourcc: str = "none"
-    keepout_config: str = str(WS4 / "single_arm" / "calibration" / "haller_right_workspace.json")
+    # robot-left arm's station zones (no envelope; a skill's envelope comes from its `keepout:` in the vocabulary)
+    keepout_config: str = str(WS4 / "single_arm" / "calibration" / "haller_right_workspace_noenv.json")
+    # robot-RIGHT arm (final chain: it opens the box); its wrist camera is right_wrist_cam (default below)
+    right_arm_port: str = "/dev/haller_arm_left"
+    right_robot_id: str = "haller_left"
+    right_keepout_config: str = ""  # empty: KeepOut.for_haller("right") (station geometry), VERIFY table height
+    right_fake_start: tuple[float, ...] | None = None
+    right_fake_calibration: str = ""
     max_relative_target: float = 20.0
     torque_limit: float = 60.0
     max_step: float = 2.0
@@ -117,6 +126,7 @@ class SessionConfig:
     stall_deg: float = 8.0
     stall_ticks: int = 15
     keepout_ticks: int = 45
+    keepout_window: int = 60  # keep-out stop: keepout_ticks refusals among the last keepout_window policy ticks
     home_speed: float = 1.0  # deg per tick when ramping to the start pose (run_single_arm --return-speed)
     allow_torque_off: bool = False
     read_other_arm: bool = True  # read the parked arm's pose before each FLUX step (keep-out other_arm zone)
@@ -175,6 +185,11 @@ class Session:
     def __init__(self, cfg: SessionConfig | None = None, llm_client: Any = None, threaded: bool = False):
         self.cfg = cfg = cfg or SessionConfig()
         self.vocab: Vocabulary = load_vocabulary(cfg.vocabulary or (SIM_VOCABULARY if cfg.env == "sim" else None))
+        unknown = sorted(set(cfg.skill_packages) - set(self.vocab.skills))
+        if unknown:
+            raise ValueError(f"--skill-package names unknown skills {unknown}; have {self.vocab.names()}")
+        for name, pkg in cfg.skill_packages.items():  # one LoRA per skill on the policy server
+            self.vocab.skills[name] = dataclasses.replace(self.vocab.skills[name], package=pkg)
         self.rig = None  # HallerRig on env=haller
         self.runs_dir = Path(cfg.runs_dir) if cfg.runs_dir else RUNS_DIR
         self.events = EventLog(echo=cfg.echo_events)
@@ -194,6 +209,7 @@ class Session:
         self.run_dir: Path | None = None
         self._plan_version = 0
         self._closing = False
+        self.imagination: Any = None  # ImaginationPanel with --imagine on the policy server
         self._thread: threading.Thread | None = None
         if threaded:
             ready = threading.Event()
@@ -228,12 +244,15 @@ class Session:
         elif cfg.env == "haller":
             from . import haller
 
-            self.rig = haller.build(cfg, self.vocab.station.home_pose)
+            self.rig = haller.build(cfg, self.vocab.station)
             base_robot = self.rig.robot
             for m in self.rig.monitors:  # ramps: first keep-out refusal stops; no load freeze (as run_single_arm)
                 if hasattr(m, "ramping"):
-                    m.ramping = lambda: self.executor is not None and any(
-                        r.ramp_on for r in self.executor.runs.values() if r.status == "running")
+                    m.ramping = self._arm_ramping
+                if hasattr(m, "owner"):
+                    m.owner = lambda arm: getattr(self, "runner", None) and self.runner._owner.get(arm)
+                if hasattr(m, "active"):
+                    m.active = lambda arm: bool(getattr(self, "runner", None) and self.runner._owner.get(arm))
         elif cfg.env == "xlerobot":
             from flux.run_xlerobot import LeRobotBimanualRobot, build_robot
 
@@ -248,11 +267,11 @@ class Session:
         self.target_backend: dict[str, Any] = {}  # runner target name -> backend object
         targets = []
         arms = self.vocab.station.arms_available if self.rig is not None else ARMS
-        home = self.vocab.station.home_pose
-        prim = PrimitiveBackend(home=None if home is None else np.array(home),
-                                joint_step=cfg.home_speed if self.rig is not None else 2.0,
-                                release_first=self.rig is not None)
         for arm in arms:
+            home = self.vocab.station.home_for(arm)
+            prim = PrimitiveBackend(home=None if home is None else np.array(home),
+                                    joint_step=cfg.home_speed if self.rig is not None else 2.0,
+                                    release_first=self.rig is not None, poses=self.vocab.station.poses_for(arm))
             name = f"prim_{arm}"
             self.backends[name] = prim
             targets.append(dataclasses.replace(per_arm_target(arm, name), name=f"{arm}:prim"))
@@ -268,14 +287,15 @@ class Session:
                 targets.append(dataclasses.replace(per_arm_target(arm, f"sim_{arm}"), name=f"{arm}:sim"))
                 self.target_backend[f"{arm}:sim"] = be
         elif cfg.policy in ("fake", "remote"):
-            packages = sorted({cfg.package_for(a) for a in arms} | {s.package for s in self.vocab.skills.values()
-                                                                    if s.package})
-            for pkg in packages:
+            # one target per (arm, package) a FLUX skill can use on that arm
+            uses = {(a, s.package or cfg.package_for(a)) for s in self.vocab.skills.values() if s.is_flux
+                    for a in s.arms if a in arms}
+            for pkg in sorted({p for _, p in uses}):
                 self.backends[pkg] = self._policy_backend(pkg)
-                for arm in arms:
-                    t = f"{arm}:{pkg}"
-                    targets.append(dataclasses.replace(per_arm_target(arm, pkg), name=t))
-                    self.target_backend[t] = self.backends[pkg]
+            for arm, pkg in sorted(uses):
+                t = f"{arm}:{pkg}"
+                targets.append(dataclasses.replace(per_arm_target(arm, pkg), name=t))
+                self.target_backend[t] = self.backends[pkg]
         else:
             raise ValueError(f"unknown policy {cfg.policy!r}")
 
@@ -296,12 +316,20 @@ class Session:
         self.runner = GatedDualArmRunner(robot, targets, self.backends, guard, async_inference=async_inf,
                                          gate=self.gate, on_event=lambda lvl, msg, data: self.events.add(lvl, msg,
                                                                                                         **data))
+        if cfg.imagine and cfg.policy == "remote":
+            from .imagination_panel import ImaginationPanel
+
+            self.imagination = ImaginationPanel(self.runner, {t: be for t, be in self.target_backend.items()
+                                                              if not t.endswith(":prim")}, cfg.fps)
         self.verifier = self._make_verifier()
         self.planner = self._make_planner()
         if self.rig is not None and cfg.policy == "remote":
-            policy_targets = [t for t in targets if not t.name.endswith(":prim")]
-            for t in policy_targets[:1]:
-                self.rig.warm_up(self.backends[t.backend], t, self.vocab.flux_prompts())
+            for t in targets:  # every prompt once per (arm, package), so no attempt waits for its encoding
+                arm, pkg = t.name.split(":")
+                prompts = [s.prompt for s in self.vocab.skills.values() if s.is_flux and arm in s.arms
+                           and (s.package or cfg.package_for(arm)) == pkg]
+                if prompts:
+                    self.rig.warm_up(self.backends[t.backend], t, prompts)
         self._last_obs = base_robot.get_observation()
         self._encode_frames(self._last_obs)
         self.events.add("info", f"session ready: env={cfg.env} policy={cfg.policy} planner={cfg.planner} "
@@ -332,7 +360,7 @@ class Session:
             if out.returncode != 0 or not out.stdout.strip():
                 raise SystemExit(f"--token-cmd failed (exit {out.returncode}): {out.stderr.strip()[:200]}")
             token = out.stdout.strip()
-        return RemoteBackend(cfg.server, package, token=token, timeout_s=90.0)
+        return RemoteBackend(cfg.server, package, token=token, timeout_s=90.0, imagine=cfg.imagine)
 
     def _make_verifier(self) -> Any:
         kind = self.cfg.verifier
@@ -399,7 +427,14 @@ class Session:
             self._frames.update(frames)
             self._last_obs = obs
 
+    def _on_frame(self, obs: dict) -> None:
+        self._encode_frames(obs)
+        if self.imagination is not None:
+            self.imagination.on_frame(obs)
+
     def frame(self, name: str) -> bytes | None:
+        if name in ("imagined", "actual"):
+            return self.imagination.frame(name) if self.imagination is not None else None
         with self._lock:
             return self._frames.get(name)
 
@@ -542,6 +577,8 @@ class Session:
         if self._thread is not None:
             self._thread.join(timeout=5)
         self.runner.close()
+        if self.imagination is not None:
+            self.imagination.close()
         if self.rig is not None:
             self.events.add("info", f"robot closed: {self.rig.close()}")
 
@@ -586,7 +623,7 @@ class Session:
             runner=self.runner, robot=self.robot, vocab=self.vocab, verifier=self.verifier,
             resolve_target=self.resolve_target, backends=self.target_backend, events=self.events, fps=cfg.fps,
             realtime=cfg.realtime, clock="ticks" if self.sim is not None else "wall", max_replans=cfg.max_replans,
-            on_replan=self._on_replan, on_frame=lambda obs, report: self._encode_frames(obs),
+            on_replan=self._on_replan, on_frame=lambda obs, report: self._on_frame(obs),
             max_run_s=cfg.max_run_s,
             # observe sends nothing, so a ramp would never arrive (run_single_arm skips it there too)
             home_target=lambda arm: f"{arm}:prim" if f"{arm}:prim" in self.target_backend
@@ -648,6 +685,14 @@ class Session:
             return "sim:scripted-stand-in"
         return ", ".join(f"{a}={cfg.package_for(a)}" for a in self._arms())
 
+    def demo_goal(self) -> str:
+        return self.vocab.station.demo_goal or "put the apple and the yellow block in the box, then close the lid"
+
+    def _arm_ramping(self, arm: str | None = None) -> bool:
+        ex = self.executor
+        return ex is not None and any(r.ramp_on and (arm is None or r.ramp_arm == arm)
+                                      for r in ex.runs.values() if r.status == "running")
+
     def _before_attempt(self, run: Any) -> str | None:
         pose = self.rig.refresh_other_arm()
         self._other_arm[(run.step.id, run.attempt)] = pose.note
@@ -708,7 +753,7 @@ class Session:
                        "planner_model": self.cfg.planner_model if self.cfg.planner == "claude" else None,
                        "verifier": self.verifier.name, "gate": bool(self.gate), "realtime": self.cfg.realtime,
                        "seed": self.cfg.seed, "lid_on_box": self.cfg.lid_on_box, "task": self.cfg.task,
-                       "trial_log": str(self.trial_log_path())},
+                       "trial_log": str(self.trial_log_path()), "demo_goal": self.demo_goal()},
             "goal": self.goal,
             "planning": self.planning,
             "proposal": proposal,
@@ -720,4 +765,6 @@ class Session:
             "last_result": self.last_result,
             "vocabulary": [{"name": s.name, "kind": s.kind, "arms": list(s.arms), "prompt": s.prompt}
                            for s in self.vocab.skills.values()],
+            "arms": list(self.vocab.station.arms_available) if self.rig is not None else list(ARMS),
+            "imagination": self.imagination.state() if self.imagination is not None else {"enabled": False},
         }

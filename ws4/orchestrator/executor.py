@@ -38,6 +38,15 @@ TERMINAL = ("succeeded", "failed", "aborted")
 MOVING = ("executing", "replanned")
 
 
+def _other(arm: str) -> str:
+    return "right" if arm == "left" else "left"
+
+
+def _arms_of(run: StepRun) -> set[str]:
+    """The arms a step occupies: its own, and the other one when the skill also poses it (e.g. tucked)."""
+    return {run.step.arm} | ({_other(run.step.arm)} if run.skill.other_arm_pose else set())
+
+
 @dataclass
 class StepRun:
     step: Step
@@ -55,8 +64,15 @@ class StepRun:
     verdicts: list[Verdict] = field(default_factory=list)
     reason: str = ""
     phase: str = ""
-    homing: bool = False  # ramping to the skill's start pose before the policy starts
-    ramp_on: bool = False  # a scripted ramp (homing or the home step) runs: ramp_mode(True) is in effect
+    homing: bool = False  # positioning before the policy starts: the other arm to its pose, then this arm to its own
+    prechecking: bool = False  # the skill's precheck (e.g. the lid is still open) runs before anything moves
+    precheck_started: bool = False
+    moves: list = field(default_factory=list)  # (arm, pose name) ramps still to do before the policy
+    move: tuple | None = None  # the (arm, pose name) ramp in progress
+    ramp_arm: str | None = None  # the arm whose ramp mode is on
+    ramp_on: bool = False  # a scripted ramp (homing, parking or the home step) runs: ramp_mode(True) is in effect
+    parking: bool = False  # park_after: the check passed; releasing, ramping home, then checking once more
+    park_checked: bool = False
     t_home: float = 0.0
     policy_started: bool = False
     attempt_interventions: int = 0
@@ -112,7 +128,7 @@ class Executor:
         on_attempt: Callable[[StepRun, bool, str], None] | None = None,
         on_estop: Callable[[str], None] | None = None,
         before_attempt: Callable[[StepRun], str | None] | None = None,
-        ramp_mode: Callable[[bool], None] | None = None,
+        ramp_mode: Callable[[str, bool, Skill], None] | None = None,
     ):
         self.runner = runner
         self.robot = robot
@@ -135,7 +151,9 @@ class Executor:
         self.on_estop = on_estop
         # e.g. refresh the parked arm's pose for the keep-out; a returned reason blocks the attempt (e-stop latched)
         self.before_attempt = before_attempt
-        self.ramp_mode = ramp_mode  # True while ramping to a start pose (e.g. station-only keep-out), False after
+        # (arm, True, skill) while that arm ramps (ramp limits, station-only keep-out); (arm, False, skill) when the
+        # skill's policy runs or the arm is idle again (policy limits, the skill's keep-out)
+        self.ramp_mode = ramp_mode
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="verify")
         self._lock = threading.RLock()
         self._commands: list[tuple[str, Any]] = []
@@ -365,17 +383,17 @@ class Executor:
             self._fail_attempt(run, "operator marked it failed")
 
     def _schedule(self) -> None:
-        busy = {r.step.arm for r in self.runs.values() if r.status == "running"} | set(self.parking)
+        busy = set().union(*(_arms_of(r) for r in self.runs.values() if r.status == "running")) | set(self.parking)
         for run in list(self.runs.values()):
             if self.state != "running":
                 return
-            if run.status != "pending" or run.step.arm in busy:
+            if run.status != "pending" or _arms_of(run) & busy:
                 continue
             if all(d in self.done_ids or (d in self.runs and self.runs[d].status == "done")
                    for d in run.step.depends_on):
                 self._start(run)
                 if run.status == "running":
-                    busy.add(run.step.arm)
+                    busy |= _arms_of(run)
 
     def _check_stall(self) -> None:
         """Nothing running and nothing startable: the run can never finish (a dependency failed for good)."""
@@ -394,6 +412,8 @@ class Executor:
         run.status, run.t_start, run.t_end = "running", self.t, None
         run.chunks, run.verify_at, run.final_check = 0, skill.verify_every_chunks, False
         run.reason, run.phase, run.homing, run.policy_started = "", "", False, False
+        run.parking = run.park_checked = False
+        run.prechecking = run.precheck_started = False
         run.attempt_interventions = 0
         if skill.name == "hold":
             run.target = None
@@ -406,17 +426,39 @@ class Executor:
                 self.events.add("error", f"{step.id}: not started: {block}")
                 self.estop(block)  # the arm holds where it is; Resume retries this attempt
                 return
-        home = self.home_target(step.arm) if (self.home_target and skill.kind in ("flux", "operator")
-                                              and skill.start_pose == "home") else None
-        if home is not None:
-            # Every FLUX step starts where its demonstrations started: ramp there through the same guard first.
-            self._ramp(run, True)
-            self.runner.start(home, "home")
-            run.target, run.homing, run.t_home, run.phase = home, True, self.t, "homing"
-            self.events.add("info", f"{step.id}: moving the {step.arm} arm to the start pose before attempt "
-                            f"{run.attempt}/{step.max_attempts}")
+        if skill.precheck:
+            if getattr(self.verifier, "name", "") == "manual":
+                self.events.add("warn", f"{step.id}: precheck {skill.precheck} skipped (manual verifier)")
+            else:
+                run.prechecking, run.phase = True, f"checking that {skill.precheck} still holds"
+                return  # _update runs the check on the next frame, before anything moves
+        self._begin_moves(run)
+
+    def _begin_moves(self, run: StepRun) -> None:
+        step, skill = run.step, run.skill
+        # Every FLUX step starts where its demonstrations started: the other arm in its pose (e.g. tucked), then this
+        # arm in its start pose, one arm moving at a time, each through the ramp guard.
+        moves = []
+        if self.home_target is not None and skill.kind in ("flux", "operator"):
+            other = _other(step.arm)
+            if skill.other_arm_pose and self.home_target(other) is not None:
+                moves.append((other, skill.other_arm_pose))
+            if skill.start_pose and self.home_target(step.arm) is not None:
+                moves.append((step.arm, skill.start_pose))
+        if moves:
+            run.moves, run.homing = moves, True
+            self._next_move(run)
             return
         self._start_policy(run)
+
+    def _next_move(self, run: StepRun) -> None:
+        arm, pose = run.moves.pop(0)
+        target = self.home_target(arm)
+        run.move, run.target, run.t_home = (arm, pose), target, self.t
+        run.phase = f"moving the {arm} arm to its {pose} pose"
+        self._ramp(run, True, arm)
+        self.runner.start(target, pose)
+        self.events.add("info", f"{run.step.id}: {run.phase} before attempt {run.attempt}/{run.step.max_attempts}")
 
     def _start_policy(self, run: StepRun) -> None:
         from .sim_backend import SimSkillError
@@ -429,8 +471,10 @@ class Executor:
             return
         target = self.resolve_target(step, skill)
         backend = self.backends.get(target)
-        if skill.name == "home":  # a scripted ramp too
+        if skill.name in ("home", "tuck"):  # scripted ramps too
             self._ramp(run, True)
+        elif skill.is_flux and self.ramp_mode is not None:
+            self.ramp_mode(step.arm, False, skill)  # this skill's keep-out (envelope) and the policy limits
         try:
             if hasattr(backend, "begin"):
                 backend.begin(target, step.arm, skill)
@@ -480,17 +524,28 @@ class Executor:
                 continue
             backend = self.backends.get(run.target)
             state6 = state12[arm_slice(step.arm)]
+            if run.prechecking:
+                self._update_precheck(run, obs)
+                continue
+            if run.parking:
+                self._update_parking(run, backend, report, obs, state6)
+                continue
             if run.homing:
-                if backend.reached("home", report.command[arm_slice(step.arm)], state6):
+                arm, pose = run.move
+                if backend.reached(pose, report.command[arm_slice(arm)], state12[arm_slice(arm)]):
                     self.runner.stop(run.target)
-                    run.homing = False
                     self._ramp(run, False)
-                    self.events.add("info", f"{step.id}: at the start pose")
-                    self._start_policy(run)
+                    self.events.add("info", f"{step.id}: {arm} arm at its {pose} pose")
+                    if run.moves:
+                        self._next_move(run)
+                    else:
+                        run.homing, run.move = False, None
+                        self._start_policy(run)
                 else:
                     limit = self.vocab["home"].timeout_s if "home" in self.vocab else 30.0
                     if self.t - run.t_home > limit:
-                        self._fail_attempt(run, f"did not reach the start pose within {limit:.0f} s", retry=False)
+                        self._fail_attempt(run, f"the {arm} arm did not reach its {pose} pose within {limit:.0f} s",
+                                           retry=False)
                 continue
             if skill.kind == "operator":
                 if self.t - run.t_start > skill.timeout_s:
@@ -536,10 +591,83 @@ class Executor:
                         f"({verdict.source}, conf {verdict.confidence:.2f}): {verdict.observation}"
                         + (f" [{verdict.error}]" if verdict.error else ""), step=run.step.id,
                         verdict=verdict.as_dict())
-        if ok:
+        if ok and run.skill.park_after and not run.parking:
+            self._park(run, verdict.observation)
+        elif ok:
             self._complete(run, verdict.observation)
+        elif run.parking:
+            self._fail_attempt(run, f"the check failed after parking: {verdict.observation}")
         elif run.final_check:
             self._fail_attempt(run, f"motion finished but the check failed: {verdict.observation}")
+
+    def _update_precheck(self, run: StepRun, obs: dict) -> None:
+        """A skill's precheck (e.g. "the lid of the box is open" before a pen skill, while the box arm holds it): pass
+        -> the step goes on; fail -> e-stop: every arm holds, nothing else moves; Resume checks again, Abort ends."""
+        pre = self.vocab[run.skill.precheck]
+        if not run.precheck_started:
+            run.precheck_started = True
+            check = Step(f"{run.step.id}:precheck", pre.arms[0], pre.name, success_check=pre.success_check)
+            if getattr(self.verifier, "fast", False):
+                run.verifying = Future()
+                run.verifying.set_result(self.verifier.check(check, pre, obs))
+            else:
+                snapshot = {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in obs.items()}
+                run.verifying = self._pool.submit(self.verifier.check, check, pre, snapshot)
+            return
+        if run.verifying is None or not run.verifying.done():
+            return
+        verdict, run.verifying = run.verifying.result(), None
+        run.verdicts.append(verdict)
+        ok = verdict.done and verdict.confidence >= pre.confidence
+        self.events.add("info" if ok else "error", f"{run.step.id}: precheck {pre.name} "
+                        f"{'holds' if ok else 'FAILED'} ({verdict.source}, conf {verdict.confidence:.2f}): "
+                        f"{verdict.observation}", step=run.step.id, verdict=verdict.as_dict())
+        if ok:
+            run.prechecking = False
+            self._begin_moves(run)
+        else:
+            run.phase = "blocked"
+            self.estop(f"{pre.name} no longer holds before {run.step.id} ({verdict.observation}); all arms hold, "
+                       "Resume checks again, Abort ends the run")
+
+    def _park(self, run: StepRun, why: str) -> None:
+        """park_after: the check passed. Stop the policy, open the gripper and ramp home (release first), then the same
+        check once more: the step is done only if the result survives the arm leaving (e.g. the lid stays open)."""
+        if run.target is not None and run.target in self.runner.active_targets():
+            self.runner.stop(run.target)
+        backend = self.backends.get(run.target)
+        if hasattr(backend, "end"):
+            backend.end(run.target)
+        run.parking, run.park_checked, run.t_home, run.phase = True, False, self.t, "parking"
+        self.events.add("info", f"{run.step.id}: check passed ({why}); parking the {run.step.arm} arm, then checking "
+                        "again")
+        home = self.home_target(run.step.arm) if self.home_target else None
+        run.target = home
+        if home is not None:
+            self._ramp(run, True)
+            self.runner.start(home, "home")
+
+    def _update_parking(self, run: StepRun, backend: Any, report: Any, obs: dict, state6: np.ndarray) -> None:
+        if run.verifying is not None:
+            if run.verifying.done():
+                fut, run.verifying = run.verifying, None
+                self._on_verdict(run, fut.result())
+            return
+        if run.park_checked:
+            return
+        arrived = run.target is None or backend.reached("home", report.command[arm_slice(run.step.arm)], state6)
+        if arrived:
+            if run.target is not None:
+                self.runner.stop(run.target)
+                self._ramp(run, False)
+                run.target = None
+            run.park_checked, run.final_check = True, True
+            self.events.add("info", f"{run.step.id}: {run.step.arm} arm parked; checking again")
+            self._verify(run, obs)
+            return
+        limit = self.vocab["home"].timeout_s if "home" in self.vocab else 30.0
+        if self.t - run.t_home > limit:
+            self._fail_attempt(run, f"did not park within {limit:.0f} s", retry=False)
 
     def _report_attempt(self, run: StepRun, ok: bool, reason: str) -> None:
         if self.on_attempt is not None and run.skill.is_flux and run.policy_started:
@@ -558,10 +686,11 @@ class Executor:
         if all(r.status == "done" for r in self.runs.values()):
             self._finish("succeeded", "")
 
-    def _ramp(self, run: StepRun, on: bool) -> None:
+    def _ramp(self, run: StepRun, on: bool, arm: str | None = None) -> None:
+        arm = arm or run.ramp_arm or run.step.arm
         if self.ramp_mode is not None and run.ramp_on != on:
-            self.ramp_mode(on)
-        run.ramp_on = on
+            self.ramp_mode(arm, on, run.skill)
+        run.ramp_on, run.ramp_arm = on, (arm if on else None)
 
     def _release(self, run: StepRun) -> None:
         self._ramp(run, False)
