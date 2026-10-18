@@ -68,6 +68,13 @@ def _box_xml(layout: Layout) -> str:
     </body>"""
 
 
+def object_extent(name: str) -> tuple[float, float]:
+    """(half length along the body's x axis, half width) of a task object's collision geometry, metres."""
+    if name == "cutter":
+        return C.CUTTER["size"][0] / 2, C.CUTTER["size"][1] / 2
+    return C.MARKER["length"] / 2, C.MARKER["cap_radius"]
+
+
 def _object_xml(name: str, pose) -> str:
     x, y, yaw = pose
     # Codex's validated marker contact: condim 6 adds torsional/rolling friction so a held cylinder

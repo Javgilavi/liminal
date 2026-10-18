@@ -14,7 +14,7 @@ import numpy as np
 
 from . import config as C
 from .ik import ArmIK, frame
-from .scene import JOINTS
+from .scene import JOINTS, object_extent
 
 CONTROL_HZ = 30.0
 OPEN, CLOSED = 30.0, 0.0  # gripper %, 30 % opens the fingertips ~45 mm
@@ -263,11 +263,19 @@ def check_success(model, data, task):
         return {"success": lid > 65.0, "lid_deg": round(lid, 1)}
     _, obj, _ = TASKS[task]
     box = data.body("box")
-    local = box.xmat.reshape(3, 3).T @ (data.body(obj).xpos - box.xpos)
+    Rb = box.xmat.reshape(3, 3)
+    local = Rb.T @ (data.body(obj).xpos - box.xpos)
+    # Both ends of the object's long axis must be inside the inner walls and below the rim: the centre
+    # alone passed a marker lying across a wall with one end outside the box.
+    half, _ = object_extent(obj)
+    axis = data.body(obj).xmat.reshape(3, 3)[:, 0] * half
+    ends = [Rb.T @ (data.body(obj).xpos + s * axis - box.xpos) for s in (-1, 1)]
     ox, oy, oz = C.BOX["outer"]
-    inside = abs(local[0]) < ox / 2 - 0.01 and abs(local[1]) < oy / 2 - 0.01 and local[2] < oz
+    ix, iy = ox / 2 - C.BOX["wall"], oy / 2 - C.BOX["wall"]
+    inside = all(abs(p[0]) < ix and abs(p[1]) < iy and p[2] < oz for p in ends)
     touching = any(model.body(model.geom_bodyid[c.geom1]).name.startswith(("left_", "right_")) and
                    model.geom_bodyid[c.geom2] == model.body(obj).id or
                    model.body(model.geom_bodyid[c.geom2]).name.startswith(("left_", "right_")) and
                    model.geom_bodyid[c.geom1] == model.body(obj).id for c in data.contact[:data.ncon])
-    return {"success": bool(inside and not touching), "object_in_box_local": np.round(local, 3).tolist()}
+    return {"success": bool(inside and not touching), "object_in_box_local": np.round(local, 3).tolist(),
+            "object_ends_in_box_local": [np.round(p, 3).tolist() for p in ends]}

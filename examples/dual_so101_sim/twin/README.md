@@ -2,7 +2,8 @@
 
 Simulated copy of the real Haller tabletop (dual SO-101 on the XLeRobot tower, D455, round table,
 black mat, white box with hinged lid, green/red markers, yellow cutter), used to generate expert
-demonstrations and fine-tune FLUX 3 Action. Plan: `../PLAN_SIM2REAL_LORA.md`.
+demonstrations and fine-tune FLUX 3 Action. Plan: `PLAN_SIM2REAL_LORA.md` in the original
+`~/erh_hack/dual_so101_sim/` directory (not versioned here).
 
 | File | Purpose |
 |---|---|

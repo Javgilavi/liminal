@@ -5,14 +5,11 @@ directory. Existing local launch commands still use that original directory.
 Virtual environments, downloaded LeRobot source, model weights, rendered outputs
 and private SSH configuration are deliberately excluded.
 
-To use this copy, run the setup below from `examples/dual_so101_sim/`. For the
-browser app also install `fastapi uvicorn requests numpy` into this copy's `.venv`.
-See [flux/RUNPOD_FLUX.md](flux/RUNPOD_FLUX.md) for the remote GPU workflow. Its
-recorded `~/erh_hack/dual_so101_sim` paths describe the original tested deployment;
-substitute this directory when running the snapshot. Copy the already-verified
-host pin from the original `flux/.runpod/known_hosts` into this copy's matching
-path on this laptop, or verify the Pod host key over trusted SSH before adding
-it on another machine. No host trust metadata or credentials are committed.
+To use this copy, run the setup below from `examples/dual_so101_sim/`.
+The browser app (`flux/`, with its remote GPU workflow `flux/RUNPOD_FLUX.md`) and the sim-to-real plan
+(`PLAN_SIM2REAL_LORA.md`) are not part of this snapshot: they stay in the original
+`~/erh_hack/dual_so101_sim/` directory, together with its Pod host pin (`flux/.runpod/known_hosts`).
+No host trust metadata or credentials are committed.
 
 MuJoCo model of the **Haller** rig ([oscardvs/haller_ws](https://github.com/oscardvs/haller_ws)) as it physically
 exists today (Phase A): two **SO-ARM101** followers on a static **XLeRobot tower** over a bench, a RealSense D455 on
@@ -84,4 +81,4 @@ Audited against haller_ws @ `b46b827` (2026-09-11): `docs/hardware_inventory.md`
 | `so101/so101.xml` | upstream `so101_new_calib_camera.xml` (Apache-2.0, see `so101/LICENSE`). Local edits: forcerange → ±1.86, kp ×2, added `wrist` camera at the lens face |
 | `check.py` | puts both arms in a pose, steps 2 s, prints tracking error, renders all cameras to `renders/` |
 | `twin/` | tabletop digital twin (table, mat, box, markers, cutter), scripted demos and FLUX LoRA tooling. See [`DIGITAL_TWIN.md`](DIGITAL_TWIN.md) |
-| `flux/` | browser UI that prompts one arm with FLUX 3 Action running on a GPU box. See [`flux/README.md`](flux/README.md) |
+| `flux/` (not in this snapshot) | browser UI that prompts one arm with FLUX 3 Action running on a GPU box; in the original `~/erh_hack/dual_so101_sim/flux/` |
