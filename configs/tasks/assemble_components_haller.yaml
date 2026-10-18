@@ -1,0 +1,148 @@
+# Generated: python scripts/build_component_task.py --order green_pen yellow_boxcutter red_pen \
+#   --output configs/tasks/assemble_components_haller.yaml
+# The Haller order: each LoRA was trained on takes recorded in this order (the cutter takes have the green pen in its
+# slot, the lid-held red-pen takes have the green pen and the cutter in), so another order is out of distribution.
+# Run it with the ws4 bridge: ws4/HARNESS_BRIDGE.md.
+name: assemble_components
+description: Right helper opens and holds the box; left main arm places three components
+  in any order.
+goal: components_assembled
+placement_order:
+- green_pen
+- yellow_boxcutter
+- red_pen
+tree:
+  sequence:
+  - inspect:
+      predicates:
+      - lid_open
+      cameras:
+      - top
+      - left_wrist
+      definitions:
+        lid_open: The box lid is open far enough for the left arm to reach every component
+          slot safely.
+      timeout_s: 10
+  - fallback:
+    - check: lid_open
+    - skill:
+        arm: right
+        name: open_box
+        target: lid
+        prompt: open the box by pulling its handle
+        success: lid_open
+        timeout_s: 240
+        zones:
+        - box
+  - while:
+      arm: right
+      maintain: lid_open
+      until: components_assembled
+      do:
+        sequence:
+        - inspect:
+            predicates:
+            - lid_open
+            - green_pen_in_slot
+            cameras:
+            - top
+            - left_wrist
+            definitions:
+              lid_open: The box lid is open far enough for the left arm to reach every
+                component slot safely.
+              green_pen_in_slot: The green pen is seated in its own slot and released
+                by the gripper.
+            timeout_s: 10
+        - check: lid_open
+        - fallback:
+          - check: green_pen_in_slot
+          - skill:
+              arm: left
+              name: put_green_pen_in_slot
+              target: green_pen
+              prompt: put the green pen in the green slot
+              success: green_pen_in_slot
+              timeout_s: 240
+              verify_timeout_s: 2
+              zones:
+              - box
+        - inspect:
+            predicates:
+            - lid_open
+            - yellow_boxcutter_in_slot
+            cameras:
+            - top
+            - left_wrist
+            definitions:
+              lid_open: The box lid is open far enough for the left arm to reach every
+                component slot safely.
+              yellow_boxcutter_in_slot: The yellow boxcutter is seated in its own
+                slot and released by the gripper.
+            timeout_s: 10
+        - check: lid_open
+        - fallback:
+          - check: yellow_boxcutter_in_slot
+          - skill:
+              arm: left
+              name: put_yellow_boxcutter_in_slot
+              target: yellow_boxcutter
+              prompt: put the yellow cutter in the yellow slot
+              success: yellow_boxcutter_in_slot
+              timeout_s: 240
+              verify_timeout_s: 2
+              zones:
+              - box
+        - inspect:
+            predicates:
+            - lid_open
+            - red_pen_in_slot
+            cameras:
+            - top
+            - left_wrist
+            definitions:
+              lid_open: The box lid is open far enough for the left arm to reach every
+                component slot safely.
+              red_pen_in_slot: The red pen is seated in its own slot and released
+                by the gripper.
+            timeout_s: 10
+        - check: lid_open
+        - fallback:
+          - check: red_pen_in_slot
+          - skill:
+              arm: left
+              name: put_red_pen_in_slot
+              target: red_pen
+              prompt: put the red pen in its slot in the cardboard box
+              success: red_pen_in_slot
+              timeout_s: 240
+              verify_timeout_s: 2
+              zones:
+              - box
+        - inspect:
+            predicates:
+            - lid_open
+            - green_pen_in_slot
+            - red_pen_in_slot
+            - yellow_boxcutter_in_slot
+            - components_assembled
+            cameras:
+            - top
+            - left_wrist
+            definitions:
+              lid_open: The box lid is open far enough for the left arm to reach every
+                component slot safely.
+              green_pen_in_slot: The green pen is seated in its own slot and released
+                by the gripper.
+              red_pen_in_slot: The red pen is seated in its own slot and released
+                by the gripper.
+              yellow_boxcutter_in_slot: The yellow boxcutter is seated in its own
+                slot and released by the gripper.
+              components_assembled: The green pen, red pen and yellow boxcutter are
+                all seated in their respective slots, with none still held by a gripper.
+            timeout_s: 10
+        - check: lid_open
+        - check: green_pen_in_slot
+        - check: red_pen_in_slot
+        - check: yellow_boxcutter_in_slot
+        - check: components_assembled
+  - check: components_assembled

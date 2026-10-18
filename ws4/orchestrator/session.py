@@ -500,6 +500,12 @@ class Session:
             obs = self._last_obs
         return None if obs is None else obs.get(IMG_HEAD)
 
+    def observation(self) -> dict | None:
+        """The latest robot observation (12-D state and camera frames) the control thread read; never touches the
+        bus. For readers on other threads, e.g. the liminal harness bridge (src/liminal/ws4_bridge)."""
+        with self._lock:
+            return self._last_obs
+
     # ------------------------------------------------------------------ planning
     def plan(self, goal: str, *, kind: str = "plan", state: dict | None = None) -> Proposal:
         goal = goal.strip()

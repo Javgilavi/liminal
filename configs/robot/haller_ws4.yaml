@@ -1,0 +1,52 @@
+# The green Haller (static XLeRobot, two SO-101 arms) driven through the ws4 stack: one ws4 orchestrator session owns
+# both arms and all three cameras (src/liminal/ws4_bridge). liminal never opens a serial port or sends a motor
+# command here; each skill is a ws4 step behind the Haller safety stack. How-to: ws4/HARNESS_BRIDGE.md.
+#
+# ROBOT frame, as in the task files and in ws4 (checked against /etc/udev/rules.d/99-haller-devices.rules):
+#   left  = robot LEFT  = the pen arm = /dev/haller_arm_right (board 5B14030445, calibration haller_right), wrist USB 7.2
+#   right = robot RIGHT = the box arm = /dev/haller_arm_left  (board 5B79018460, calibration haller_left),  wrist USB 7.3
+# The recorder / operator frame (left_* = robot right) is NOT used anywhere in this file.
+name: haller_ws4
+ws4:
+  # The ws4 HMI next to the run (events, cameras, Haiku verdicts, e-stop button and spacebar, Release / Resume after a
+  # ws4 safety stop). 0 turns it off; then a ws4 safety stop can only end in the tree's timeout (arms stay frozen).
+  hmi_port: 8080
+  # Environment variable holding the command that prints the policy-server token, as the runbook's TOKEN:
+  # export WS4_TOKEN_CMD="ssh -i ~/.ssh/id_ed25519_osrdvs -p <port> root@<pod-ip> cat /workspace/flux_token"
+  token_cmd_env: WS4_TOKEN_CMD
+  # orchestrator.session.SessionConfig fields; unset ones keep the Haller defaults of `python -m orchestrator hmi
+  # --env haller` (liminal.ws4_bridge.session.HALLER_SESSION and SessionConfig).
+  session:
+    env: haller
+    policy: remote
+    server: http://127.0.0.1:8790  # ssh -N -L 8790:127.0.0.1:8790 to the pod (runbook section 1)
+    verifier: claude               # ws4's Haiku checks decide each step; the tree's perception re-checks it
+    port: /dev/haller_arm_right    # robot LEFT arm (pen)
+    robot_id: haller_right
+    wrist_cam: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.2:1.0-video-index0
+    head_cam: /dev/haller_cam_mast
+    right_arm_port: /dev/haller_arm_left  # robot RIGHT arm (box)
+    right_robot_id: haller_left
+    right_wrist_cam: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.3:1.0-video-index0
+    hold_arms: []                  # [right] when the box arm is handed over already holding the lid open
+    task: liminal_assemble_components
+    condition: post_training
+    variant: liminal_bt+lora_chain
+    operator: ""
+arms:
+  left:
+    type: ws4
+    ws4_arm: left
+  right:
+    type: ws4
+    ws4_arm: right
+cameras:
+  top:
+    type: ws4
+    ws4_camera: head
+  left_wrist:
+    type: ws4
+    ws4_camera: left_wrist
+  right_wrist:
+    type: ws4
+    ws4_camera: right_wrist
