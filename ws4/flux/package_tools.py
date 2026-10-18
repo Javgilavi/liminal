@@ -128,7 +128,7 @@ def _link_or_copy(src: Path, dst: Path) -> None:
     try:
         os.symlink(src.resolve(), dst)
     except OSError:
-        shutil.copy2(src, dst)
+        shutil.copyfile(src, dst)
 
 
 def renormalize_package(
@@ -172,7 +172,8 @@ def renormalize_package(
         if item.name.startswith("policy_") or item.name == "dataset_statistics.json":
             continue  # rewritten below
         if item.is_file():
-            (_link_or_copy if item.suffix == ".safetensors" else shutil.copy2)(item, dst / item.name)
+            # copyfile, not copy2: S3 FUSE volumes (RunPod geesefs) refuse the metadata copy
+            (_link_or_copy if item.suffix == ".safetensors" else shutil.copyfile)(item, dst / item.name)
     pre.save_pretrained(dst)
     post.save_pretrained(dst)
     (dst / "normalization_source.json").write_text(
