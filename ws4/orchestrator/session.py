@@ -935,6 +935,8 @@ class Session:
                     if (run.step.id, run.attempt) in self._start_note else "")
                  + (f"; {self.runner_settings()}" if self.rig is not None else "")
                  + (f"; kit runner_args {' '.join(run.skill.runner_args)}" if run.skill.runner_args else "")
+                 + (f"; checks {', '.join(f'{v.done} {v.confidence:.2f}' for v in run.verdicts)}"
+                    if len(run.verdicts) > 1 else "")
                  + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"
                     if verdict else ""))
         trial = tl.Trial(

@@ -998,3 +998,29 @@ def test_cutter_replay_in_the_chain_slow_near_the_box_arm(tmp_path, monkeypatch)
         s.close()
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.parametrize("recheck, status", [((True, 0.6), "succeeded"), ((False, 0.3), "succeeded"),
+                                             ((False, 0.9), "failed")])
+def test_unclear_recheck_after_home_keeps_the_pass(tmp_path, chain_server, recheck, status):
+    """finish: home re-checks once the policy is back home. Live 18 Oct the green insert passed at 0.70, then the
+    re-check said "upright in the green holder, seating not fully visible" at 0.60 and failed it. Now only a confident
+    "not done" fails the step; an unclear re-check keeps the pass, and the trial row lists both verdicts."""
+    server, token, _ = chain_server
+    s = chain_session(tmp_path, server, token)
+    try:
+        checks = ScriptedChecks()
+        green = iter([Verdict(True, 0.7, "upright in the green holder", "test"),
+                      Verdict(*recheck, "seating not fully visible", "test")])
+        base = checks.check
+        checks.check = lambda step, skill, obs: (next(green) if skill.name == "put_green_pen_in_slot"
+                                                 else base(step, skill, obs))
+        s.verifier = checks
+        result = s.execute(s.plan("open the box, put the green pen in the green slot").result.plan)
+        assert result.status == status, result.failure
+        trials = load_trial_log().load(tmp_path / "trials.jsonl")
+        (green_row,) = [t for t in trials if t.task == "put_green_pen_in_slot"]
+        assert f"True 0.70, {recheck[0]} {recheck[1]:.2f}; last check" in green_row.notes  # pass, then re-check
+        assert green_row.success == (status == "succeeded")
+    finally:
+        s.close()

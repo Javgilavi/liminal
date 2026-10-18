@@ -14,6 +14,8 @@ ws4:
   # Environment variable holding the command that prints the policy-server token, as the runbook's TOKEN:
   # export WS4_TOKEN_CMD="ssh -i ~/.ssh/id_ed25519_osrdvs -p <port> root@<pod-ip> cat /workspace/flux_token"
   token_cmd_env: WS4_TOKEN_CMD
+  # every ws4 step check on Opus 5.5 (Oscar, 18 Oct 10:50: Haiku is not good enough; slower is fine)
+  verifier_model: claude-opus-5-5
   # orchestrator.session.SessionConfig fields; unset ones keep the Haller defaults of `python -m orchestrator hmi
   # --env haller` (liminal.ws4_bridge.session.HALLER_SESSION and SessionConfig).
   session:

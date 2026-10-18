@@ -43,7 +43,7 @@ class Ws4Bridge:
 
     def __init__(self, settings: Mapping[str, Any] | None = None, session_factory: Callable[[Any], Any] | None = None):
         self.settings = dict(settings or {})
-        unknown = set(self.settings) - {"session", "token_cmd_env", "hmi_port", "poll_s"}
+        unknown = set(self.settings) - {"session", "token_cmd_env", "hmi_port", "poll_s", "verifier_model"}
         if unknown:
             raise ValueError(f"unknown ws4 bridge settings {sorted(unknown)}")
         self.poll_s = float(self.settings.get("poll_s", 0.1))
@@ -104,9 +104,15 @@ class Ws4Bridge:
         from orchestrator.session import Session, SessionConfig  # noqa: PLC0415
 
         cfg = SessionConfig(**self.session_config())
-        if self._factory is not None:
-            return self._factory(cfg)
-        return Session(cfg, threaded=True)
+        session = self._factory(cfg) if self._factory is not None else Session(cfg, threaded=True)
+        model = self.settings.get("verifier_model")
+        if model:  # every step check on this model instead of the vocabulary's (Haiku 5.5 by default)
+            import dataclasses
+
+            for name, skill in list(session.vocab.skills.items()):
+                session.vocab.skills[name] = dataclasses.replace(skill, verifier_model=model)
+            session.events.add("info", f"liminal bridge: every step check runs on {model}")
+        return session
 
     def disconnect(self) -> None:
         with self._lock:

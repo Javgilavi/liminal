@@ -8,6 +8,7 @@
 model:
   provider: ws4_haiku
   scene_camera: top   # the checks were tuned on the head camera only
+  verifier_model: claude-opus-5-5  # the tuned prompts, judged by Opus 5.5 instead of Haiku (slower)
   budget_usd: 2.0
   checks:
     lid_open: open_box
@@ -28,7 +29,7 @@ inspection:
   confirmations: 2
   # A WHILE re-checks its invariant every timeout_s / 3 and treats evidence older than timeout_s as broken; a Haiku
   # check takes about 1.3 s (up to a few s), so 15 s leaves margin.
-  timeout_s: 15
+  timeout_s: 30  # Opus 5.5 checks take several seconds each
   retry_delay_s: 0.1
   definitions:
     lid_open: The box lid is open far enough for the left arm to reach every component slot safely.

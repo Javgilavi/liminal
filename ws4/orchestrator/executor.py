@@ -702,10 +702,18 @@ class Executor:
             self._park(run, verdict.observation)
         elif ok:
             self._complete(run, verdict.observation)
-        elif run.returning:
-            self._fail_attempt(run, f"the check failed after the arm returned home: {verdict.observation}")
-        elif run.parking:
-            self._fail_attempt(run, f"the check failed after parking: {verdict.observation}")
+        elif run.returning or run.parking:
+            # The step already passed with confidence before the arm moved away. Only a confident "not done" undoes
+            # that; an unclear re-check (low confidence, a verifier error) keeps the pass (live 18 Oct: green passed at
+            # 0.70, then "upright in the green holder, seating not fully visible" at 0.60 failed a real insert).
+            where = "after the arm returned home" if run.returning else "after parking"
+            if not verdict.done and verdict.confidence >= run.skill.confidence:
+                self._fail_attempt(run, f"the check failed {where}: {verdict.observation}")
+            else:
+                self.events.add("warn", f"{run.step.id}: re-check {where} unclear ({verdict.source}, conf "
+                                f"{verdict.confidence:.2f}): {verdict.observation}; the earlier pass stands",
+                                step=run.step.id)
+                self._complete(run, f"passed; re-check {where} unclear (conf {verdict.confidence:.2f})")
         elif run.final_check:
             self._fail_attempt(run, f"motion finished but the check failed: {verdict.observation}")
 

@@ -37,7 +37,7 @@ class Ws4HaikuVisionModel:
     def __init__(self, checks: Mapping[str, str] | None = None, derived: Mapping[str, Sequence[str]] | None = None,
                  scene_camera: str = "top", vocabulary: str | None = None, budget_usd: float = 2.0,
                  effort: str = "low", thinking: str = "adaptive", keep_s: Mapping[str, float] | None = None,
-                 verifier: Any = None, clock: Callable[[], float] = time.monotonic):
+                 verifier: Any = None, clock: Callable[[], float] = time.monotonic, verifier_model: str = ""):
         self.checks = dict(HALLER_CHECKS if checks is None else checks)
         self.derived = {k: list(v) for k, v in (HALLER_DERIVED if derived is None else derived).items()}
         for name, parts in self.derived.items():
@@ -52,6 +52,7 @@ class Ws4HaikuVisionModel:
         self._verifier = verifier
         self._vocab: Any = None
         self.clock = clock
+        self.verifier_model = verifier_model  # "" = each ws4 skill's own (Haiku 5.5)
         self._confident: dict[str, tuple[str, float]] = {}  # predicate -> (last confident value, when)
         self._lock = threading.Lock()
 
@@ -113,6 +114,10 @@ class Ws4HaikuVisionModel:
         from orchestrator.plan import Step  # noqa: PLC0415
 
         skill = self._vocab.skills[self.checks[predicate]]
+        if self.verifier_model:
+            import dataclasses
+
+            skill = dataclasses.replace(skill, verifier_model=self.verifier_model)
         step = Step(id=predicate, arm=skill.arms[0], skill=skill.name, success_check=skill.success_check)
         verdict = self._verifier.check(step, skill, {"observation.images.head": head})
         evidence = verdict.observation + (f" [{verdict.error}]" if verdict.error else "")
