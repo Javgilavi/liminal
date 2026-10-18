@@ -70,8 +70,16 @@ class FluxConfig:
     load_timeout_s: float = 180.0
     lora_adapter: str | None = None  # applied to every arm
     arm_adapters: dict[str, str] = field(default_factory=dict)  # option A1: arm -> LoRA, overrides lora_adapter
+    # lerobot = in-process (CUDA); remote = the ws4 policy server, one package per checkpoint (policy/remote_engine.py)
+    engine: str = "lerobot"
+    server: str = ""  # remote: e.g. http://127.0.0.1:8790 through an SSH tunnel to the pod
+    package: str = ""  # remote without a checkpoint registry: the served package
+    token_file: str = ""  # remote: file with the shared token, else the command in $token_cmd_env prints it
+    token_cmd_env: str = "WS4_TOKEN_CMD"
 
     def __post_init__(self) -> None:
+        if self.engine not in ("lerobot", "remote"):
+            raise ValueError("engine must be lerobot or remote")
         self.camera_roles = tuple(self.camera_roles)
         self.joint_order = tuple(self.joint_order)
         integer_fields = {
@@ -117,9 +125,20 @@ class FluxPolicyBackend:
     # -- model -------------------------------------------------------------------------
 
     def load(self) -> None:
+        entry = self._selected_checkpoint
+        if self.cfg.engine == "remote":
+            from liminal.policy.remote_engine import RemoteFluxEngine
+
+            package = (entry.package if entry else "") or self.cfg.package
+            if not package:
+                raise ValueError("engine: remote needs a served package (registry entry `package:` or `package`)")
+            engine = RemoteFluxEngine(self.cfg, package)
+            self._model = engine
+            self._checkpoint_identity = {**engine.identity(), "name": entry.name if entry else package,
+                                         "source": entry.path if entry else ""}
+            return
         from liminal.policy.lerobot_engine import LeRobotEngine
 
-        entry = self._selected_checkpoint
         if self.cfg.lora_adapter or self.cfg.arm_adapters:
             raise ValueError("stage merged checkpoints with saved processors in the skill registry")
         identity = entry.identity() if entry else None

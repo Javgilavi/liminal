@@ -28,13 +28,19 @@ def ws4_dir() -> Path:
     return Path(os.environ.get("LIMINAL_WS4_DIR") or REPO / "ws4").resolve()
 
 
-def import_orchestrator():
-    """Put ws4/ on sys.path (as ``cd ws4 && python -m orchestrator`` does) and return the ``orchestrator`` package."""
+def ws4_on_path() -> Path:
+    """Put ws4/ on sys.path so its top-level packages (``flux``, ``orchestrator``) import as in ws4 itself."""
     root = ws4_dir()
-    if not (root / "orchestrator" / "__init__.py").is_file():
-        raise RuntimeError(f"ws4 orchestrator not found under {root} (set LIMINAL_WS4_DIR)")
+    if not (root / "flux" / "remote.py").is_file():
+        raise RuntimeError(f"ws4 not found under {root} (set LIMINAL_WS4_DIR)")
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
+    return root
+
+
+def import_orchestrator():
+    """Put ws4/ on sys.path (as ``cd ws4 && python -m orchestrator`` does) and return the ``orchestrator`` package."""
+    ws4_on_path()
     import orchestrator  # noqa: PLC0415
 
     return orchestrator

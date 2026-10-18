@@ -104,9 +104,10 @@ def robot_config(ws4, tmp_path, server, token, **session):
     (tmp_path / "skills.yaml").write_text(yaml.safe_dump(vocab))
     cfg = yaml.safe_load(ROBOT.read_text())
     cfg["ws4"]["hmi_port"] = 0
-    cfg["ws4"]["session"].update(robot="fake", server=server, token_file=token, verifier="manual", realtime=False,
-                                 vocabulary=str(tmp_path / "skills.yaml"), runs_dir=str(tmp_path / "runs"),
-                                 trial_log=str(tmp_path / "trials.jsonl"), max_run_s=120, **session)
+    cfg["ws4"]["session"].update({"robot": "fake", "server": server, "token_file": token, "verifier": "manual",
+                                  "realtime": False, "vocabulary": str(tmp_path / "skills.yaml"),
+                                  "runs_dir": str(tmp_path / "runs"), "trial_log": str(tmp_path / "trials.jsonl"),
+                                  "max_run_s": 120, **session})
     return cfg
 
 
@@ -310,3 +311,50 @@ def test_xlerobot_config_uses_the_robot_frame():
     assert haller["port"] == "/dev/haller_arm_right" and haller["right_arm_port"] == "/dev/haller_arm_left"
     assert haller["wrist_cam"].endswith("usb-0:7.2:1.0-video-index0")
     assert haller["right_wrist_cam"].endswith("usb-0:7.3:1.0-video-index0")
+
+
+def test_liminal_run_cli_drives_the_fake_haller(ws4, tmp_path, policy_server, monkeypatch, capsys):
+    """`liminal run` with the shipped Haller configs. The Claude-backed parts stay real code down to the API call:
+    ClaudeVerifier.check is the only stand-in (it judges the fake rig's state; fake camera frames show nothing), for
+    both ws4's step checks and the ws4_haiku scene predicates."""
+    import json
+
+    from orchestrator import verifier as ws4_verifier
+    from orchestrator.verifier import Verdict
+
+    from liminal.ui.cli import main
+    from liminal.ws4_bridge import session as bridge_session
+    from liminal.ws4_bridge import vision
+
+    server, token, backends = policy_server
+    bridges, done, calls = [], set(), []
+    connect = bridge_session.Ws4Bridge.connect
+
+    def tracking_connect(self):
+        bridges.append(self)
+        connect(self)
+
+    def fake_check(self, step, skill, obs):
+        calls.append(("scene" if step.id in vision.HALLER_CHECKS else "ws4", skill.name))
+        rig = bridges[-1].session.rig
+        box = np.asarray(rig.arms["right"].robot.joints())[:5]
+        if skill.name == "open_box":
+            return Verdict(bool(np.abs(box - GREEN_HOLD[:5]).max() <= 1.0), 0.9, "fake rig", "fake")
+        if step.id not in vision.HALLER_CHECKS:  # ws4's own check after the step: the fake policy "placed" it
+            done.add(skill.name)
+        return Verdict(skill.name in done, 0.9, "fake rig", "fake")
+
+    monkeypatch.setattr(bridge_session.Ws4Bridge, "connect", tracking_connect)
+    monkeypatch.setattr(ws4_verifier.ClaudeVerifier, "check", fake_check)
+    monkeypatch.setattr("orchestrator.claude.api_key_available", lambda: True)
+    robot = tmp_path / "haller_fake.yaml"
+    robot.write_text(yaml.safe_dump(robot_config(ws4, tmp_path, server, token, verifier="claude")))
+    code = main(["run", str(TASK), "--robot", str(robot), "--backend", "ws4", "--policy", str(POLICY),
+                 "--perception", str(PERCEPTION), "--log-dir", str(tmp_path / "runs")])
+    out = capsys.readouterr().out
+    report = json.loads(out[out.index("{\n") : out.rindex("}") + 1])
+    assert code == 0 and report["goal_verified"] and report["status"] == "success", out
+    assert {skill for kind, skill in calls if kind == "ws4"} == {s for s, _ in CHAIN}
+    assert {skill for kind, skill in calls if kind == "scene"} == {s for s, _ in CHAIN}
+    assert all(len(backends[pkg].requests) > 1 for pkg in PACKAGES.values())  # warm-up plus the policy's chunks
+    assert bridges and bridges[-1].session is None  # closed at the end of the run

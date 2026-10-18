@@ -48,7 +48,8 @@ def build_arms(robot_cfg: dict[str, Any]) -> tuple[dict[str, Arm], dict[str, Any
             arms[name] = SO101Arm(name, port=a["port"], robot_id=a.get("id"),
                                   max_relative_target=a.get("max_relative_target"),
                                   max_speed=a.get("max_speed", 20.0),
-                                  temperature_limit=a.get("temperature_limit", 55.0))
+                                  temperature_limit=a.get("temperature_limit", 55.0),
+                                  estop=a.get("estop", "torque_off"))
         elif kind == "mujoco":
             from liminal.sim.mujoco_arm import MujocoArm
 
