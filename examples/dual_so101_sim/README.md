@@ -83,4 +83,5 @@ Audited against haller_ws @ `b46b827` (2026-09-11): `docs/hardware_inventory.md`
 | `scene.xml` | the rig. Arms come in via `<attach prefix="left_"/"right_">`. |
 | `so101/so101.xml` | upstream `so101_new_calib_camera.xml` (Apache-2.0, see `so101/LICENSE`). Local edits: forcerange → ±1.86, kp ×2, added `wrist` camera at the lens face |
 | `check.py` | puts both arms in a pose, steps 2 s, prints tracking error, renders all cameras to `renders/` |
+| `twin/` | tabletop digital twin (table, mat, box, markers, cutter), scripted demos and FLUX LoRA tooling. See [`DIGITAL_TWIN.md`](DIGITAL_TWIN.md) |
 | `flux/` | browser UI that prompts one arm with FLUX 3 Action running on a GPU box. See [`flux/README.md`](flux/README.md) |
