@@ -10,6 +10,26 @@ text-prompted skills on one arm. Everything above that is this repo: deciding
 *why* a skill is needed, *when* the other arm is ready, *which conditions must stay
 true*, and *whether the goal really happened*.
 
+## Hackathon results (ERH Physical AI Hackathon, 18 October 2026)
+
+- **Full 4-skill chain on the real Haller**, planned by Claude with a camera check after every step:
+  **2 of 3 runs finished 4/4** with no human touch during the run (208.6 s and 302.2 s).
+  - The box is opened by a **scripted replay of a recorded demo**, not FLUX.
+  - The green pen and cutter are placed by their own **FLUX 3 Action LoRAs**.
+  - In the filmed runs, the green-pen policy also slotted the red pen on its way home.
+  - Demo mode: keep-out zones and stall/load stops were off. Joint limits, 1 deg per tick, a 60 % torque cap and the
+    e-stop stayed on.
+- **Per-skill FLUX LoRAs** (rank 32, each skill normalized on its own demos): the red pen went 3/5, then 2/3, real
+  inserts. Stock zero-shot FLUX went 0/16.
+- **Public models and data:** Hugging Face
+  [Oskrt/flux-3-action-so101-haller-*-lora](https://huggingface.co/Oskrt) (every checkpoint) and the
+  [Oskrt/haller_*](https://huggingface.co/Oskrt) datasets.
+- **Where things are:**
+  - [ws4/pitch/README_submission.md](ws4/pitch/README_submission.md): the full write-up and numbers.
+  - [ws4/](ws4/): the FLUX skill pipeline, safety runner and Claude orchestrator.
+  - [ws4/HARNESS_BRIDGE.md](ws4/HARNESS_BRIDGE.md): this behavior-tree harness driving the Haller through the ws4
+    safety stack, with the optional Opus 5.5 gate.
+
 [![Liminal architecture: a deterministic behavior-tree harness coordinates independent left and right FLUX 3 Action policies adapted with task LoRA. A skill registry selects checkpoint bundles; safety checks gate robot commands. Scene and wrist cameras feed Qwen3-VL-4B-Instruct perception, which updates verified world-state predicates for the harness.](docs/assets/liminal-architecture.png)](docs/assets/liminal-architecture.png)
 
 *Configured runtime: FLUX 3 Action + task LoRA on each arm; Qwen3-VL-4B-Instruct for
