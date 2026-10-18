@@ -27,7 +27,7 @@ recorded successful rollout.
 See [the architecture](docs/architecture.md) for the complete contracts.
 
 Figure generated and refined with the built-in image-generation tool using our
-robot photograph; [generation and refinement prompts](docs/assets/architecture-refined-prompt.txt).
+robot photograph; [generation and refinement prompts](docs/assets/architecture-minimal-prompt.txt).
 Visual references: [OpenVLA](https://openvla.github.io/) and its
 [GitHub repo](https://github.com/openvla/openvla),
 [Diffusion Policy](https://diffusion-policy.cs.columbia.edu/) and its
