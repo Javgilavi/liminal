@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Liminal coordinates language-conditioned robot skills across two arms with explicit task dependencies, independent verification and a MuJoCo scene mirror."
+    />
+    <meta
+      property="og:title"
+      content="Liminal — Two arms, explicit dependencies"
+    />
+    <meta
+      property="og:description"
+      content="Explore the system, simulation experiments, real hardware evidence and interactive digital twin."
+    />
+    <meta property="og:image" content="assets/real-vs-sim.jpg" />
+    <title>Liminal — Two arms, explicit dependencies</title>
+    <link rel="icon" href="assets/favicon.svg" />
+    <link rel="stylesheet" href="style.css?v=20261018-resilient" />
+    <link rel="stylesheet" href="project.css?v=20261018-resilient" />
+    <script type="importmap">
+      { "imports": { "three": "./assets/vendor/three.module.js" } }
+    </script>
+    <script type="module" src="project.js?v=20261018-resilient"></script>
+  </head>
+  <body>
+    <a class="skip" href="#overview">Skip to project</a>
+    <header class="site-header">
+      <a class="wordmark" href="./"
+        >liminal<span class="wordmark-dot">.</span></a
+      >
+      <nav aria-label="Project sections">
+        <a
+          href="https://github.com/Javgilavi/liminal"
+          target="_blank"
+          rel="noopener"
+          >GitHub ↗</a
+        >
+        <a href="#overview">Overview</a><a href="#method">Method</a
+        ><a href="#experiments">Experiments</a><a href="#evidence">Evidence</a>
+      </nav>
+      <a class="button primary" href="live.html" target="_blank" rel="noopener"
+        >Open live lab ↗</a
+      >
+    </header>
+    <main>
+      <section class="intro">
+        <p class="project-dateline">
+          ERH Physical AI Hackathon · 17–18 October 2026
+        </p>
+        <h1>Dual-arm manipulation<br />with FLUX 3 Action.</h1>
+        <p class="subtitle">
+          Task LoRAs control each arm. A behavior tree coordinates the task.
+        </p>
+        <p class="intro-copy">
+          Liminal runs on Haller, a dual SO-101 rig, with camera feedback and a
+          MuJoCo joint mirror.
+        </p>
+        <div class="intro-actions">
+          <a
+            class="button light"
+            href="https://github.com/Javgilavi/liminal"
+            target="_blank"
+            rel="noopener"
+            >GitHub code ↗</a
+          >
+          <a class="button primary" href="#physical">Watch the real robot ↓</a
+          ><a
+            class="button light"
+            href="live.html"
+            target="_blank"
+            rel="noopener"
+            >Enter the full-screen lab ↗</a
+          >
+        </div>
+        <p class="project-line">
+          Two SO-101 arms <span>/</span> FLUX 3 Action + task LoRA
+          <span>/</span> MuJoCo
+        </p>
+      </section>
+      <section class="hero-media">
+        <figure class="real-setup">
+          <img
+            src="assets/setup.png"
+            alt="The physical green Haller dual-arm tabletop rig"
+          />
+          <figcaption>
+            <span class="micro">Haller hardware</span
+            ><span>Real setup capture</span>
+          </figcaption>
+        </figure>
+        <div class="hero-twin">
+          <div
+            class="viewer"
+            id="hero-view"
+            aria-label="Interactive Haller CAD scene"
+          >
+            <img
+              class="scene-poster"
+              src="assets/twin-scene.png"
+              alt="Estimated Haller MuJoCo scene"
+            />
+            <div class="scene-prompt">
+              <p class="scene-status" role="status">Recorded MuJoCo preview</p>
+              <button class="scene-load" disabled>Explore in 3D</button>
+            </div>
+          </div>
+          <div class="viewer-top">
+            <span class="tag"><i></i> MuJoCo scene preview</span
+            ><button
+              class="icon-button"
+              id="reset-hero"
+              disabled
+              aria-label="Reset scene camera"
+            >
+              ↺
+            </button>
+          </div>
+          <div class="viewer-bottom">
+            <span><strong>Haller in MuJoCo</strong></span
+            ><span class="orbit-hint">Load 3D to rotate the scene</span>
+          </div>
+        </div>
+      </section>
+      <div class="caption-row">
+        <span>Real setup and estimated tabletop reconstruction</span
+        ><span>Recorded simulation · no robot connection needed</span>
+      </div>
+      <nav class="chapter-nav" aria-label="Page chapters">
+        <a href="#overview">Overview</a><a href="#physical">Real robot</a
+        ><a href="#method">The architecture</a
+        ><a href="#dependencies">Task dependencies</a
+        ><a href="#demonstrations">Demonstrations</a
+        ><a href="#experiments">Results</a><a href="#twin">Digital twin</a
+        ><a href="#evidence">Status</a>
+      </nav>
+      <section class="section" id="overview">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">The idea</p>
+            <h2>One arm holds.<br />The other inserts.</h2>
+          </div>
+          <p>
+            The placement arm needs the lid to stay open. Losing support must
+            stop the insertion.
+          </p>
+        </div>
+        <div class="overview-prose">
+          <p>
+            One arm opens and holds the lid while the other places an object
+            inside.
+          </p>
+          <p>
+            The behavior tree schedules skills, monitors support and waits for
+            camera-based verification before advancing.
+          </p>
+        </div>
+        <div class="dependency-words">
+          <div>
+            <strong>AFTER</strong
+            ><span>Begin when a prerequisite has finished.</span>
+          </div>
+          <div>
+            <strong>WHILE</strong
+            ><span>Continue only while an invariant holds.</span>
+          </div>
+          <div>
+            <strong>UNTIL</strong
+            ><span>Keep working until a verified condition is true.</span>
+          </div>
+        </div>
+        <p class="annotation">
+          Full learned dual-arm execution is still unverified.
+        </p>
+      </section>
+
+      <section class="section" id="physical">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Real robot</p>
+            <h2>Red-pen insertion<br />on Haller.</h2>
+          </div>
+          <p>
+            Five recorded FLUX LoRA runs. Head and wrist cameras are shown side
+            by side.
+          </p>
+        </div>
+        <div class="physical-feature">
+          <div>
+            <label class="mobile-media-picker"
+              >Recording<select id="physical-select">
+                <option value="0">Layout C · 48 seconds</option>
+                <option value="1">Layout A · 94 seconds</option>
+                <option value="2">Layout B · 91 seconds</option>
+                <option value="3">Morning A · 69 seconds</option>
+                <option value="4">Morning C · 36 seconds</option>
+              </select></label
+            >
+            <div
+              class="physical-tabs"
+              role="tablist"
+              aria-label="Physical robot video"
+            >
+              <button data-physical="0" class="active">
+                <span>Layout C</span><span class="tab-meta">48 s</span></button
+              ><button data-physical="1">
+                <span>Layout A</span><span class="tab-meta">94 s</span></button
+              ><button data-physical="2">
+                <span>Layout B</span><span class="tab-meta">91 s</span></button
+              ><button data-physical="3">
+                <span>Morning A</span><span class="tab-meta">69 s</span></button
+              ><button data-physical="4">
+                <span>Morning C</span><span class="tab-meta">36 s</span>
+              </button>
+            </div>
+            <div id="physical-panel" role="tabpanel" tabindex="0">
+              <video
+                id="physical-video"
+                controls
+                playsinline
+                preload="metadata"
+                src="assets/real-insert-C.mp4"
+                poster="assets/preview-real-insert-C.jpg"
+              ></video>
+              <p id="physical-caption">
+                RAW 5k adapter · layout C · real head and wrist camera
+                recordings.
+              </p>
+            </div>
+          </div>
+          <aside>
+            <span class="physical-type">Selected successful runs</span>
+            <h3>“Put the red pen in its slot in the cardboard box.”</h3>
+            <p>
+              RAW-5k red-pen LoRA. 16 actions per request. Single-arm insertion
+              with the box accessible.
+            </p>
+            <div class="physical-counts">
+              <div>
+                <strong>3 / 5</strong><span>Team-reported early block</span>
+              </div>
+              <div>
+                <strong>2 / 3</strong><span>Team-reported 07:40 block</span>
+              </div>
+            </div>
+            <p class="annotation">
+              Team-reported session counts; clips show selected successes, not a
+              controlled benchmark.
+            </p>
+          </aside>
+        </div>
+        <details class="figure-detail">
+          <summary>
+            A few centimeters can change the policy's view
+            <span>Compare wrist observations ↗</span>
+          </summary>
+          <img
+            loading="lazy"
+            src="assets/station-offset.jpg"
+            alt="Recorded wrist-camera comparison between the training station and an offset runtime station"
+          />
+          <p>
+            Training and runtime wrist views after a small station offset. This
+            records a setup mismatch; its effect on success was not measured.
+          </p>
+        </details>
+      </section>
+      <section class="section" id="method">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">The architecture</p>
+            <h2>How the system works.</h2>
+          </div>
+          <p>
+            Each arm has its own six-channel FLUX instance, observation history
+            and task checkpoint. Select a component below.
+          </p>
+        </div>
+        <div class="architecture" aria-label="Interactive system architecture">
+          <div class="architecture-goal">
+            Operator goal <span>“Put the pens in the open box.”</span>
+          </div>
+          <div class="architecture-flow">
+            <button class="arch-node selected" data-node="tree">
+              <span>Coordinate</span><strong>Behavior-tree harness</strong
+              ><small>AFTER · WHILE · UNTIL · retry</small>
+            </button>
+            <div class="arch-branches">
+              <button class="arch-node" data-node="left">
+                <span>Left arm</span><strong>FLUX + task LoRA</strong
+                ><small>Own history · own model state</small></button
+              ><button class="arch-node" data-node="right">
+                <span>Right arm</span><strong>FLUX + task LoRA</strong
+                ><small>Own history · own model state</small>
+              </button>
+            </div>
+            <button class="arch-node" data-node="safety">
+              <span>Gate every command</span><strong>Safety supervisor</strong
+              ><small>Ownership · travel · freshness · stop</small>
+            </button>
+            <div class="arch-hardware">
+              Haller / dual SO-101
+              <span>Measured joints + scene / wrist cameras</span>
+            </div>
+            <button class="arch-node feedback-node" data-node="perception">
+              <span>Independent feedback</span
+              ><strong>Qwen scene inspection + WorldState</strong
+              ><small>Timestamped predicates → verify / cancel / recover</small>
+            </button>
+          </div>
+          <div class="arch-detail" aria-live="polite">
+            <span id="arch-detail-label">Behavior-tree harness</span>
+            <p id="arch-detail-text">
+              The tree schedules skills, checks support conditions and waits for
+              independent verification.
+            </p>
+          </div>
+        </div>
+        <details class="figure-detail">
+          <summary>
+            View the complete architecture figure <span>Expand ↗</span>
+          </summary>
+          <a href="assets/architecture.png" target="_blank" rel="noopener"
+            ><img
+              src="assets/architecture.png"
+              loading="lazy"
+              alt="Liminal architecture: behavior tree, skill registry, independent per-arm FLUX, safety, Haller hardware, Qwen perception and world-state feedback"
+          /></a>
+          <p>
+            System diagram from the README; the hardware panel is an adapted
+            photograph.
+          </p>
+        </details>
+      </section>
+      <section class="section" id="dependencies">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Task dependencies</p>
+            <h2>Open. Hold. Insert.</h2>
+          </div>
+          <p>
+            Move the slider through the task. Toggle loss of support to see
+            placement cancel.
+          </p>
+        </div>
+        <div class="task-explorer">
+          <div class="task-topline">
+            <span>Illustrative behavior-tree execution</span
+            ><label
+              ><input type="checkbox" id="support-loss" /> Inject loss of lid
+              support</label
+            >
+          </div>
+          <div
+            class="task-stages"
+            id="task-stages"
+            role="group"
+            aria-label="Task stage"
+          >
+            <button data-step="0" class="active">
+              <span class="stage-number" aria-hidden="true">1</span
+              ><span>Open lid</span></button
+            ><button data-step="1">
+              <span class="stage-number" aria-hidden="true">2</span
+              ><span>Hold lid</span></button
+            ><button data-step="2">
+              <span class="stage-number" aria-hidden="true">3</span
+              ><span>Insert object</span></button
+            ><button data-step="3">
+              <span class="stage-number" aria-hidden="true">4</span
+              ><span>Verify inside</span></button
+            ><button data-step="4">
+              <span class="stage-number" aria-hidden="true">5</span
+              ><span>Release lid</span>
+            </button>
+          </div>
+          <input
+            type="range"
+            id="task-progress"
+            min="0"
+            max="4"
+            step="1"
+            value="0"
+            aria-label="Task dependency stage"
+          />
+          <div class="arm-lanes">
+            <div>
+              <span>Helper arm / right</span
+              ><strong id="helper-action">Open the lid</strong
+              ><i id="helper-bar"></i>
+            </div>
+            <div>
+              <span>Task arm / left</span
+              ><strong id="task-action">Wait for access</strong
+              ><i id="task-bar"></i>
+            </div>
+          </div>
+          <div class="predicate-row">
+            <span id="predicate-lid">lid_open: pending</span
+            ><span id="predicate-object">object_inserted: pending</span
+            ><span id="predicate-runtime">AFTER: establish access</span>
+          </div>
+          <p id="task-explanation">
+            The helper arm changes the scene. The placement skill waits for a
+            verified open-lid condition.
+          </p>
+          <p class="annotation">
+            Runtime illustration, not a physical trial. The showcase sequences a
+            green pen, red pen and cutter.
+          </p>
+        </div>
+      </section>
+      <section class="section demo-section" id="demonstrations">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Demonstrations</p>
+            <h2>Simulation and diagnostics.</h2>
+          </div>
+          <p>
+            Inspect a scripted teacher, compare policy checkpoints and view
+            predicted camera frames.
+          </p>
+        </div>
+        <div class="demo-grid">
+          <div class="video-panel">
+            <div class="panel-label">
+              <span><i class="dot"></i> Scripted simulation expert</span
+              ><span>Green marker</span>
+            </div>
+            <video
+              id="demo-video"
+              controls
+              playsinline
+              preload="metadata"
+              poster="assets/demo-poster.jpg"
+              src="assets/demonstration.mp4"
+            ></video>
+            <div class="panel-footer">
+              <span>Grasp, lift, carry, release, settle.</span><span>14 s</span>
+            </div>
+          </div>
+          <div class="replay-panel">
+            <div class="panel-label">
+              <span>The same recorded poses</span>
+              <div class="view-presets">
+                <button
+                  class="preset active"
+                  data-camera="perspective"
+                  disabled
+                >
+                  Perspective</button
+                ><button class="preset" data-camera="top" disabled>Top</button
+                ><button class="preset" data-camera="front" disabled>
+                  Front
+                </button>
+              </div>
+            </div>
+            <div
+              class="viewer"
+              id="replay-view"
+              aria-label="Rotatable recorded simulation"
+            >
+              <img
+                class="scene-poster"
+                src="assets/demo-poster.jpg"
+                alt="Recorded scripted simulation preview"
+              />
+              <div class="scene-prompt">
+                <p class="scene-status" role="status">
+                  Recorded MuJoCo preview
+                </p>
+                <button class="scene-load" disabled>Explore in 3D</button>
+              </div>
+            </div>
+            <div class="replay-controls">
+              <button
+                class="play-button"
+                id="play-replay"
+                disabled
+                aria-label="Play simulation replay"
+              >
+                ▶</button
+              ><input
+                id="replay-time"
+                disabled
+                type="range"
+                min="0"
+                max="14"
+                value="0"
+                step="0.0333"
+                aria-label="Recorded replay time"
+              /><span id="replay-clock">0.0 / 14.0 s</span>
+            </div>
+          </div>
+        </div>
+        <p class="evidence-note">
+          Scripted training demonstration: left arm parked, lid fixed open.
+        </p>
+        <div class="comparison-heading">
+          <h3>Zero-shot vs. task LoRA.</h3>
+          <p>
+            Red marker, seed 901001. These videos belong to the separate
+            tabletop-twin experiment.
+          </p>
+        </div>
+        <div class="checkpoint-comparison">
+          <div>
+            <span class="media-tag">Zero-shot FLUX</span
+            ><video
+              id="compare-base"
+              poster="assets/preview-zero-shot-red.jpg"
+              src="assets/zero-shot-red.mp4"
+              controls
+              playsinline
+              preload="metadata"
+            ></video>
+            <p>Final gripper-to-marker distance: <strong>20.6 cm</strong></p>
+          </div>
+          <div>
+            <span class="media-tag adapted">Final task LoRA</span
+            ><video
+              id="compare-lora"
+              poster="assets/preview-lora-red.jpg"
+              src="assets/lora-red.mp4"
+              controls
+              playsinline
+              preload="metadata"
+            ></video>
+            <p>Final gripper-to-marker distance: <strong>2.2 cm</strong></p>
+          </div>
+        </div>
+        <div class="comparison-controls">
+          <button class="button light" id="play-comparison">Play both</button
+          ><input
+            id="comparison-time"
+            type="range"
+            min="0"
+            max="1"
+            step="0.002"
+            value="0"
+            aria-label="Normalized checkpoint comparison time"
+          /><span>Scrub the same relative point</span>
+        </div>
+        <p class="annotation">
+          Both checkpoints completed 0/20 placements. The shorter distance in
+          this scene does not establish a successful grasp.
+        </p>
+        <div class="gallery-heading">
+          <h3>Prediction and perception.</h3>
+          <label class="mobile-media-picker"
+            >Diagnostic<select id="gallery-select">
+              <option value="0">Real-camera prediction</option>
+              <option value="1">FLUX in simulation</option>
+              <option value="2">Scene analysis</option>
+              <option value="3">Simulated prediction</option>
+            </select></label
+          >
+          <div
+            class="gallery-buttons"
+            role="tablist"
+            aria-label="Policy diagnostic"
+          >
+            <button data-slide="0" class="active">Real prediction</button
+            ><button data-slide="1">FLUX simulation</button
+            ><button data-slide="2">Scene analysis</button
+            ><button data-slide="3">Sim prediction</button>
+          </div>
+        </div>
+        <div
+          class="gallery-stage"
+          id="gallery-panel"
+          role="tabpanel"
+          tabindex="0"
+        >
+          <video
+            id="gallery-video"
+            poster="assets/preview-real-prediction.jpg"
+            controls
+            playsinline
+            preload="metadata"
+            src="assets/real-prediction.mp4"
+          ></video>
+          <div>
+            <span id="gallery-type"
+              >Real recorded input / visual prediction</span
+            >
+            <h3 id="gallery-title">What the policy imagines next.</h3>
+            <p id="gallery-description">
+              On held-out red-pen take 101, the RAW-5k LoRA’s imagined video
+              appears beside recorded camera frames. A predicted future is not a
+              measured outcome.
+            </p>
+            <div class="gallery-arrows">
+              <button id="gallery-prev" aria-label="Previous recorded example">
+                ←</button
+              ><span id="gallery-count">1 / 4</span
+              ><button id="gallery-next" aria-label="Next recorded example">
+                →
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="section results-section" id="experiments">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Results</p>
+            <h2>Simulation and hardware results.</h2>
+          </div>
+          <p>Recorded results, separated by task and experiment.</p>
+        </div>
+        <div class="results-tabs" role="tablist" aria-label="Result domain">
+          <button role="tab" aria-selected="true" data-result="simulation">
+            Simulation</button
+          ><button role="tab" aria-selected="false" data-result="hardware">
+            Real robot</button
+          ><button role="tab" aria-selected="false" data-result="twin">
+            Twin dataset
+          </button>
+        </div>
+        <div id="results-simulation" class="results-panel">
+          <div class="result-intro">
+            <div>
+              <h3>Red block → blue container</h3>
+              <p>
+                Five identical held-out seeds for each model. Lift threshold:
+                3.5 cm.
+              </p>
+            </div>
+            <label
+              >Measure
+              <select id="result-metric" disabled>
+                <option value="bilateral">Bilateral contact</option>
+                <option value="lift">Lift over 3.5 cm</option>
+                <option value="placement">Completed placement</option>
+                <option value="contact">Any contact</option>
+              </select></label
+            >
+          </div>
+          <div class="result-bars" id="result-bars">
+            <p class="inline-status">Loading recorded results…</p>
+          </div>
+          <div class="result-context">
+            <span><strong>64 + 16</strong> train / validation episodes</span
+            ><span><strong>32,220</strong> frames at 20 Hz</span
+            ><span><strong>250</strong> optimizer updates</span>
+          </div>
+          <p class="annotation">
+            Raw LoRA: 2/5 lifts. Zero-shot and EMA: 0/5. All models: 0/5
+            placements.
+          </p>
+        </div>
+        <div id="results-hardware" class="results-panel" hidden>
+          <h3>Red-pen insertion sessions</h3>
+          <p>
+            The media index reports 3/5 and 2/3 successful attempts in two
+            RAW-5k sessions. <a href="#physical">Watch the selected runs ↗</a>
+          </p>
+          <h3 class="older-index">Earlier official-policy engineering index</h3>
+          <div class="hardware-counts">
+            <div><strong>16</strong><span>Official-policy trials</span></div>
+            <div><strong>11</strong><span>Execution requests</span></div>
+            <div><strong>9</strong><span>Trials with commands</span></div>
+            <div>
+              <strong>Unlabeled</strong><span>Independent task success</span>
+            </div>
+          </div>
+          <p>
+            Two trials reached their duration. Others stopped on torque,
+            travel-limit or tracking checks.
+          </p>
+          <p class="annotation">
+            These older trials have no task-success labels. They are separate
+            from the red-pen sessions above.
+          </p>
+        </div>
+        <div id="results-twin" class="results-panel" hidden>
+          <h3>Tabletop-twin dataset</h3>
+          <div class="hardware-counts">
+            <div><strong>576</strong><span>Generated candidates</span></div>
+            <div><strong>243</strong><span>Accepted demonstrations</span></div>
+            <div><strong>133 / 110</strong><span>Green / red marker</span></div>
+            <div>
+              <strong>0 / 20</strong
+              ><span>Placements per evaluated checkpoint</span>
+            </div>
+          </div>
+          <p>
+            Scripted demonstrations vary object pose, box layout, lighting and
+            cameras.
+          </p>
+          <p class="annotation">
+            Separate dataset from the five-seed red-block experiment.
+          </p>
+        </div>
+        <p class="result-source">
+          Sources: current main validation records and media index ·
+          <a href="evidence/results.json" download
+            >Download the public result summary ↗</a
+          >
+        </p>
+      </section>
+      <section class="section" id="twin">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">The digital twin</p>
+            <h2>Real workspace and MuJoCo.</h2>
+          </div>
+          <p>
+            Drag to compare the real setup with the estimated scene. The views
+            are not registered.
+          </p>
+        </div>
+        <div class="image-comparison" id="scene-comparison">
+          <img src="assets/twin-scene.png" alt="Estimated MuJoCo tabletop" />
+          <div class="image-comparison-top">
+            <img
+              src="assets/setup.png"
+              alt="Actual Haller tabletop reference"
+            />
+          </div>
+          <div class="comparison-divider"></div>
+          <span class="image-label real">Real reference</span
+          ><span class="image-label sim">MuJoCo estimate</span
+          ><input
+            id="scene-divider"
+            type="range"
+            min="0"
+            max="100"
+            value="40"
+            aria-label="Real versus simulation comparison divider"
+          />
+        </div>
+        <div class="twin-explanation">
+          <article>
+            <h3>Measured-joint mirroring</h3>
+            <p>
+              Pair the lab with the local companion to mirror measured joints in
+              MuJoCo.
+            </p>
+          </article>
+          <article>
+            <h3>Estimated physical correspondence</h3>
+            <p>
+              Scene dimensions and camera registration need calibration. Live
+              objects and contact forces are not tracked.
+            </p>
+          </article>
+        </div>
+        <details class="figure-detail">
+          <summary>
+            Why the fingers matter <span>Expand comparison ↗</span>
+          </summary>
+          <img
+            src="assets/gripper-comparison.png"
+            alt="Real compliant fingers next to rigid simulated jaws"
+            loading="lazy"
+          />
+          <p>Haller uses compliant fingers; the simulated jaws are rigid.</p>
+        </details>
+      </section>
+      <section class="section evidence-section" id="evidence">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Evidence & limits</p>
+            <h2>Current status.</h2>
+          </div>
+          <p>Code, recordings and remaining validation.</p>
+        </div>
+        <div class="evidence-rows">
+          <details open>
+            <summary>
+              Runtime and skill coordination
+              <span>Implemented / software checked</span>
+            </summary>
+            <p>
+              The runtime is implemented. Six object-order permutations pass
+              symbolic checks using synthetic checkpoints and deterministic
+              feedback.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Perception and verification
+              <span>Configured / deployment needs evaluation</span>
+            </summary>
+            <p>
+              Qwen inspects camera views and updates timestamped scene
+              predicates. Physical task transitions still need a labeled
+              perception evaluation.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Task LoRA and the red-pen skill
+              <span>RAW-5k inserts / 10k loading check</span>
+            </summary>
+            <p>
+              RAW-5k has recorded real inserts. A separate 10k adapter passed a
+              blank-image loading check with a finite 42×6 output. Other
+              showcase skill bundles remain unstaged.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Simulation-to-real transfer <span>Research in progress</span>
+            </summary>
+            <p>
+              Single-arm red-pen inserts are recorded. Full learned dual-arm
+              execution and a calibrated object/contact twin remain unverified.
+            </p>
+          </details>
+        </div>
+        <div class="next-step">
+          <div>
+            <h3>Open the lab.</h3>
+            <p>
+              Replay runs in your browser. Pair the local companion for real
+              cameras, joint mirroring and prompt-driven trials.
+            </p>
+          </div>
+          <a
+            class="button primary"
+            href="live.html"
+            target="_blank"
+            rel="noopener"
+            >Open full-screen lab ↗</a
+          >
+        </div>
+        <details class="figure-detail">
+          <summary>Reproducibility and attribution</summary>
+          <p>
+            This page is based on main revision <code>07e50d0</code>, reviewed
+            on 18 October 2026. Public results are an explicit aggregate export
+            of recorded validation files, not a newly reproduced benchmark.
+            Hardware/controller origins, serial identifiers, credentials and raw
+            telemetry are excluded.
+          </p>
+          <p>
+            <a href="evidence/results.json"
+              >Result counts and source-file provenance</a
+            >
+            ·
+            <a href="evidence/notes.html"
+              >Read the evidence notes and local bridge setup</a
+            >
+          </p>
+          <p>
+            Layout references:
+            <a
+              href="https://zhexiluo.github.io/DexMimic/"
+              target="_blank"
+              rel="noopener"
+              >DexMimic</a
+            >
+            and
+            <a href="https://nerfies.github.io/" target="_blank" rel="noopener"
+              >Nerfies</a
+            >. Liminal's copy, interactions and layouts are original. Hardware
+            CAD is from TheRobotStudio; Three.js and self-hosted fonts retain
+            their licenses.
+          </p>
+        </details>
+      </section>
+    </main>
+    <footer>
+      <a class="wordmark" href="./"
+        >liminal<span class="wordmark-dot">.</span></a
+      ><span>FLUX skills · dual SO-101 · MuJoCo</span>
+      <div>
+        <a
+          href="https://github.com/Javgilavi/liminal"
+          target="_blank"
+          rel="noopener"
+          >GitHub code ↗</a
+        >
+        <a
+          href="https://github.com/oscardvs/haller_ws"
+          target="_blank"
+          rel="noopener"
+          >Haller hardware ↗</a
+        ><a href="live.html" target="_blank" rel="noopener">Live lab ↗</a>
+      </div>
+    </footer>
+    <noscript
+      >Recorded videos and explanations are available without JavaScript.
+      Interactive diagrams, sliders and 3D views require JavaScript and
+      WebGL.</noscript
+    >
+  </body>
+</html>

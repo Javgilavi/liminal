@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      name="description"
+      content="Liminal full-screen robot lab: explore a recorded scene or pair with a local Haller companion."
+    />
+    <title>Liminal — Live lab</title>
+    <link rel="icon" href="assets/favicon.svg" />
+    <link rel="stylesheet" href="style.css?v=20261018-resilient" />
+    <link rel="stylesheet" href="live.css?v=20261018-resilient" />
+    <script type="importmap">
+      { "imports": { "three": "./assets/vendor/three.module.js" } }
+    </script>
+    <script type="module" src="live.js?v=20261018-resilient"></script>
+  </head>
+  <body class="lab-page">
+    <header class="lab-top">
+      <a class="wordmark" href="./"
+        >liminal<span class="wordmark-dot">.</span></a
+      ><span class="lab-context"
+        >Embodied in the loop <span>/</span> Full-screen lab</span
+      >
+      <div>
+        <a href="./">← Project</a
+        ><button id="fullscreen" aria-label="Toggle browser full screen">
+          ⛶
+        </button>
+      </div>
+    </header>
+    <main class="workspace">
+      <div class="workspace-bar">
+        <div>
+          <span id="connection-dot" class="status-dot"></span
+          ><strong id="connection-state">Recorded simulation</strong
+          ><span id="connection-description"
+            >Explore without a robot connection</span
+          >
+        </div>
+        <div>
+          <button id="disconnect" hidden>Disconnect</button
+          ><button id="pair" class="pair-button">Pair local robot ↗</button>
+        </div>
+      </div>
+      <div class="lab-main">
+        <section class="large-twin">
+          <div class="view-title">
+            <span id="twin-title">Recorded poses / estimated MuJoCo scene</span>
+            <div>
+              <button class="preset active" data-camera="perspective" disabled>
+                Orbit</button
+              ><button class="preset" data-camera="top" disabled>Top</button
+              ><button class="preset" data-camera="front" disabled>
+                Front
+              </button>
+            </div>
+          </div>
+          <div id="lab-view" class="viewer">
+            <img
+              class="scene-poster"
+              src="assets/twin-scene.png"
+              alt="Recorded estimated MuJoCo tabletop preview"
+            />
+            <div class="scene-prompt">
+              <p class="scene-status" role="status">Recorded MuJoCo preview</p>
+              <button class="scene-load" disabled>Explore in 3D</button>
+            </div>
+          </div>
+          <div class="twin-overlay">
+            <span>Drag to orbit · Scroll to zoom</span
+            ><span id="twin-scope"
+              >Scripted teacher replay · objects are recorded poses</span
+            >
+          </div>
+        </section>
+        <aside class="camera-column">
+          <div class="view-title">
+            <span id="camera-title">Recorded scene camera</span
+            ><select id="camera-select" aria-label="Camera input">
+              <option value="top">Scene / top</option>
+              <option value="wrist_a">Left wrist</option>
+              <option value="wrist_b">Right wrist</option>
+            </select>
+          </div>
+          <div class="camera-frame">
+            <video
+              id="recorded-camera"
+              src="assets/demonstration.mp4"
+              playsinline
+              preload="metadata"
+              poster="assets/demo-poster.jpg"
+              muted
+            ></video
+            ><img id="real-camera" alt="Live Haller camera" hidden />
+            <div id="camera-notice" hidden>
+              Waiting for a fresh camera frame.
+            </div>
+            <span id="camera-caption">Scripted expert · simulation · 14 s</span>
+          </div>
+          <div class="telemetry-grid">
+            <div>
+              <span>Telemetry</span><strong id="telemetry-hz">Replay</strong>
+            </div>
+            <div><span>Sample age</span><strong id="sample-age">—</strong></div>
+            <div>
+              <span>Policy target</span
+              ><strong id="active-arm">Not connected</strong>
+            </div>
+            <div>
+              <span>Trial state</span><strong id="trial-state">Idle</strong>
+            </div>
+          </div>
+          <details class="lab-details">
+            <summary>Joint state & scope</summary>
+            <p id="joint-state">
+              The replay contains recorded simulated body poses. A paired bridge
+              supplies measured joint positions; it does not track live objects
+              or contact forces.
+            </p>
+            <pre id="joint-values"></pre>
+          </details>
+          <p class="lab-note" id="lab-note">
+            This replay is a scripted training demonstration. It is not a
+            learned-policy success. Pair with your existing local companion to
+            view measured joints and real cameras.
+          </p>
+        </aside>
+      </div>
+      <div class="scrubber" id="replay-controls">
+        <button id="replay-play" disabled aria-label="Play recorded simulation">
+          ▶</button
+        ><input
+          type="range"
+          id="replay-scrub"
+          disabled
+          min="0"
+          max="14"
+          step="0.0333"
+          value="0"
+          aria-label="Recorded scene time"
+        /><span id="replay-clock">0.0 / 14.0 s</span
+        ><span class="replay-label">Recorded simulation</span>
+      </div>
+      <form id="trial-form">
+        <div class="instruction-row">
+          <label for="instruction"
+            >Task instruction
+            <span id="instruction-mode"
+              >Connect a local bridge to run FLUX</span
+            ></label
+          ><textarea id="instruction" maxlength="500" rows="2">
+Pick up the red pen and put it in the box.</textarea
+          ><button type="submit" id="run-trial" class="button primary" disabled>
+            Run observation
+          </button>
+        </div>
+        <div class="trial-options">
+          <label
+            ><input type="checkbox" id="execute" /> Send actions to
+            hardware</label
+          ><label
+            >Duration
+            <select id="duration">
+              <option value="10">10 s</option>
+              <option value="20" selected>20 s</option>
+              <option value="30">30 s</option>
+            </select></label
+          ><label id="engage-label" hidden
+            ><input type="checkbox" id="engage" /> I engaged MANUAL + torque in
+            Haller</label
+          ><button type="button" id="stop-trial" disabled>
+            Stop this trial
+          </button>
+        </div>
+        <p id="run-message" role="status">
+          No robot connection. Replay and camera exploration are available now.
+        </p>
+      </form>
+    </main>
+    <dialog id="pair-dialog">
+      <form method="dialog">
+        <button class="dialog-close" aria-label="Close pairing setup">×</button>
+      </form>
+      <p class="dialog-kicker">Connect your own Haller service</p>
+      <h2>Keep the robot local.<br />Open the lab here.</h2>
+      <p>
+        GitHub Pages hosts this interface. Your local companion supplies
+        cameras, measured joints and the existing guarded FLUX runner.
+      </p>
+      <ol>
+        <li>
+          Start Haller normally, then launch the research companion on the same
+          machine.
+        </li>
+        <li>
+          Open the local pairing page. It creates a private session link back to
+          this full-screen lab.
+        </li>
+        <li>
+          Allow local-network access if your browser requests it. No camera
+          stream or pairing token is uploaded to GitHub.
+        </li>
+      </ol>
+      <pre>
+./scripts/research_ui.sh \
+  --profile configs/policy/official_haller_right.yaml \
+  --site-url https://javgilavi.github.io/liminal/</pre
+      >
+      <a
+        id="open-pair"
+        class="button primary"
+        href="http://127.0.0.1:18003/pair"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Open local pairing page ↗</a
+      >
+      <p class="dialog-foot">
+        Use the matching verified profile for your arm and camera mapping.
+        Hardware execution stays gated by fresh telemetry, verified units and
+        explicit manual engagement.
+        <a href="evidence/notes.html">Setup details ↗</a>
+      </p>
+    </dialog>
+  </body>
+</html>

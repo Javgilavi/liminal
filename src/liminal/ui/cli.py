@@ -1,9 +1,9 @@
 """Command-line trigger (owned by WS5).
 
-    liminal run configs/tasks/lid_hold_insert.yaml --robot configs/robot/mock_dual.yaml
-    liminal plan "put the block in the box" --planner template
-    liminal validate configs/tasks/*.yaml
-    liminal serve --robot configs/robot/so101_dual.yaml --backend flux
+liminal run configs/tasks/lid_hold_insert.yaml --robot configs/robot/mock_dual.yaml
+liminal plan "put the block in the box" --planner template
+liminal validate configs/tasks/*.yaml
+liminal serve --robot configs/robot/so101_dual.yaml --backend flux
 """
 
 from __future__ import annotations
@@ -124,8 +124,7 @@ def _inspect(args: argparse.Namespace) -> int:
     expected_cameras = set(runtime.inspection.cameras)
     if set(image_paths) != expected_cameras:
         raise SystemExit(
-            f"images must contain exactly the configured cameras {sorted(expected_cameras)}; "
-            f"got {sorted(image_paths)}"
+            f"images must contain exactly the configured cameras {sorted(expected_cameras)}; got {sorted(image_paths)}"
         )
 
     class ImageCamera:
@@ -145,11 +144,13 @@ def _inspect(args: argparse.Namespace) -> int:
         world,
         confirmations=runtime.confirmations,
     )
-    assessment = asyncio.run(inspector.inspect_until_known(
-        request,
-        timeout_s=runtime.inspection.timeout_s,
-        retry_delay_s=runtime.inspection.retry_delay_s,
-    ))
+    assessment = asyncio.run(
+        inspector.inspect_until_known(
+            request,
+            timeout_s=runtime.inspection.timeout_s,
+            retry_delay_s=runtime.inspection.retry_delay_s,
+        )
+    )
     output: dict[str, object] = {
         "predicates": {
             key: {
@@ -180,14 +181,10 @@ def _evaluate_perception(args: argparse.Namespace) -> int:
     runtime = load_perception_config(args.perception)
     missing_predicates = set(recording.request.predicates) - set(runtime.inspection.definitions)
     if missing_predicates:
-        raise SystemExit(
-            f"evaluation predicates are absent from the perception config: {sorted(missing_predicates)}"
-        )
+        raise SystemExit(f"evaluation predicates are absent from the perception config: {sorted(missing_predicates)}")
     configured_cameras = set(runtime.inspection.cameras)
     if set(recording.request.cameras) != configured_cameras:
-        raise SystemExit(
-            f"evaluation cameras must exactly match the perception config: {sorted(configured_cameras)}"
-        )
+        raise SystemExit(f"evaluation cameras must exactly match the perception config: {sorted(configured_cameras)}")
     # Labels own expected verdicts and image paths. Prompt semantics stay owned by
     # the deployed perception profile so evaluation cannot silently test a drifted
     # predicate definition or timeout.
@@ -207,8 +204,10 @@ def _evaluate_perception(args: argparse.Namespace) -> int:
             "inferences": [asdict(metrics) for metrics in runtime.model.inference_metrics],
         }
 
-    output_path = Path(args.output) if args.output else (
-        Path("runs") / f"{time.strftime('%Y%m%d-%H%M%S')}_{Path(args.labels).stem}_perception_eval.json"
+    output_path = (
+        Path(args.output)
+        if args.output
+        else (Path("runs") / f"{time.strftime('%Y%m%d-%H%M%S')}_{Path(args.labels).stem}_perception_eval.json")
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(output, indent=2) + "\n")
@@ -250,23 +249,22 @@ def _inspect_live(args: argparse.Namespace) -> int:
     missing_cameras = set(request.cameras) - set(ctx.cameras)
     if missing_cameras:
         raise SystemExit(f"robot config is missing perception cameras: {sorted(missing_cameras)}")
-    output_path = Path(args.output) if args.output else (
-        Path("runs") / f"{time.strftime('%Y%m%d-%H%M%S')}_live_perception.json"
+    output_path = (
+        Path(args.output) if args.output else (Path("runs") / f"{time.strftime('%Y%m%d-%H%M%S')}_live_perception.json")
     )
     capture_dir = output_path.parent / f"{output_path.stem}_frames"
-    cameras = {
-        name: SnapshotCamera(ctx.cameras[name], capture_dir)
-        for name in request.cameras
-    }
+    cameras = {name: SnapshotCamera(ctx.cameras[name], capture_dir) for name in request.cameras}
     ctx.inspector.cameras = cameras
     warm_vision_model(runtime.model)
     with connected_cameras(cameras):
-        output = asyncio.run(inspect_live(
-            ctx.inspector,
-            request,
-            samples=args.samples,
-            interval_s=args.interval_s,
-        ))
+        output = asyncio.run(
+            inspect_live(
+                ctx.inspector,
+                request,
+                samples=args.samples,
+                interval_s=args.interval_s,
+            )
+        )
     if isinstance(runtime.model, QwenVisionModel):
         output["model_metrics"] = {
             "config": asdict(runtime.model.config),
@@ -279,6 +277,15 @@ def _inspect_live(args: argparse.Namespace) -> int:
     print(json.dumps({"passed": output["passed"], "final_blackboard": output["final_blackboard"]}, indent=2))
     print(f"live perception report: {output_path}")
     return 0 if output["passed"] else 1
+
+
+def _research(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from liminal.ui.research import create_research_app
+
+    uvicorn.run(create_research_app(args.profile, args.controller, args.site_url), host=args.host, port=args.port)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -338,6 +345,14 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--interval-s", type=float, default=0.25, help="delay between inspections")
     live.add_argument("--output", help="JSON report path; defaults to a timestamped file under runs/")
     live.set_defaults(fn=_inspect_live)
+
+    research = sub.add_parser("research", help="paper-style demo, camera console and read-only MuJoCo twin")
+    research.add_argument("--profile", default=None, help="existing verified official FLUX rig profile")
+    research.add_argument("--controller", default="http://127.0.0.1:8000")
+    research.add_argument("--site-url", default=None, help="trusted HTTPS GitHub Pages site for browser pairing")
+    research.add_argument("--host", default="127.0.0.1")
+    research.add_argument("--port", type=int, default=18003)
+    research.set_defaults(fn=_research)
 
     args = ap.parse_args(argv)
     return args.fn(args)

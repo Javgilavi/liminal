@@ -1,0 +1,20 @@
+Edit the supplied Liminal architecture figure. The user clarifies that they WANT BOXES, just NOT SQUARE-CORNERED BOXES. Restore refined softly rounded containers around the architecture nodes, keeping the elegant minimal style of this version. This is a precise design correction, not a redesign.
+
+Preserve the actual robot photograph on the right EXACTLY, with the green framework, tall camera mast, box, pens, yellow cutter, pose, proportions, lighting and all details unchanged. Keep the white background, restrained typography, all exact wording and model names, three-column composition, small header and flow topology.
+
+Give each node its own beautifully proportioned flat capsule / rounded-rectangle enclosure:
+- Task plan / YAML
+- Harness / Deterministic behavior tree
+- Skill registry / Task LoRA checkpoints
+- LEFT ARM / FLUX 3 Action / task LoRA · 6-D
+- RIGHT ARM / FLUX 3 Action / task LoRA · 6-D
+- Safety / Limits · ownership · E-stop
+- World state / Verified predicates
+- Perception / Qwen3-VL-4B-Instruct
+- Observations / Images + joint state
+
+Boxes must have generous corner radii, approximately 24–32px at this image resolution: rounded and gentle, never square. Their borders are subtle and fine, approximately 1px, soft gray for deterministic components. Very pale almost-white sage fill for LEFT ARM and very pale almost-white slate-blue fill for RIGHT ARM, with matching fine border; all other boxes white or near-white. NO shadows, no gradients, no glossy glass effects, no icons, no bulky outlines, no dashboard styling, no badges. Flat refined academic figure, generous internal padding and consistent radii. The two FLUX model boxes must be exactly the same size, visually important but restrained. Remove the small standalone colored horizontal lines above LEFT ARM and RIGHT ARM; the new enclosures replace them.
+
+Retain thin smoothly curved branching arrows from Harness to each policy, output paths from each policy joining into the single Safety box, and arrow from Safety to robot. Arrows meet the outside borders; never cross text or run through box interiors. Adapt placement slightly to avoid overlap but keep overall layout. Bottom feedback: robot down into Observations; Observations left into Perception; Perception left into World state; World state upward into Harness. A downward arrow connects Task plan to Harness. No extra connector from registry: its upper placement labels the checkpoint source for both policies. The tiny 'Independent instances / Inputs: images + joint state' caption stays outside boxes. Robot and its XLeRobot / Dual SO-101 caption stay unboxed. Headers COORDINATE, ACT and EMBODY stay unboxed.
+
+Keep text concise and unchanged. Keep the diagram balanced, flat, subtle, sharp and legible. The main correction is SOFTLY ROUNDED BOXES with fine borders. No square corners and no removal of containers.
