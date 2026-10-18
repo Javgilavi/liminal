@@ -352,6 +352,7 @@ def test_orchestrator_bridge_mirrors_both_arms_and_runs_the_plan(orchestrator_br
 
 
 def test_orchestrator_bridge_rejects_a_remote_orchestrator_and_a_profile(tmp_path):
+    pytest.importorskip("mujoco")  # create_research_app builds the twin mirror before it checks the arguments
     from liminal.ui.research import create_research_app
 
     with pytest.raises(ValueError, match="local orchestrator"):
