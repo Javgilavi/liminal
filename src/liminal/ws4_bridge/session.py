@@ -30,6 +30,8 @@ HALLER_SESSION: dict[str, Any] = {
     "max_run_s": 1200.0,
     "task": "liminal_bt",
     "realtime": True,
+    # the tree owns recovery (fallback, retry): a ws4 replan would wait for a goal and an approval that never come
+    "max_replans": 0,
 }
 TERMINAL = ("succeeded", "failed", "aborted")  # orchestrator.executor.TERMINAL
 _TUPLES = ("hold_arms", "fake_start", "right_fake_start", "image_size")

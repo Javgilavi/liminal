@@ -405,3 +405,23 @@ def test_unclear_lid_view_keeps_the_last_confident_verdict_for_keep_s(ws4):
     assert lid(False, 0.9, 40)["value"] == "false"  # a confident closed lid always counts
     assert lid(True, 0.5, 45)["value"] == "false"  # and is what an unclear view keeps
 
+
+
+def test_a_failed_ws4_step_ends_without_waiting_for_a_ws4_replan(ws4, tmp_path, policy_server):
+    """Live 18 Oct: a failed open_box parked ws4 in awaiting_replan (no goal, no approver) until the tree's timeout."""
+    from orchestrator.verifier import Verdict
+
+    server, token, _ = policy_server
+    ctx, bridge, scene = bridge_context(ws4, tmp_path, server, token)
+    bridge.connect()
+    try:
+        bridge.session.verifier = ws4["Checks"]()
+        bridge.session.verifier.check = lambda step, skill, obs: Verdict(False, 0.9, "lid still closed", "test")
+        t0 = time.monotonic()
+        with connected(ctx):
+            report = asyncio.run(run_task(load_task(TASK, arms=ctx.arm_names), ctx))
+        assert not report.goal_verified and time.monotonic() - t0 < 60
+        assert scene.steps == [("open_box", "right", "failed")]
+        assert bridge.session.executor.state == "failed" and bridge.session.cfg.max_replans == 0
+    finally:
+        bridge.disconnect()
