@@ -39,6 +39,8 @@ in service of those three, in time order. Tick each line; the owner is who does 
       close pills).
 - [ ] The box step is called a scripted replay everywhere (slides, README, video captions), never FLUX.
 - [ ] Cutter count reconciled (trial log 1/6 vs the orchestrator's 0/5 inserts at 09:00) before it is quoted.
+- [ ] Chain stated with its caveats: unguarded demo mode, red pen placed by the green-pen LoRA.
+- [ ] Video v3 from video-cut (Drive `liminal/05_video`, about 12:50) checked against NUMBERS.md 0.1b captions.
 - [ ] 3-minute order: cover, zeroshot, contract (optional), diagnosis, architecture, orchestrator, teach (optional),
       heldout, results, knifeedge, imagination, imaginebetter (optional), realworld, close. Skip safety, memory, sim,
       team and next in the 3-minute pitch (their notes say FINAL ONLY).
@@ -74,9 +76,6 @@ Mirror of NUMBERS.md section 14; grep for the exact tokens.
 
 | Placeholder | What | Owner | Expected |
 |---|---|---|---|
-| `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | full chain: successes / runs, steps | demo-rehearsal | 10:00 to 12:30 |
-| `[[NUM:REH_PENLID]]` | red pen with the lid held, one check attempt | demo-rehearsal | 09:00 to 11:30 |
-| `[[NUM:B84_PEN_SUCCESS]]`, `[[NUM:MEDIAN_PEN_SUCCESS]]` | zero-shot B84 / median on the arm, only if run | orchestrator | 12:30, else delete |
 | `[[CLIP:HMI_CHAIN]]`, `[[CLIP:IMAGINED_VS_ACTUAL]]` | chain screen recording; optional live imagination clip | demo-rehearsal | with the chain |
 | `[[NUM:GPU_SPEND]]`, `[[NUM:CLAUDE_SPEND]]`, `[[NUM:RECORD_HOURS]]`, `[[NUM:TRAIN_HOURS]]` | cost and time split (optional) | Oscar | 13:00 |
 | `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to `[[TEAM:WS5]]`, `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]`, `[[TEAM:CREDITS]]` | team facts | Oscar / team | as early as possible |
