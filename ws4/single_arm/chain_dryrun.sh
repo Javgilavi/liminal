@@ -6,11 +6,16 @@
 #   POD_HOST=157.157.221.177 POD_PORT=15377 bash ws4/single_arm/chain_dryrun.sh
 #
 # Env: CHAIN ("box green cutter pen_lid"), ROWS (median), ATTEMPT_S (4), ALLOW_NO_REFS (1: skills built with
-# --no-refs still run, their home check reports the missing references), plus anything eval_skill.sh takes.
+# --no-refs still run, their home check reports the missing references), BOX_END ("q1 .. q6": a box-skill end pose;
+# first prints which pen skills the box-arm gate allows with the box arm there), plus anything eval_skill.sh takes.
 set -euo pipefail
 : "${POD_HOST:?POD_HOST}" "${POD_PORT:?POD_PORT}"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
+if [ -n "${BOX_END:-}" ]; then
+  # shellcheck disable=SC2086
+  python ws4/single_arm/gate.py report $BOX_END
+fi
 for skill in ${CHAIN:-box green cutter pen_lid}; do
   if ! env_out=$(python ws4/single_arm/skills.py env "$skill" 2>&1); then
     echo "=== $skill: not ready ($env_out)"; continue

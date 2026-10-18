@@ -44,7 +44,7 @@
     0.085
   ],
   "other_q": null,
-  "other_clearance": 0.04,
+  "other_clearance": 0.01,
   "env_joint_lo": [
     -14.392949104309082,
     -23.048182487487793,

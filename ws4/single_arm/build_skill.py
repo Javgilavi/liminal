@@ -32,6 +32,7 @@ WS4 = HERE.parent
 sys.path.insert(0, str(WS4))
 sys.path.insert(0, str(HERE))
 
+from gate import envelope_gap, point_segment  # noqa: E402, F401 (re-exported for tests)
 from keepout import ZONES, KeepOut  # noqa: E402
 from skills import ARMS, CACHE, SKILL_DIR, SKILLS, find_dataset  # noqa: E402
 
@@ -80,32 +81,6 @@ def split_of(root: Path, episodes: list[int]) -> dict:
             "heldout": {"H": good[-3:]}, "drop": drop, "train": good[:-3], "provisional": True}  # fmt: skip
 
 
-def point_segment(points: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """Distances from points (N, 3) to the segment a-b."""
-    ab = b - a
-    t = np.clip((points - a) @ ab / max(float(ab @ ab), 1e-12), 0.0, 1.0)
-    return np.linalg.norm(points - (a + t[:, None] * ab), axis=1)
-
-
-def envelope_gap(ws: KeepOut, other_poses: list[np.ndarray], samples: int = 6) -> np.ndarray:
-    """Per envelope voxel: the smallest distance from any point inside it (``samples``^3 grid) to the other arm's
-    capsule surfaces, over ``other_poses``."""
-    from kinematics.collision import LINKS
-
-    names = ["base", "j0", "j1", "j2", "j3", "j4", "tcp"]
-    v = ws.env_voxel
-    corners = np.asarray(ws.env_origin) + np.asarray(ws.env_cells, float) * v
-    g = (np.arange(samples) + 0.5) / samples
-    sub = np.stack(np.meshgrid(g, g, g, indexing="ij"), -1).reshape(-1, 3) * v
-    pts = (corners[:, None, :] + sub[None]).reshape(-1, 3)
-    gap = np.full(len(pts), np.inf)
-    for pose in other_poses:
-        caps = ws._capsule_points(np.asarray(pose, float), ws.other_base_pos)  # noqa: SLF001
-        for x, y, r in LINKS:
-            gap = np.minimum(gap, point_segment(pts, caps[names.index(x)], caps[names.index(y)]) - r)
-    return gap.reshape(len(corners), -1).min(axis=1)
-
-
 def replay(ko: KeepOut, state: np.ndarray, action: np.ndarray, other: np.ndarray | None, ep: np.ndarray,
            takes: list[int]) -> dict:  # fmt: skip
     """Refusals of every recorded step (state and commanded action vs the measured state) of ``takes``."""
@@ -124,6 +99,20 @@ def replay(ko: KeepOut, state: np.ndarray, action: np.ndarray, other: np.ndarray
     return {"steps": steps, "refusals": sum(zones.values()), "zones": dict(zones), "takes": dict(per_take)}
 
 
+def write_refs_only(skill, out: Path) -> None:
+    """References for a skill built with --no-refs: decode frame 0 of its held-out takes from the recorded snapshot."""
+    from make_layout_refs import write_refs
+
+    info = json.loads((out / "skill.json").read_text())
+    arm = ARMS[info["arm"]]
+    write_refs(info["snapshot"], info["split"]["heldout"], out / "layouts", repo_id="local/skill",
+               wrist_key=arm.wrist_key, columns=arm.columns, meta={"dataset": Path(info["dataset"]).name,
+                                                                    "task": info["task"]})  # fmt: skip
+    info["refs"] = True
+    (out / "skill.json").write_text(json.dumps(info, indent=1))
+    print(f"{skill.name}: references written to {out / 'layouts'}", flush=True)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("skill", choices=sorted(set(SKILLS) - {"pen"}))
@@ -136,14 +125,24 @@ def main() -> None:
                    help="override the task arm's midline backstop: |y| in m toward the other arm (station: 0.11)")
     p.add_argument("--other-clearance", type=float, default=None,
                    help="override the other-arm capsule clearance (m, station: 0.04); orchestrator approval only")
+    p.add_argument("--torso-margin", type=float, default=None,
+                   help="override the torso box margin (m, station: 0.02); orchestrator approval only")
+    p.add_argument("--slow-zone", type=float, default=None,
+                   help="m: the runner's slow zone near the other arm for this skill (0.5 deg/tick, load freeze at 50 "
+                   "%% for 0.2 s); written into skill.json runner_args")
     p.add_argument("--env-gap", type=float, default=None,
                    help="drop envelope voxels with any point closer than this (m) to the other arm's capsules, at the "
                    "min / median / max of its pose range in the demos")
     p.add_argument("--reason", default="", help="why the overrides; recorded in skill.json")
     p.add_argument("--no-refs", action="store_true", help="skip the start frames (video decoding): keep-out and "
                    "envelope only, e.g. while the laptop records (run the full build afterwards)")
+    p.add_argument("--refs-only", action="store_true",
+                   help="only write the held-out start frames into an already built skill (its snapshot and split)")
     args = p.parse_args()
     skill = SKILLS[args.skill]
+    if args.refs_only:
+        write_refs_only(skill, Path(args.out) if args.out else SKILL_DIR / skill.name)
+        return
     arm = ARMS[args.arm or skill.arm]
     other_arm = ARMS["left" if arm.side == "right" else "right"]
     if args.root:
@@ -187,6 +186,8 @@ def main() -> None:
         station.midline_y = ws.midline_y = -abs(args.midline)
     if args.other_clearance is not None:
         station.other_clearance = ws.other_clearance = args.other_clearance
+    if args.torso_margin is not None:
+        station.torso_margin = ws.torso_margin = args.torso_margin
     station_replay = replay(station, state, action, other, ep, good)
     train_mask = np.isin(ep, split["train"])
     ws.build_envelope(action[train_mask], source=f"{skill.name}: {src.name} train takes {split['train']}")
@@ -225,6 +226,22 @@ def main() -> None:
         print(f"parked arm (robot {other_arm.side}) in the demos: {parked['min']} .. {parked['max']} (median "
               f"{parked['median']}){drift}", flush=True)  # fmt: skip
 
+    runner_args, slow = [], None
+    if args.slow_zone is not None:
+        runner_args = ["--slow-zone", f"{args.slow_zone:g}", "--slow-step", "0.5", "--slow-load-sustain", "0.5",
+                       "--slow-load-ticks", "6"]  # fmt: skip
+        if other is not None:  # how much of the demonstrated motion runs in the slow zone (measured poses)
+            good_idx = np.flatnonzero(np.isin(ep, good))
+            ko = KeepOut.load(out / "workspace.json")
+            near = np.zeros(len(good_idx), dtype=bool)
+            for k, i in enumerate(good_idx):
+                ko.other_q = tuple(float(v) for v in other[i])
+                near[k] = float(ko.other_arm_gap(state[i])) < args.slow_zone
+            takes = sorted({int(ep[i]) for i in good_idx[near]})
+            slow = {"zone_m": args.slow_zone, "tick_fraction": round(float(near.mean()), 4), "takes": len(takes),
+                    "of_takes": len(good)}  # fmt: skip
+            print(f"slow zone {args.slow_zone} m: {near.mean() * 100:.1f} % of the demo ticks, in {len(takes)} of "
+                  f"{len(good)} takes", flush=True)  # fmt: skip
     rel = out.resolve().relative_to(WS4.parent) if out.resolve().is_relative_to(WS4.parent) else out.resolve()
     if args.no_refs:
         print("references skipped (--no-refs): rerun without it before an arm session", flush=True)
@@ -241,15 +258,25 @@ def main() -> None:
         "validation": {"station": station_replay, "heldout_with_envelope": heldout_replay,
                        "zones": list(ZONES), "ok": station_replay["refusals"] == 0 and heldout_replay["refusals"] == 0},
         "overrides": {"exclude": sorted(args.exclude), "midline": args.midline, "env_gap": args.env_gap,
-                      "env_voxels_trimmed": trimmed, "other_clearance": args.other_clearance, "reason": args.reason}
+                      "env_voxels_trimmed": trimmed, "other_clearance": args.other_clearance,
+                      "torso_margin": args.torso_margin,
+                      "slow_zone": slow, "reason": args.reason}
         if args.exclude or args.midline is not None or args.env_gap is not None or args.other_clearance is not None
-        else None,
+        or args.slow_zone is not None or args.torso_margin is not None else None,
+        "runner_args": runner_args,
         "refs": not args.no_refs, "built": time.strftime("%Y-%m-%d %H:%M:%S"),
     }  # fmt: skip
     (out / "skill.json").write_text(json.dumps(record, indent=1))
     verdict = "OK" if record["validation"]["ok"] else "REFUSALS: review the zones before any arm run"
     print(f"wrote {out}/skill.json: keep-out validation {verdict}"
           f"{' (provisional split)' if split['provisional'] else ''}")  # fmt: skip
+    if arm.side == "left" and skill.name != "pen" and other is not None:  # chain skills with the lid-holding box arm
+        if (SKILL_DIR / "box" / "skill.json").exists():
+            from gate import write as write_gate
+
+            write_gate(skill.name, out)
+        else:
+            print("no box skill yet: the box-arm gate is not written (gate.py write <skill> later)", flush=True)
 
 
 if __name__ == "__main__":

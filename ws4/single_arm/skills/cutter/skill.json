@@ -2,7 +2,7 @@
  "skill": "cutter",
  "arm": "left",
  "dataset": "/home/oscar-devos/.cache/huggingface/lerobot/ws4/haller_put_the_yellow_cutter_in_the_yellow_slot",
- "snapshot": "/home/oscar-devos/liminal/ws4/.cache/single_arm_diag/skill_cutter_20261018_024124",
+ "snapshot": "/home/oscar-devos/liminal/ws4/.cache/single_arm_diag/skill_cutter_20261018_025504",
  "task": "put the yellow cutter in the yellow slot",
  "workspace": "ws4/single_arm/skills/cutter/workspace.json",
  "layouts": "ws4/single_arm/skills/cutter/layouts",
@@ -123,76 +123,15 @@
  "validation": {
   "station": {
    "steps": 49950,
-   "refusals": 1983,
-   "zones": {
-    "other_arm": 1983
-   },
-   "takes": {
-    "0": 117,
-    "1": 16,
-    "2": 126,
-    "4": 69,
-    "6": 48,
-    "7": 10,
-    "8": 37,
-    "9": 60,
-    "11": 54,
-    "12": 53,
-    "13": 25,
-    "14": 25,
-    "15": 16,
-    "17": 16,
-    "18": 16,
-    "19": 19,
-    "20": 25,
-    "21": 13,
-    "22": 95,
-    "24": 78,
-    "25": 116,
-    "26": 25,
-    "28": 30,
-    "33": 22,
-    "34": 42,
-    "35": 49,
-    "37": 63,
-    "39": 12,
-    "40": 32,
-    "41": 9,
-    "43": 53,
-    "46": 22,
-    "47": 27,
-    "48": 30,
-    "49": 34,
-    "51": 50,
-    "53": 51,
-    "54": 32,
-    "55": 29,
-    "56": 37,
-    "57": 28,
-    "58": 38,
-    "59": 49,
-    "60": 7,
-    "61": 16,
-    "62": 5,
-    "63": 39,
-    "65": 13,
-    "66": 15,
-    "67": 17,
-    "68": 37,
-    "69": 36
-   }
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
   },
   "heldout_with_envelope": {
    "steps": 2364,
-   "refusals": 90,
-   "zones": {
-    "other_arm": 90
-   },
-   "takes": {
-    "67": 17,
-    "68": 37,
-    "69": 36
-   }
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
   },
   "zones": [
    "table",
@@ -205,7 +144,7 @@
    "joint_env",
    "tcp_env"
   ],
-  "ok": false
+  "ok": true
  },
  "overrides": {
   "exclude": [
@@ -217,9 +156,48 @@
   "midline": 0.21,
   "env_gap": 0.02,
   "env_voxels_trimmed": 34,
-  "other_clearance": null,
-  "reason": "cutter: yellow slot in the box on the robot's right, demos reach TCP y -0.154 measured / -0.175 commanded (midline -0.21); takes 3, 5, 31, 52 are mast outliers (6.5 % of 62), left out of the safety envelope only; 2 cm envelope trim near the lid-holding box arm (orchestrator's standing rule, 18 Oct)"
+  "other_clearance": 0.01,
+  "slow_zone": {
+   "zone_m": 0.04,
+   "tick_fraction": 0.0439,
+   "takes": 31,
+   "of_takes": 58
+  },
+  "reason": "cutter: demos pass the lid-holding box arm at 1.7 cm measured / 1.3 cm commanded next to the yellow slot (box-arm clearance 1.0 cm with a 4 cm slow zone: 0.5 deg/tick, load freeze at 50 % for 0.2 s, orchestrator decision 18 Oct); yellow slot in the box on the robot's right, demos reach TCP y -0.154 measured / -0.175 commanded (midline -0.21); takes 3, 5, 31, 52 are mast outliers (6.5 % of 62), left out of the safety envelope only; 2 cm envelope trim near the lid-holding box arm (standing rule)"
  },
- "refs": false,
- "built": "2026-10-18 02:43:39"
+ "runner_args": [
+  "--slow-zone",
+  "0.04",
+  "--slow-step",
+  "0.5",
+  "--slow-load-sustain",
+  "0.5",
+  "--slow-load-ticks",
+  "6"
+ ],
+ "refs": true,
+ "built": "2026-10-18 02:57:35",
+ "other_arm_gate": {
+  "joint_lo": [
+   -2.5,
+   -38.9,
+   -25.9,
+   -30.6,
+   24.9,
+   0.0
+  ],
+  "joint_hi": [
+   26.9,
+   31.5,
+   53.4,
+   46.9,
+   93.9,
+   100.0
+  ],
+  "demo_poses": "ws4/single_arm/skills/cutter/demo_poses.npz",
+  "n_demo_poses": 3130,
+  "max_below": 0.01,
+  "box_end_takes": 59,
+  "reason": "the box-skill end pose varies run to run; a joint range would refuse nearly every real run"
+ }
 }

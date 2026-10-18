@@ -155,6 +155,29 @@
   "env_voxels_trimmed": 7,
   "reason": "green slot sits in the box on the robot's right; demos reach -0.179 measured / -0.198 commanded; takes 3, 15, 23, 41, 47 are small outliers (box-arm clearance, mast, table), left out of the safety envelope only; 2 cm envelope trim near the lid-holding box arm (approved by the orchestrator 18 Oct)"
  },
- "refs": false,
- "built": "2026-10-18 02:13:42"
+ "refs": true,
+ "built": "2026-10-18 02:13:42",
+ "other_arm_gate": {
+  "joint_lo": [
+   -2.5,
+   -38.9,
+   -25.9,
+   -30.6,
+   24.9,
+   0.0
+  ],
+  "joint_hi": [
+   26.9,
+   31.5,
+   53.4,
+   46.9,
+   93.9,
+   100.0
+  ],
+  "demo_poses": "ws4/single_arm/skills/green/demo_poses.npz",
+  "n_demo_poses": 3036,
+  "max_below": 0.01,
+  "box_end_takes": 59,
+  "reason": "the box-skill end pose varies run to run; a joint range would refuse nearly every real run"
+ }
 }

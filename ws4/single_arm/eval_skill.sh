@@ -21,7 +21,8 @@
 # Median row gripper (M's gripper stats span 0..40, ours 0..100 with open = 100): M_START_GRIP (start-pose gripper,
 # default 100; 40 starts inside M's range) or M_GRIP_SCALE (e.g. 0.4: model = 0.4 x robot gripper), not both.
 # DRY_RUN=1 prints the runner commands and touches nothing. FAKE_ROBOT=1 runs against the real server with the fake
-# arm: no arm port opened, nothing logged. Run preflight.py --skill <skill> first. Placement page:
+# arm: no arm port opened, nothing logged. HOLD_OTHER (default 1 for the chain's pen-arm skills): the runner takes the
+# box arm over from the HMI and holds it at its pose (--hold-other-arm). Run preflight.py --skill <skill> first. Placement page:
 # http://127.0.0.1:8899 while the runner waits for Enter.
 set -euo pipefail
 MODE="${1:?usage: eval_skill.sh session|baseline|median|lora}"
@@ -72,33 +73,50 @@ if [[ " ${ROWS[*]} " == *" baseline "* ]]; then
   : "${BASE:?BASE package name on the server for skill $SKILL}" "${BASE_CHECKPOINT:?BASE_CHECKPOINT for the trial log}"
 fi
 if [[ " ${ROWS[*]} " == *" lora "* ]]; then
-  : "${LORA:?LORA package name on the server: lora_[<skill>_]<microsteps>[_raw]}"
-  [[ "$LORA" =~ ^lora_(.*_)?([0-9]+)(_raw|_ema)?$ ]] || { echo "LORA must look like lora_[<name>_]<microsteps>[_raw]" >&2; exit 2; }
-  n="${BASH_REMATCH[2]}"
-  kind=EMA
-  adapter_dir=pretrained_model_ema
-  if [ "${BASH_REMATCH[3]}" = _raw ]; then kind=raw; adapter_dir=pretrained_model; fi
-  if [ "$SKILL" = pen ]; then
-    LORA_CHECKPOINT="${LORA_CHECKPOINT:-/workspace/real_lora/lora_pen84/checkpoints/$(printf %06d "$n")/$adapter_dir on so101_haller_pen_B84 (${kind^^}, $n microsteps)}"
+  : "${LORA:?LORA package name on the server (lora_[<skill>_]<microsteps>[_raw], or any name with LORA_VARIANT)}"
+  if [[ "$LORA" =~ ^lora_(.*_)?([0-9]+)(_raw|_ema)?$ ]]; then
+    n="${BASH_REMATCH[2]}"
+    kind=EMA
+    adapter_dir=pretrained_model_ema
+    if [ "${BASH_REMATCH[3]}" = _raw ]; then kind=raw; adapter_dir=pretrained_model; fi
+    if [ "$SKILL" = pen ]; then
+      LORA_CHECKPOINT="${LORA_CHECKPOINT:-/workspace/real_lora/lora_pen84/checkpoints/$(printf %06d "$n")/$adapter_dir on so101_haller_pen_B84 (${kind^^}, $n microsteps)}"
+    fi
+    default_variant="LoRA-$n"
+    (( n >= 1000 && n % 1000 == 0 )) && default_variant="LoRA-$((n / 1000))k"
+    [ "$kind" = raw ] && default_variant="$default_variant-raw"
+    LORA_VARIANT="${LORA_VARIANT:-$default_variant}"
+    choice="$kind adapter of checkpoint $n"
+  else  # a package named by ws4-datasets (e.g. skill_red_pen): the variant must be given
+    : "${LORA_VARIANT:?LORA_VARIANT for package $LORA (e.g. LoRA-10k-raw)}"
+    choice="package $LORA ($LORA_VARIANT)"
   fi
   : "${LORA_CHECKPOINT:?LORA_CHECKPOINT for the trial log (from ws4-datasets)}"
-  default_variant="LoRA-$n"
-  (( n >= 1000 && n % 1000 == 0 )) && default_variant="LoRA-$((n / 1000))k"
-  [ "$kind" = raw ] && default_variant="$default_variant-raw"
-  LORA_VARIANT="${LORA_VARIANT:-$default_variant}"
   # Pre-registered rule (orchestrator, 18 Oct): the LoRA row uses whichever adapter (raw or EMA) of the latest
   # checkpoint is best on the held-out protocol at session start. The choice goes into every LoRA trial's notes and
   # is printed before the first attempt.
-  LORA_CHOICE="${LORA_CHOICE:-$kind adapter of checkpoint $n, chosen before the session as the best of raw/EMA on the held-out takes}"
+  LORA_CHOICE="${LORA_CHOICE:-$choice, chosen before the session as the best of raw/EMA on the held-out takes}"
   echo "pre-registered LoRA row: package $LORA, variant $LORA_VARIANT; $LORA_CHOICE"
 fi
+read -r -a SKILL_EXTRA <<< "$SKILL_RUNNER_ARGS"  # per-skill runner flags recorded in skill.json (cutter: slow zone)
 HOME_ARGS=()
 [ "$HOME_REF" != none ] && HOME_ARGS=(--home-check "$HOME_REF")
+read -r -a SKILL_GATE <<< "$SKILL_GATE_ARGS"  # pen-arm chain skills: geometric box-arm gate (gate.py)
 read -r -a PARKED_LO <<< "$SKILL_PARKED_LO"
 read -r -a PARKED_HI <<< "$SKILL_PARKED_HI"
 ROBOT_ARGS=(--port "$SKILL_PORT" --robot-id "$SKILL_ROBOT_ID" --other-arm-port "$SKILL_OTHER_PORT" --other-arm-id "$SKILL_OTHER_ID"
-            --other-arm-lo "${PARKED_LO[@]}" --other-arm-hi "${PARKED_HI[@]}" --other-arm-tol "${PARKED_TOL:-5}")
-[ -n "${FAKE_ROBOT:-}" ] && ROBOT_ARGS=(--robot fake --no-log --no-video)
+            --other-arm-lo "${PARKED_LO[@]}" --other-arm-hi "${PARKED_HI[@]}" --other-arm-tol "${PARKED_TOL:-$SKILL_PARKED_TOL}"
+            "${SKILL_GATE[@]}")
+if [ "${HOLD_OTHER:-$SKILL_HOLD_OTHER}" = 1 ]; then
+  ROBOT_ARGS+=(--hold-other-arm)  # the runner takes the box arm over (goal = its pose, then torque on) and holds it
+fi
+if [ -n "${FAKE_ROBOT:-}" ]; then
+  ROBOT_ARGS=(--robot fake --no-log --no-video)
+  if [ "${HOLD_OTHER:-$SKILL_HOLD_OTHER}" = 1 ] && [ -n "$SKILL_PARKED_MEDIAN" ]; then
+    read -r -a FAKE_OTHER <<< "$SKILL_PARKED_MEDIAN"
+    ROBOT_ARGS+=(--other-arm-port fake --hold-other-arm --fake-other-q "${FAKE_OTHER[@]}")
+  fi
+fi
 cd "$REPO"
 RUN=(python ws4/single_arm/run_single_arm.py)
 [ -n "${DRY_RUN:-}" ] && RUN=(echo python ws4/single_arm/run_single_arm.py)  # print, touch nothing
@@ -177,7 +195,7 @@ run_row() {  # row package checkpoint variant condition start_at start_grip note
     --seconds "$ATTEMPT_S" --max-step 1.0 --max-relative-target 20 \
     --guidance-note "1.0 + compile as served ($pkg)" \
     --note "$SKILL eval, $row row: layouts [$LAYOUTS] from held-out start frames, haller home, keep-out with the skill's demo envelope${note:+; $note}${NOTE:+; $NOTE}" \
-    "$@"
+    "${SKILL_EXTRA[@]}" "$@"
 }
 
 start="$START_AT"

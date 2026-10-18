@@ -107,6 +107,12 @@ def find_dataset(skill: Skill) -> list[Path]:
 def parked_range(skill: Skill, info: dict) -> dict[str, str]:
     """SKILL_PARKED_LO / _HI: per-joint min / max of the other arm over the skill's good takes (skill.json), or the
     tucked pose known before the build. The runner widens them by --other-arm-tol."""
+    gate = info.get("other_arm_gate")
+    if gate:  # pen-arm chain skills: loose sanity range (already widened) + the geometric gate (gate.py)
+        return {"SKILL_PARKED_LO": " ".join(f"{v:g}" for v in gate["joint_lo"]),
+                "SKILL_PARKED_HI": " ".join(f"{v:g}" for v in gate["joint_hi"]), "SKILL_PARKED_TOL": "0",
+                "SKILL_GATE_ARGS": f"--other-arm-demo-poses {gate['demo_poses']} "
+                                   f"--other-arm-gate-max-below {gate['max_below']:g}"}  # fmt: skip
     parked = info.get("parked_other_arm") or {}
     if "min" in parked and "max" in parked:
         lo, hi = parked["min"], parked["max"]
@@ -114,7 +120,8 @@ def parked_range(skill: Skill, info: dict) -> dict[str, str]:
         lo = hi = skill.parked
     else:
         raise SystemExit(f"skill {skill.name!r}: no parked-arm range (rebuild with build_skill.py {skill.name})")
-    return {"SKILL_PARKED_LO": " ".join(f"{v:g}" for v in lo), "SKILL_PARKED_HI": " ".join(f"{v:g}" for v in hi)}
+    return {"SKILL_PARKED_LO": " ".join(f"{v:g}" for v in lo), "SKILL_PARKED_HI": " ".join(f"{v:g}" for v in hi),
+            "SKILL_PARKED_TOL": "5", "SKILL_GATE_ARGS": ""}
 
 
 def shell_env(name: str) -> str:
@@ -129,6 +136,10 @@ def shell_env(name: str) -> str:
         "SKILL_LAYOUTS": info.get("eval_layouts", skill.layouts),
         "SKILL_VALID": int(bool(info.get("validation", {}).get("ok"))),
         "SKILL_REFS": int(info.get("refs", True)),
+        "SKILL_RUNNER_ARGS": " ".join(info.get("runner_args") or []),  # per-skill runner flags (cutter: slow zone)
+        # Chain skills with the lid-holding box arm: the runner takes the box arm over from the HMI and holds it.
+        "SKILL_HOLD_OTHER": int(bool(info.get("other_arm_gate"))),
+        "SKILL_PARKED_MEDIAN": " ".join(f"{v:g}" for v in (info.get("parked_other_arm") or {}).get("median", [])),
         **parked_range(skill, info),
     }  # fmt: skip
     lines = [f"{k}={shlex.quote(str(v))}" for k, v in values.items()]

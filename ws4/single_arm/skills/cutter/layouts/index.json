@@ -1,0 +1,59 @@
+{
+ "dataset": "haller_put_the_yellow_cutter_in_the_yellow_slot",
+ "task": "put the yellow cutter in the yellow slot",
+ "wrist_key": "observation.images.right_wrist",
+ "columns": "right",
+ "takes": [
+  {
+   "layout": "P3",
+   "episode": 67,
+   "frames": 401,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.4,
+    5.6,
+    3.8,
+    0.9,
+    -0.2,
+    96.2
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 68,
+   "frames": 361,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.3,
+    5.6,
+    0.9,
+    0.0,
+    0.1,
+    96.1
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 69,
+   "frames": 423,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.5,
+    5.4,
+    0.9,
+    0.8,
+    -0.3,
+    96.2
+   ]
+  }
+ ]
+}

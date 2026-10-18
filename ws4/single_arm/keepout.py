@@ -255,9 +255,13 @@ class KeepOut:
         base = np.broadcast_to(np.zeros(3), tcp.shape)
         return np.stack([base, *(frames[..., i, :3, 3] for i in range(5)), tcp], axis=-2) + off
 
-    def other_arm_depth(self, q_deg: np.ndarray) -> np.ndarray:
+    def other_arm_gap(self, q_deg: np.ndarray) -> np.ndarray:
+        """Smallest distance (m) between this arm's capsule surfaces and the parked other arm's (inf without one)."""
         from kinematics.collision import LINKS, segment_distance
 
+        q_deg = np.asarray(q_deg, dtype=float)
+        if self.other_q is None or self.other_base_pos is None:
+            return np.full(q_deg.shape[:-1], np.inf)
         names = ["base", "j0", "j1", "j2", "j3", "j4", "tcp"]
         idx = [(names.index(a), names.index(b), r) for a, b, r in LINKS]
         mine = self._capsule_points(q_deg, self.base_pos)
@@ -267,7 +271,10 @@ class KeepOut:
             for c, d, r2 in idx:
                 dist = segment_distance(mine[..., a, :], mine[..., b, :], other[c], other[d]) - r - r2
                 gap = np.minimum(gap, dist)
-        return np.maximum(0.0, self.other_clearance - gap)
+        return gap
+
+    def other_arm_depth(self, q_deg: np.ndarray) -> np.ndarray:
+        return np.maximum(0.0, self.other_clearance - self.other_arm_gap(q_deg))
 
     def refuse(self, target_deg: np.ndarray, measured_deg: np.ndarray, eps: float = 1e-4) -> tuple[bool, str]:
         """True (and the zone) when ``target`` is in a zone and deeper than the measured pose."""
