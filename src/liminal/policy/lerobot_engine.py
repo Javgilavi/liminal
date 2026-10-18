@@ -27,7 +27,7 @@ def processor_contract(pre: Any, post: Any, checkpoint: str) -> dict:
     source_path = Path(checkpoint) / "normalization_source.json"
     source = json.loads(source_path.read_text()) if source_path.exists() else {}
     profile = source.get("profile", "released")
-    if profile == "hf_space_native" and source.get("normalization") != statistics:
+    if profile in ("hf_space_native", "dataset_native") and source.get("normalization") != statistics:
         raise ValueError("normalization provenance differs from saved processor tensors")
     return {"normalization_profile": profile, "state_statistics": statistics["state"],
             "action_statistics": statistics["action"], "normalization_source": source}
@@ -51,7 +51,7 @@ class LeRobotEngine:
             raise ValueError("checkpoint history/horizon/rate is incompatible")
         if list(model_cfg.camera_keys) != [f"observation.images.{role}" for role in cfg.camera_roles]:
             raise ValueError("checkpoint camera roles/order are incompatible")
-        # VERIFY on each deployment's LeRobot revision; mismatch fails before motion.
+        # Saved feature metadata is checked before any command can reach the executor.
         if model_cfg.output_features["action"].shape[-1] != cfg.action_dim:
             raise ValueError("checkpoint action dimension is incompatible")
         self.reset()

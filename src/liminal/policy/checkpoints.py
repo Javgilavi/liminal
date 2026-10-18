@@ -45,7 +45,7 @@ class Checkpoint:
                     "embodiment", "joint_order", "state_units", "action_semantics"):
             if getattr(self, key) != getattr(cfg, key):
                 raise ValueError(f"{self.name}: incompatible {key}")
-        if self.normalization_profile not in ("released", "hf_space_native"):
+        if self.normalization_profile not in ("released", "hf_space_native", "dataset_native"):
             raise ValueError(f"{self.name}: unknown normalization profile")
 
     def identity(self) -> dict[str, str]:

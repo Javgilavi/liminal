@@ -6,6 +6,7 @@ skills:
   home: "primitive - move to the safe rest pose"
   open_gripper: "primitive"
   close_gripper: "primitive"
+  put_red_pen_in_slot: "VLA - Oskrt red-pen task adapter; pick and place using its exact trained prompt"
   pick_place: "VLA - pick an object and place it somewhere; describe both in the prompt"
   open_lid: "VLA - grasp a hinged lid and lift it open"
   lift_aside: "VLA - lift an obstacle (lid, flap) up and out of the way, then hold"
@@ -17,6 +18,7 @@ skills:
   restore_cable: "VLA - helper arm returns the cable to its resting route and releases it"
   open_lid_and_insert: "bimanual VLA (option B only, arm: both) - left opens and holds the lid, right inserts"
 predicates:
+  - red_pen_in_slot
   - lid_open
   - object_inserted
   - obstacle_cleared

@@ -22,7 +22,8 @@ from liminal.policy.lerobot_engine import processor_contract  # noqa: F401
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", default="/liminal/models/so101")
-    parser.add_argument("--normalization-profile", choices=("released", "hf_space_native"), default="released")
+    parser.add_argument("--normalization-profile", choices=("released", "hf_space_native", "dataset_native"),
+                        default="released")
     args = parser.parse_args()
     wire = sys.stdout
     with contextlib.redirect_stdout(sys.stderr):

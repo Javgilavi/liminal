@@ -13,6 +13,9 @@ from liminal.policy.flux import FluxConfig, FluxPolicyBackend
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--policy", default="configs/policy/flux3_so101.yaml")
+ap.add_argument("--prompt", default="Pick up the red block and place it in the bowl")
+ap.add_argument("--state", type=float, nargs="+", help="initial measured and held-command state")
+ap.add_argument("--gpu-memory-fraction", type=float, help="optional per-process CUDA allocation limit")
 ap.add_argument("--skill", help="skill whose registry entry to smoke-test")
 ap.add_argument("--iters", type=int, default=10)
 args = ap.parse_args()
@@ -29,6 +32,12 @@ if backend.cfg.checkpoints:
     entry = Checkpoint.parse(name, backend.cfg.checkpoints[name])
     entry.validate(backend.cfg, backend.cfg.midtraining_base, entry.targets[0])
     backend._selected_checkpoint = entry
+if args.gpu_memory_fraction is not None:
+    import torch
+
+    if not 0 < args.gpu_memory_fraction <= 1:
+        ap.error("gpu-memory-fraction must be between zero and one")
+    torch.cuda.set_per_process_memory_fraction(args.gpu_memory_fraction)
 backend.load()
 
 import numpy as np  # noqa: E402
@@ -37,12 +46,15 @@ import numpy as np  # noqa: E402
 target = "right" if backend.cfg.action_dim == 6 else "both"
 frame = np.zeros((480, 640, 3), dtype=np.uint8)
 images = {role: frame for role in backend.cfg.camera_roles}
-history = [Observation(target, [0.0] * backend.cfg.action_dim, images) for _ in range(backend.cfg.obs_history)]
+state = args.state if args.state is not None else [0.0] * backend.cfg.action_dim
+if len(state) != backend.cfg.action_dim:
+    ap.error("state must match the configured action dimension")
+history = [Observation(target, state, images) for _ in range(backend.cfg.obs_history)]
 backend._commands[target] = deque([list(o.state) for o in history], maxlen=backend.cfg.obs_history)
 lat = []
 for _ in range(args.iters):
     t = time.monotonic()
-    chunk = backend.predict(history, "Pick up the red block and place it in the bowl", target)
+    chunk = backend.predict(history, args.prompt, target)
     lat.append(time.monotonic() - t)
 print(f"chunk: {len(chunk)} x {len(chunk[0])}")
 print(f"latency: median {statistics.median(lat)*1000:.0f} ms, max {max(lat)*1000:.0f} ms")

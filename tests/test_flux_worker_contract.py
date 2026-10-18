@@ -62,3 +62,14 @@ def test_hf_profile_provenance_must_match_actual_tensors(tmp_path):
     metadata["normalization"] = {s: {"q01": [-1] * 6, "q99": [1] * 6} for s in ("state", "action")}
     path.write_text(json.dumps(metadata))
     assert WORKER.processor_contract(*pipelines(), str(tmp_path))["normalization_profile"] == "hf_space_native"
+
+
+def test_dataset_native_profile_requires_its_own_saved_quantiles(tmp_path):
+    metadata = {"profile": "dataset_native", "normalization": {}}
+    path = tmp_path / "normalization_source.json"
+    path.write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match="differs"):
+        WORKER.processor_contract(*pipelines(), str(tmp_path))
+    metadata["normalization"] = {s: {"q01": [-1] * 6, "q99": [1] * 6} for s in ("state", "action")}
+    path.write_text(json.dumps(metadata))
+    assert WORKER.processor_contract(*pipelines(), str(tmp_path))["normalization_profile"] == "dataset_native"

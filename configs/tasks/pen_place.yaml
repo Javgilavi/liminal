@@ -1,0 +1,13 @@
+name: pen_place
+description: Pick up the red pen and place it in its cardboard-box slot using the Oskrt task adapter.
+goal: red_pen_in_slot
+tree:
+  sequence:
+    - skill:
+        arm: right
+        name: put_red_pen_in_slot
+        prompt: put the red pen in its slot in the cardboard box
+        success: red_pen_in_slot
+        timeout_s: 240
+        verify_timeout_s: 2
+    - check: red_pen_in_slot
