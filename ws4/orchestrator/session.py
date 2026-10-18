@@ -93,7 +93,8 @@ class SessionConfig:
     skill_packages: dict[str, str] = field(default_factory=dict)  # skill -> policy server package (one LoRA per skill)
     # skill -> "flux" | "replay" (a recorded take as a scripted policy, ws4/single_arm/replay.py: the box fallback)
     skill_backends: dict[str, str] = field(default_factory=dict)
-    replay_episode: int | None = None  # override the take of every replay skill
+    # the take of one replay skill (skill -> episode), or of every replay skill ("*"): --replay-episode
+    replay_episodes: dict[str, int] = field(default_factory=dict)
     imagine: str = ""  # "lazy": the server keeps FLUX's imagined frames per chunk; the HMI shows them
     async_inference: bool | None = None  # default: True for remote
     # Sim
@@ -218,11 +219,13 @@ class Session:
                 raise ValueError(f"--skill-backend {name}={backend}: needs a skill of {self.vocab.names()} with a "
                                  "replay entry in the vocabulary, and flux or replay")
             self.vocab.skills[name] = dataclasses.replace(skill, backend=backend)
-        if cfg.replay_episode is not None:
-            for name, skill in self.vocab.skills.items():
-                if skill.replay:
-                    replay = {**skill.replay, "episode": int(cfg.replay_episode)}
-                    self.vocab.skills[name] = dataclasses.replace(skill, replay=replay)
+        for name, episode in cfg.replay_episodes.items():
+            if name != "*" and not (name in self.vocab.skills and self.vocab.skills[name].replay):
+                raise ValueError(f"--replay-episode {name}={episode}: {name} has no replay entry in the vocabulary")
+        for name, skill in self.vocab.skills.items():
+            episode = cfg.replay_episodes.get(name, cfg.replay_episodes.get("*"))
+            if skill.replay and episode is not None:
+                self.vocab.skills[name] = dataclasses.replace(skill, replay={**skill.replay, "episode": int(episode)})
         replaying = [s for s in self.vocab.skills.values() if s.backend == "replay"]
         if replaying and cfg.env != "haller":
             raise ValueError("a replay skill drives a Haller arm: env=haller only")

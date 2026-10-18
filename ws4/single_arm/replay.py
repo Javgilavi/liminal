@@ -14,6 +14,15 @@ arm's pose when the replay starts. The arm follows the recorded path itself, onl
 faster; after the last recorded action the chunks repeat it, so the arm holds there (a box take ends holding the lid
 open).
 
+The gripper keeps its timing along the arm's path: the VR trigger jumps the recorded gripper command between 0 and
+100 in one frame, and the real gripper then took about a second to follow while the operator's arm moved on (box take
+59: command 0 at frame 17, the gripper closed at frame 45, on the handle). Warping that jump into a ramp with the arm
+standing still and then slowing the arm would close the gripper about 25 frames early along the path (offline servo
+model: arm frame 20), on air before the fingers reach the handle, and open it 22 frames early. So while the recorded
+gripper STATE moves toward its command, the replay commands that state (``GRIPPER_LEAD`` frames ahead, for the
+servo's lag); once it has settled, the recorded command again, so a closed grip still squeezes as in the take
+(``gripper_profile``). Same model with the profile: closed at frame 44, reopened at 154, as recorded (45, 154).
+
 Near the other arm (a skill with a slow zone: the cutter by the lid-holding box arm) the guard would clip the arm to
 ``slow_step`` per tick and the arm would cut corners behind the replayed path; ``step_at(q)`` gives the warp a
 smaller step there (the runner and the orchestrator pass the slow step within the slow zone plus ``SLOW_MARGIN`` of
@@ -42,13 +51,15 @@ from flux.backends import PolicyResponse  # noqa: E402
 from flux.contract import SO101_CONTRACT, arm_slice  # noqa: E402
 
 DEFAULT_ROOT = Path.home() / ".cache/huggingface/lerobot/ws4/haller_open_the_box"
-# Take 59 (P3, the chain's box position; train split; review: keep, "ends with the box arm holding the lid open"):
-# of the 32 good P3 takes its first frame is nearest the chain's box home [0, 0.8, 2.0, 0.4, 0, 99.7] (1.6 deg), its
-# end pose (last second) has the widest margins in the pen skills' start gate (14 deg inside the joint range; demo
-# gaps 4.8 / 1.7 / 8.0 cm for green / cutter / pen_lid), it moves least in its last second (2.1 deg: settled,
-# holding), and time-warped from box home it passes the box workspace with its envelope with 0 refusals in 549
-# ticks (18 s at 1 deg/tick). Checked offline 18 Oct against skills/box, green, cutter and pen_lid.
-DEFAULT_EPISODE = 59
+# Take 72 (P3, held out): its first head frame is the kit's skills/box/layouts/P3_ep072_head.jpg, so the placement
+# overlay and the home check show exactly where its box and handle were (the box was placed against that P3
+# reference for the live runs). Its end passes all three pen-skill start gates (13 deg inside the joint range; demo
+# gaps 4.0 / 1.5 / 7.2 cm for green / cutter / pen_lid); 0 refusals by the box workspace with its envelope from box
+# home, 441 ticks (15 s). Ranked 18 Oct 10:30 over the 32 good P3 takes: every take's box and handle sit within 6 px
+# of the P3 references, so the reference itself decided; 73 (P3_ep073_head.jpg) is the second choice, 74 fails the
+# green and cutter gates. Take 59 (the first default: nearest box home at its start, widest gate margins) has no
+# kit reference frame.
+DEFAULT_EPISODE = 72
 # Per skill (skills.py names): the default take. Cutter 67 (P3, held-out: its first head frame is
 # skills/cutter/layouts/P3_ep067_head.jpg, the placement reference): of the three takes with a reference it keeps the
 # most room to the lid-holding box arm (2.9 cm min over its path with the box arm where box take 59 ends, 3.2 cm at
@@ -57,6 +68,24 @@ DEFAULT_EPISODE = 59
 # slot") and ends exactly at home, with 0 refusals by the cutter workspace from home (757 ticks at 1 deg/tick).
 DEFAULT_TAKES = {"box": DEFAULT_EPISODE, "cutter": 67}
 SLOW_MARGIN = 0.01  # m beyond a slow zone where the warp already slows down (measured lag, live vs recorded poses)
+# VERIFY on the arm: frames the gripper state is taken ahead (its response to a command step starts about 2 frames
+# late in the box takes, then closes at up to 3.6 %/frame), and the change in % that counts as still moving.
+GRIPPER_LEAD = 2
+GRIPPER_SETTLE = 1.0
+
+
+def gripper_profile(command: np.ndarray, state: np.ndarray, lead: int = GRIPPER_LEAD,
+                    settle: float = GRIPPER_SETTLE, horizon: int = 5) -> np.ndarray:  # fmt: skip
+    """Gripper targets per recorded frame: the recorded gripper state ``lead`` frames ahead while it is still on its
+    way to the command (it differs from the command and keeps changing within ``horizon`` frames), else the recorded
+    command (at rest; or squeezing an object or the handle the gripper has closed on)."""
+    gc, gs = np.asarray(command, float), np.asarray(state, float)
+    n = len(gs)
+    ahead = gs[np.minimum(np.arange(n) + lead, n - 1)]
+    future = np.array([np.abs(gs[min(i + lead + 1, n - 1): min(i + lead + 1 + horizon, n)] - ahead[i]).max(initial=0.0)
+                       for i in range(n)])  # fmt: skip
+    moving = (np.abs(gc - ahead) > 2 * settle) & (future > settle)
+    return np.where(moving, ahead, gc)
 
 
 def take_source(skill: str) -> tuple[Path, int, str]:
@@ -87,16 +116,23 @@ def load_take(root: str | Path, episode: int, columns: str) -> tuple[np.ndarray,
     files = sorted(root.glob("data/chunk-*/*.parquet"))
     if not files:
         raise SystemExit(f"replay: no parquet files under {root}/data")
-    table = pq.ParquetDataset(files, filters=[("episode_index", "=", int(episode))]).read(
-        columns=["episode_index", "frame_index", "action"])
+    dataset = pq.ParquetDataset(files, filters=[("episode_index", "=", int(episode))])
+    has_state = "observation.state" in dataset.schema.names
+    table = dataset.read(columns=["episode_index", "frame_index", "action"] + ["observation.state"] * has_state)
     if table.num_rows == 0:
         raise SystemExit(f"replay: episode {episode} is not in {root}")
     order = np.argsort(np.asarray(table["frame_index"]))
     actions = np.stack(table["action"].to_numpy(zero_copy_only=False)).astype(float)[order]
     if actions.shape[1] != 12:
         raise SystemExit(f"replay: {root} has {actions.shape[1]}-D actions, expected the Haller's 12-D [left | right]")
-    info = {"episode": int(episode), "root": str(root), "columns": columns, "frames": len(actions)}
-    return actions[:, arm_slice(columns)], info
+    actions = actions[:, arm_slice(columns)]
+    info = {"episode": int(episode), "root": str(root), "columns": columns, "frames": len(actions),
+            "gripper": "recorded command (no state in the dataset)"}  # fmt: skip
+    if has_state:  # the gripper's timing along the arm's path, as recorded (module docstring)
+        state = np.stack(table["observation.state"].to_numpy(zero_copy_only=False)).astype(float)[order]
+        actions[:, 5] = gripper_profile(actions[:, 5], state[:, arm_slice(columns)][:, 5])
+        info["gripper"] = f"recorded state {GRIPPER_LEAD} frames ahead while it moves, else the recorded command"
+    return actions, info
 
 
 def time_warp(actions: np.ndarray, start: np.ndarray, max_step: float = 1.0, max_gripper_step: float = 5.0,

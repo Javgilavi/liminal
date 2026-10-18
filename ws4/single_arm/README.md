@@ -467,12 +467,27 @@ follows the recorded path, only slower where the operator moved faster. When the
 attempt ends with `replay finished: scripted replay of recorded demo N, holding where the take ends`; the arm keeps
 holding (x, the default) or returns on r. meta.json carries `replay` and `checkpoint: scripted replay of recorded demo
 N (...)`; scored attempts go to trials.jsonl with condition `scripted` and variant `scripted-replay-ep<N>`, never
-with the policy rows. Prefetch is forced off (it would skip recorded steps). Default take 59 (P3, train): nearest the
-box home at its start (1.6 deg), the widest pen-skill gate margins at its end, settled in its last second, 0
-keep-out refusals over its 549 ticks from box home (18.3 s). `python ws4/single_arm/replay.py 59` summarises a take.
+with the policy rows. Prefetch is forced off (it would skip recorded steps).
+
+The gripper keeps its timing along the arm's path. The VR trigger jumps the recorded command 0 <-> 100 in one frame
+and the real gripper then took about a second to follow while the arm moved on (take 59: trigger at frame 17, shut on
+the handle at frame 45). The first version ramped that jump with the arm standing still and then slowed the arm:
+offline servo model, the gripper shut at arm frame 20, on air, and re-opened 22 frames early; the first live box
+replay (take 59, 10:05) ran to its end with the lid still closed. Now, while the recorded gripper state moves toward
+its command, the replay commands that state 2 frames ahead (VERIFY the lead on the arm); once it has settled, the
+recorded command again, so a closed grip still squeezes as in the take. Same model: shut at frame 44, re-opened at
+154 (recorded 45, 154); takes 40, 42, 72, 73 within 2 frames.
+
+Default take 72 (P3, held out): its first head frame is `skills/box/layouts/P3_ep072_head.jpg`, so the placement
+page and the home check show exactly where its box and handle were. Ranked over the 32 good P3 takes (10:30, first
+frames decoded from the snapshot, template match of the box and of its handle tab against the P3 references): every
+take's box and handle sit within 6 px of the references, so having the take's own reference decided. 72 passes all
+three pen-skill gates at its end (demo gaps 4.0 / 1.5 / 7.2 cm), 0 refusals from box home, 441 ticks (15 s); 73
+(`P3_ep073_head.jpg`) is the second choice, 74 fails the green and cutter gates, 59 has no kit reference.
+`python ws4/single_arm/replay.py 72` summarises a take.
 
 ```bash
-python ws4/single_arm/run_single_arm.py --backend replay --replay-episode 59 \
+python ws4/single_arm/run_single_arm.py --backend replay --replay-episode 72 \
   --port /dev/haller_arm_left --robot-id haller_left --other-arm-port /dev/haller_arm_right --other-arm-id haller_right \
   --other-arm-lo 1.1 -83.7 81.8 82.8 -10.4 0.9 --other-arm-hi 5.4 -83.5 81.9 82.8 -10.1 0.9 --other-arm-tol 5 \
   --scene-cam /dev/haller_cam_mast --scene-fourcc none \
@@ -512,7 +527,7 @@ python ws4/single_arm/run_single_arm.py --backend replay --replay-skill cutter \
 
 `--prime-ticks K` with `--backend remote` replays the first K ticks (rounded up to the action horizon) and then lets
 FLUX take over with that history, for trying a primed FLUX box start; such attempts are logged with the variant
-`<variant>+primed-ep<N>-<K>`. Tests: `tests/test_replay.py` (fake arm, a synthetic parquet; take 59 against the box
+`<variant>+primed-ep<N>-<K>`. Tests: `tests/test_replay.py` (fake arm, a synthetic parquet; take 72 against the box
 workspace when the dataset is in the cache).
 
 ### Imported by ws4-orchestrator (stable through Sunday)

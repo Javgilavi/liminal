@@ -27,22 +27,30 @@ TAKE = np.array([[0, 0, 0, 0, 0, 100.0]] + [[i * 0.6, -i * 0.4, i * 0.9, 0.0, i 
 
 
 def write_dataset(root: Path, episodes: dict[int, np.ndarray], other: np.ndarray | None = None,
-                  columns: str = "left") -> Path:
-    """LeRobot v3 layout, data columns only: 12-D actions [left_* | right_*], the take in ``columns``."""
+                  columns: str = "left", states: dict[int, np.ndarray] | None = None) -> Path:
+    """LeRobot v3 layout, data columns only: 12-D actions [left_* | right_*], the take in ``columns``; with
+    ``states`` also observation.state (the take arm's measured joints, same layout)."""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    rows = {"episode_index": [], "frame_index": [], "action": []}
+    rows = {"episode_index": [], "frame_index": [], "action": [], "observation.state": []}
     for ep, take in episodes.items():
         rest = np.tile(other if other is not None else [3, -83.6, 81.9, 82.8, -10.2, 0.9], (len(take), 1))
-        for i, a in enumerate(np.hstack([take, rest] if columns == "left" else [rest, take])):
+        measured = (states or {}).get(ep, take)
+        for i, (a, s) in enumerate(zip(np.hstack([take, rest] if columns == "left" else [rest, take]),
+                                       np.hstack([measured, rest] if columns == "left" else [rest, measured]),
+                                       strict=True)):  # fmt: skip
             rows["episode_index"].append(ep)
             rows["frame_index"].append(i)
             rows["action"].append([float(v) for v in a])
+            rows["observation.state"].append([float(v) for v in s])
     (root / "data" / "chunk-000").mkdir(parents=True)
-    table = pa.table({"episode_index": pa.array(rows["episode_index"], pa.int64()),
-                      "frame_index": pa.array(rows["frame_index"], pa.int64()),
-                      "action": pa.array(rows["action"], pa.list_(pa.float32()))})
+    columns_out = {"episode_index": pa.array(rows["episode_index"], pa.int64()),
+                   "frame_index": pa.array(rows["frame_index"], pa.int64()),
+                   "action": pa.array(rows["action"], pa.list_(pa.float32()))}
+    if states is not None:
+        columns_out["observation.state"] = pa.array(rows["observation.state"], pa.list_(pa.float32()))
+    table = pa.table(columns_out)
     pq.write_table(table, root / "data" / "chunk-000" / "file-000.parquet")
     return root
 
@@ -148,8 +156,8 @@ BOX = Path(replay.DEFAULT_ROOT)
 
 @pytest.mark.skipif(not (BOX / "data").exists(), reason="the box dataset is not in the local cache")
 def test_default_box_take_replays_inside_the_box_workspace():
-    """Take 59 time-warped from the chain's box home: no command the box skill's keep-out (with its envelope, the
-    pen arm tucked) would refuse, inside one 120 s attempt, ending where take 59 ends."""
+    """The default box take (72) time-warped from the chain's box home: no command the box skill's keep-out (with
+    its envelope, the pen arm tucked) would refuse, inside one 120 s attempt."""
     from keepout import KeepOut
 
     actions, info = replay.load_take(BOX, replay.DEFAULT_EPISODE, "left")
@@ -157,7 +165,7 @@ def test_default_box_take_replays_inside_the_box_workspace():
     ko = KeepOut.load(HERE / "skills" / "box" / "workspace.json")
     ko.other_q = (3, -83.6, 81.9, 82.8, -10.2, 0.9)
     assert not any(ko.refuse(b, a)[0] for a, b in zip(np.vstack([BOX_HOME, seq])[:-1], seq, strict=True))
-    assert len(seq) / 30 < 60 and info["frames"] == 409
+    assert len(seq) / 30 < 60 and info["frames"] == 279
 
 
 # ---------------------------------------------------------------------------------------------- the cutter replay
@@ -165,7 +173,8 @@ def test_each_skill_has_its_dataset_arm_and_default_take(tmp_path):
     root, ep, columns = replay.take_source("cutter")
     assert root.name == "haller_put_the_yellow_cutter_in_the_yellow_slot" and (ep, columns) == (67, "right")
     root, ep, columns = replay.take_source("box")
-    assert root == replay.DEFAULT_ROOT and (ep, columns) == (59, "left")
+    assert root == replay.DEFAULT_ROOT and (ep, columns) == (72, "left")
+    assert replay.reference_frame(HERE / "skills" / "box" / "layouts", ep) is not None  # its own placement frame
     kit = HERE / "skills" / "cutter" / "layouts"
     assert replay.reference_frame(kit, 67) == kit / "P3_ep067_head.jpg"  # the placement reference exists in the kit
     assert replay.reference_frame(kit, 12) is None
@@ -245,3 +254,54 @@ def test_replay_places_and_home_checks_against_the_take_own_first_frame(tmp_path
     home = json.loads(next((tmp_path / "primed").glob("*/home_check.json")).read_text())
     assert home["reference"] == "P3_ep009_head.jpg"  # the last held-out take, as without a replay
     assert "placement reference" not in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------------------------- gripper timing
+def trigger_take(n=80, close_at=10, open_at=50, rate=4.0, dead=2):
+    """The VR trigger: the gripper command jumps 100 -> 0 -> 100 in one frame each; the measured gripper starts
+    ``dead`` frames later and moves ``rate`` per frame, stopping at 1 (squeezed shut) and 99.5."""
+    command = np.where((np.arange(n) >= close_at) & (np.arange(n) < open_at), 0.0, 100.0)
+    state, g = [], 99.5
+    for i in range(n):
+        target = command[max(0, i - dead)]
+        g = float(np.clip(g + np.clip(target - g, -rate, rate), 1.0, 99.5))
+        state.append(g)
+    return command, np.array(state)
+
+
+def test_gripper_follows_the_recorded_state_while_it_moves_then_the_command():
+    command, state = trigger_take()
+    g = replay.gripper_profile(command, state)
+    closing = slice(10, 40)
+    assert np.all(np.diff(g[closing]) <= 1e-9)  # closing never jumps to the command first and back (no glitch)
+    assert np.allclose(g[12:30], state[14:32])  # the state two frames ahead while it moves
+    assert g[40:50].max() == 0.0  # settled shut: the command again, so the grip still squeezes as in the take
+    assert np.abs(np.diff(g)).max() <= 5.0 + 1e-9  # no step beyond the 5 %/tick guard: the arm sets the pace
+    assert g[-1] == 100.0 and g[0] == 100.0
+
+
+def test_load_take_uses_the_gripper_profile_when_the_dataset_has_states(tmp_path):
+    command, state = trigger_take()
+    take = np.c_[np.tile(TAKE[0, :5], (len(command), 1)), command]
+    measured = np.c_[np.tile(TAKE[0, :5], (len(command), 1)), state]
+    root = write_dataset(tmp_path / "box", {2: take}, states={2: measured})
+    actions, info = replay.load_take(root, 2, "left")
+    assert np.allclose(actions[:, 5], replay.gripper_profile(command, state), atol=1e-4)
+    assert "recorded state" in info["gripper"]
+    plain, info = replay.load_take(write_dataset(tmp_path / "plain", {2: take}), 2, "left")
+    assert np.allclose(plain[:, 5], command) and "no state" in info["gripper"]
+
+
+@pytest.mark.skipif(not (BOX / "data").exists(), reason="the box dataset is not in the local cache")
+def test_box_take_closes_on_the_handle_where_the_take_did():
+    """Take 59: the recorded gripper is shut (< 5) at frame 45, when the fingers are on the handle; the replayed
+    gripper target reaches it at the same recorded frame (before the fix: frame 17, when the trigger was pulled)."""
+    import pyarrow.parquet as pq
+
+    actions, _ = replay.load_take(BOX, 59, "left")
+    files = sorted(BOX.glob("data/chunk-*/*.parquet"))
+    t = pq.ParquetDataset(files, filters=[("episode_index", "=", 59)]).read(
+        columns=["frame_index", "observation.state"])
+    state = np.stack(t["observation.state"].to_numpy(zero_copy_only=False))[np.argsort(np.asarray(t["frame_index"]))]
+    shut = int(np.argmax(state[:, 5] < 5))
+    assert shut == 45 and abs(int(np.argmax(actions[:, 5] < 5)) - (shut - replay.GRIPPER_LEAD)) <= 1
