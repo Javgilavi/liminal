@@ -1,0 +1,404 @@
+import { TwinView, loadScene, drawViews } from "./viewer.js";
+const $ = (s) => document.querySelector(s),
+  $$ = (s) => [...document.querySelectorAll(s)];
+let view,
+  replay,
+  scene,
+  mode = "replay",
+  playing = false,
+  started = 0,
+  offset = 0,
+  bridge = null,
+  token = null,
+  ws = null,
+  latest = null,
+  lastReceived = 0,
+  cameraURL = null,
+  reconnectTimer = null;
+const camera = $("#recorded-camera");
+const paired = new URLSearchParams(location.hash.slice(1));
+if (location.hash)
+  history.replaceState(null, "", location.pathname + location.search);
+loadScene()
+  .then((data) => {
+    scene = data;
+    view = new TwinView($("#lab-view"), data, true);
+    if (replay) showReplay();
+  })
+  .catch(() => {
+    $("#lab-view").textContent =
+      "Interactive scene unavailable. Recorded video is still available.";
+  });
+fetch("./assets/replay.json")
+  .then((r) => r.json())
+  .then((data) => {
+    replay = data;
+    $("#replay-scrub").max = data.duration;
+    showReplay();
+  });
+function showReplay() {
+  if (!replay || mode !== "replay") return;
+  const t = +$("#replay-scrub").value;
+  view?.setPoses(
+    replay.frames[
+      Math.min(replay.frames.length - 1, Math.floor(t * replay.fps))
+    ].poses,
+  );
+  $("#replay-clock").textContent =
+    `${t.toFixed(1)} / ${replay.duration.toFixed(1)} s`;
+}
+function stopReplay() {
+  playing = false;
+  camera.pause();
+  $("#replay-play").textContent = "▶";
+  $("#replay-play").setAttribute("aria-label", "Play recorded simulation");
+}
+$("#replay-play").onclick = () => {
+  if (playing) {
+    stopReplay();
+    return;
+  }
+  if (+$("#replay-scrub").value >= replay.duration)
+    $("#replay-scrub").value = 0;
+  playing = true;
+  offset = +$("#replay-scrub").value;
+  started = performance.now();
+  camera.currentTime = offset;
+  camera.play().catch(() => {});
+  $("#replay-play").textContent = "Ⅱ";
+  $("#replay-play").setAttribute("aria-label", "Pause recorded simulation");
+};
+$("#replay-scrub").oninput = () => {
+  offset = +$("#replay-scrub").value;
+  started = performance.now();
+  camera.currentTime = offset;
+  showReplay();
+};
+function animate(now) {
+  if (playing && replay && mode === "replay") {
+    const t = Math.min(replay.duration, offset + (now - started) / 1000);
+    $("#replay-scrub").value = t;
+    showReplay();
+    if (t >= replay.duration) stopReplay();
+  }
+  if (
+    mode === "live" &&
+    lastReceived &&
+    performance.now() - lastReceived > 1200
+  ) {
+    $("#connection-dot").className = "status-dot stale";
+    $("#connection-state").textContent = "Telemetry stale";
+    $("#run-trial").disabled = true;
+    $("#camera-notice").hidden = false;
+    $("#camera-notice").textContent = "Telemetry is stale. The twin is frozen.";
+  }
+  drawViews();
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+$$(".preset").forEach(
+  (b) =>
+    (b.onclick = () => {
+      view?.reset(b.dataset.camera);
+      $$(".preset").forEach((x) => x.classList.toggle("active", x === b));
+    }),
+);
+$("#fullscreen").onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+};
+$("#pair").onclick = () => $("#pair-dialog").showModal();
+$("#pair-dialog").addEventListener("click", (e) => {
+  if (e.target === $("#pair-dialog")) {
+    const r = e.target.getBoundingClientRect();
+    if (
+      e.clientX < r.left ||
+      e.clientX > r.right ||
+      e.clientY < r.top ||
+      e.clientY > r.bottom
+    )
+      e.target.close();
+  }
+});
+function message(text, error = false) {
+  $("#run-message").textContent = text;
+  $("#run-message").classList.toggle("error", error);
+}
+async function api(path, options = {}) {
+  const headers = { Authorization: `Bearer ${token}`, ...options.headers };
+  const r = await fetch(bridge + path, {
+    ...options,
+    headers,
+    credentials: "omit",
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!r.ok) {
+    let detail;
+    try {
+      detail = (await r.json()).detail;
+    } catch {
+      detail = await r.text().catch(() => r.statusText);
+    }
+    throw new Error(detail || `Companion returned ${r.status}`);
+  }
+  return r;
+}
+function renderState(state) {
+  latest = state;
+  lastReceived = performance.now();
+  $("#connection-dot").className =
+    `status-dot ${state.connected ? "connected" : "stale"}`;
+  $("#connection-state").textContent = state.connected
+    ? "Measured hardware"
+    : "Bridge paired / robot offline";
+  $("#connection-description").textContent =
+    state.error || "Local camera and measured-joint stream";
+  $("#telemetry-hz").textContent = state.connected
+    ? `${state.observed_hz} Hz`
+    : "Offline";
+  $("#sample-age").textContent =
+    state.sample_age_ms === null ? "—" : `${state.sample_age_ms} ms`;
+  $("#active-arm").textContent = state.active_arm || "No profile";
+  $("#trial-state").textContent = state.job?.state || "idle";
+  const busy = ["starting", "running"].includes(state.job?.state);
+  $("#run-trial").disabled =
+    !state.connected || !state.profile_configured || busy;
+  $("#stop-trial").disabled = !busy;
+  $("#instruction-mode").textContent = state.profile_configured
+    ? `${state.active_arm} arm / ${state.checkpoint_label || "configured profile"}`
+    : "Restart companion with --profile to run FLUX";
+  if (state.connected && state.poses) {
+    if (scene && state.poses.length !== scene.poses.length) {
+      message(
+        "The companion scene differs from this published scene. Update the site scene before using the live twin.",
+        true,
+      );
+    } else view?.setPoses(state.poses);
+  }
+  $("#joint-values").textContent = Object.entries(state.arms || {})
+    .map(
+      ([name, arm]) =>
+        `${name.toUpperCase()}   ${arm.mode || "unknown"} / torque ${arm.torque ? "on" : "off"}\n${arm.positions?.map((x) => Number(x).toFixed(2)).join("  ") || ""}`,
+    )
+    .join("\n\n");
+  $("#camera-notice").hidden = state.connected && !!cameraURL;
+  if (!state.connected) {
+    $("#camera-notice").textContent =
+      "Waiting for fresh Haller telemetry. The last pose is frozen.";
+    $("#real-camera").hidden = true;
+  }
+  if (state.job?.error) message(state.job.error, true);
+  else if (state.job?.output && busy)
+    message(`Trial ${state.job.state}. Recording locally: ${state.job.output}`);
+  $("#camera-title").textContent =
+    `Real camera / ${$("#camera-select").selectedOptions[0].textContent}`;
+}
+function socket() {
+  if (mode !== "live") return;
+  const url = new URL(bridge);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = "/ws/twin";
+  ws = new WebSocket(url, ["liminal", `token.${token}`]);
+  ws.onmessage = (e) => {
+    try {
+      renderState(JSON.parse(e.data));
+    } catch {
+      message("The companion sent an invalid state message.", true);
+    }
+  };
+  ws.onerror = () =>
+    message(
+      "Connection unavailable. Allow local-network access in this browser and check the companion.",
+      true,
+    );
+  ws.onclose = () => {
+    if (mode === "live") {
+      reconnectTimer = setTimeout(socket, 2500);
+      $("#connection-state").textContent = "Bridge reconnecting";
+      $("#run-trial").disabled = true;
+    }
+  };
+}
+async function connect(local, secret) {
+  try {
+    const parsed = new URL(local);
+    if (
+      !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname) ||
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash ||
+      !secret ||
+      !/^[\w-]{32,}$/.test(secret)
+    )
+      throw new Error(
+        "Invalid local pairing link. Open the pairing page again.",
+      );
+    bridge = parsed.origin;
+    token = secret;
+    await api("/api/state");
+    stopReplay();
+    mode = "live";
+    $("#recorded-camera").hidden = true;
+    $("#real-camera").hidden = false;
+    $("#camera-notice").hidden = false;
+    $("#camera-notice").textContent = "Waiting for a fresh real camera frame.";
+    $("#replay-controls").hidden = true;
+    $("#pair").hidden = true;
+    $("#disconnect").hidden = false;
+    $("#twin-title").textContent =
+      "Measured joints / MuJoCo forward kinematics";
+    $("#twin-scope").textContent =
+      "Joint mirror only · live objects and contact are untracked";
+    $("#camera-caption").textContent = "Local Haller stream / measured";
+    $("#joint-state").textContent =
+      "Joint positions are native measured degrees; gripper is percent. The visual scene has estimated registration. Telemetry rate is not FLUX inference frequency.";
+    $("#lab-note").textContent =
+      "Cameras and telemetry travel directly from your machine to this browser. Trials use the existing guarded runner and save under local runs/research. No motor engagement is performed by this page.";
+    message(
+      "Bridge paired. Waiting for fresh telemetry; observation-only is the default.",
+    );
+    socket();
+    cameraLoop();
+  } catch (e) {
+    message(`Pairing failed: ${e.message}`, true);
+    bridge = null;
+    token = null;
+    $("#pair-dialog").showModal();
+  }
+}
+async function cameraLoop() {
+  while (mode === "live") {
+    try {
+      if (latest?.connected && !document.hidden) {
+        const response = await api(`/api/cameras/${$("#camera-select").value}`);
+        const blob = await response.blob();
+        if (mode !== "live") break;
+        const next = URL.createObjectURL(blob);
+        $("#real-camera").src = next;
+        $("#real-camera").hidden = false;
+        $("#camera-notice").hidden = true;
+        if (cameraURL) URL.revokeObjectURL(cameraURL);
+        cameraURL = next;
+      }
+    } catch {
+      if (mode === "live") {
+        $("#camera-notice").hidden = false;
+        $("#camera-notice").textContent =
+          "Selected camera unavailable. Check the camera binding in Haller.";
+      }
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+$("#disconnect").onclick = () => {
+  mode = "replay";
+  clearTimeout(reconnectTimer);
+  ws?.close();
+  bridge = null;
+  token = null;
+  latest = null;
+  lastReceived = 0;
+  if (cameraURL) URL.revokeObjectURL(cameraURL);
+  cameraURL = null;
+  $("#disconnect").hidden = true;
+  $("#pair").hidden = false;
+  $("#replay-controls").hidden = false;
+  $("#recorded-camera").hidden = false;
+  $("#real-camera").hidden = true;
+  $("#camera-notice").hidden = true;
+  $("#connection-dot").className = "status-dot";
+  $("#connection-state").textContent = "Recorded simulation";
+  $("#connection-description").textContent =
+    "Explore without a robot connection";
+  $("#telemetry-hz").textContent = "Replay";
+  $("#sample-age").textContent = "—";
+  $("#active-arm").textContent = "Not connected";
+  $("#trial-state").textContent = "Idle";
+  $("#run-trial").disabled = true;
+  $("#stop-trial").disabled = true;
+  $("#twin-title").textContent = "Recorded poses / estimated MuJoCo scene";
+  $("#camera-title").textContent = "Recorded scene camera";
+  $("#camera-caption").textContent = "Scripted expert / simulation";
+  $("#twin-scope").textContent =
+    "Scripted teacher replay / objects are recorded poses";
+  $("#joint-values").textContent = "";
+  $("#instruction-mode").textContent = "Connect a local bridge to run FLUX";
+  $("#joint-state").textContent =
+    "The replay contains recorded simulated body poses. A paired bridge supplies measured joint positions; it does not track live objects or contact forces.";
+  $("#lab-note").textContent =
+    "This replay is a scripted training demonstration. It is not a learned-policy success. Pair with your existing local companion to view measured joints and real cameras.";
+  $("#execute").checked = false;
+  $("#engage").checked = false;
+  $("#execute").onchange();
+  $("#camera-select").onchange();
+  message(
+    "Disconnected from the bridge. An already running trial continues locally; reconnect to stop it.",
+  );
+  showReplay();
+};
+$("#camera-select").onchange = () => {
+  if (mode === "replay") {
+    const selected = $("#camera-select").value;
+    camera.pause();
+    camera.src =
+      selected === "top"
+        ? "assets/demonstration.mp4"
+        : selected === "wrist_a"
+          ? "assets/replay-left-wrist.mp4"
+          : "assets/replay-right-wrist.mp4";
+    const t = +$("#replay-scrub").value;
+    camera.onloadedmetadata = () => {
+      camera.currentTime = t;
+      if (playing) camera.play().catch(() => {});
+    };
+    $("#camera-title").textContent =
+      `Recorded ${$("#camera-select").selectedOptions[0].textContent} camera`;
+  } else {
+    $("#camera-notice").hidden = false;
+    $("#camera-notice").textContent = "Switching camera…";
+  }
+};
+$("#execute").onchange = () => {
+  $("#engage-label").hidden = !$("#execute").checked;
+  $("#run-trial").textContent = $("#execute").checked
+    ? "Run with actions"
+    : "Run observation";
+  if (!$("#execute").checked) $("#engage").checked = false;
+};
+$("#trial-form").onsubmit = async (e) => {
+  e.preventDefault();
+  if (mode !== "live") return;
+  $("#run-trial").disabled = true;
+  try {
+    const r = await api("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: $("#instruction").value.trim(),
+        execute: $("#execute").checked,
+        engage_acknowledged: $("#engage").checked,
+        duration_s: +$("#duration").value,
+      }),
+    });
+    const result = await r.json();
+    message(
+      `Trial started. ${result.execute ? "Hardware actions enabled." : "Observation only."} Saved locally: ${result.output}`,
+    );
+  } catch (error) {
+    message(error.message, true);
+    $("#run-trial").disabled = !latest?.connected;
+  }
+};
+$("#stop-trial").onclick = async () => {
+  try {
+    await api("/api/stop", { method: "POST" });
+    message("Stop requested for the trial launched by this companion.");
+  } catch (e) {
+    message(e.message, true);
+  }
+};
+if (paired.has("bridge") && paired.has("token"))
+  connect(paired.get("bridge"), paired.get("token"));

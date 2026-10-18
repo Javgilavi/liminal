@@ -1,5 +1,7 @@
 # liminal
 
+**[Project page](https://javgilavi.github.io/liminal/) · [Live lab](https://javgilavi.github.io/liminal/live.html)**
+
 **Long-horizon, dual-arm collaboration on SO-101 / XLeRobot, using FLUX 3 Action for manipulation.**
 
 One arm changes or holds something in the scene so the other arm can do what it
@@ -237,3 +239,27 @@ docs/             guides, validation reports, architecture and research briefs
 - LeRobot imports and CLI flags change between releases. They are isolated in
   `hardware/so101.py` and `scripts/record_demos.sh`.
 - SO-101 holding is **position** holding, not torque control. Keep loads light.
+
+
+## Public project page and live digital twin lab
+
+Explore the longer interactive project page at **https://javgilavi.github.io/liminal/**.
+The separate [full-screen lab](https://javgilavi.github.io/liminal/live.html) includes a
+rotatable recorded MuJoCo scene, scene/wrist views and explicit pairing to a local
+Haller companion. The project page distinguishes real red-pen insertion highlights,
+scripted teachers, simulation comparisons and older unlabeled hardware trials.
+
+```bash
+uv sync --extra research --extra dev
+./scripts/research_ui.sh \
+  --profile configs/policy/official_haller_right.yaml \
+  --site-url https://javgilavi.github.io/liminal/
+# Open http://127.0.0.1:18003/pair on the robot-side machine.
+```
+
+**Liminal** is the project; **Haller** is the hardware/controller. Live cameras and
+measured joints travel directly from the local companion to the browser. Trials
+use the existing guarded official runner and save locally under `runs/research/`.
+The viewer mirrors arm joints; object poses, contact and physical registration are
+not automatically tracked. [Setup, safety gates and implementation](docs/research-ui.md).
+The static site is deployed independently from the dedicated `gh-pages` branch.
