@@ -23,7 +23,7 @@ def create_research_app(
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel, Field
 
-    from liminal.ui.twin import JointMirror, parse_telemetry
+    from liminal.ui.twin import JointMirror, parse_telemetry, telemetry_source_age
 
     root = Path(__file__).resolve().parents[3]
     assets = Path(__file__).with_name("static") / "research"
@@ -66,6 +66,8 @@ def create_research_app(
 
     def snapshot():
         age = None if state["received_at"] is None else time.monotonic() - state["received_at"]
+        if age is not None:
+            age += state.get("source_age", 0.0)
         connected = age is not None and age < 0.5 and not state["error"]
         return {
             "connected": bool(connected),
@@ -81,6 +83,15 @@ def create_research_app(
             "object_tracking": False,
             "source": "measured_joints",
             "controller": controller,
+            "camera_labels": {
+                "top": "Scene / top",
+                "wrist_a": "Wrist A",
+                "wrist_b": "Wrist B",
+                **(
+                    {cfg["wrist_camera_id"]: f"{cfg['arm'].title()} policy wrist"}
+                    if cfg and cfg.get("wrist_camera_id") else {}
+                ),
+            },
         }
 
     async def observe():
@@ -94,8 +105,7 @@ def create_research_app(
                 async with connect(ws_url, open_timeout=2, close_timeout=1) as ws:
                     async for raw in ws:
                         message = json.loads(raw)
-                        if "t_ms" in message and abs(time.time() - float(message["t_ms"]) / 1000) > 0.5:
-                            raise ValueError("Controller timestamp is stale or clocks differ by >500 ms")
+                        source_age = telemetry_source_age(message)
                         arms = parse_telemetry(message)
                         now = time.monotonic()
                         if state["received_at"] is not None:
@@ -103,11 +113,15 @@ def create_research_app(
                             if 0 < interval < 1:
                                 state["rate_hz"] = state["rate_hz"] * 0.8 + 0.2 / interval
                         mirror.apply({name: arm["positions"] for name, arm in arms.items()})
-                        state.update(arms=arms, received_at=now, error=None)
+                        state.update(arms=arms, received_at=now, source_age=source_age, error=None)
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                state["error"] = "Waiting for Haller telemetry"
+            except Exception as exc:
+                state["error"] = (
+                    str(exc) if isinstance(exc, ValueError)
+                    else f"Waiting for Haller at {controller}: {type(exc).__name__}"
+                )
+                state["rate_hz"] = 0.0
                 await asyncio.sleep(2)
 
     async def cancel():
@@ -172,6 +186,11 @@ def create_research_app(
 
         fragment = urlencode({"bridge": str(request.base_url).rstrip("/"), "token": pairing_token})
         link = escape(site_url + "live.html#" + fragment, quote=True)
+        current = snapshot()
+        status = (
+            "Fresh measured joints available" if current["connected"]
+            else current["error"] or "Waiting for fresh joints"
+        )
         return HTMLResponse(
             '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             '<meta name="referrer" content="no-referrer"><title>Pair Liminal</title>'
@@ -182,6 +201,11 @@ def create_research_app(
             "local companion. Cameras and robot data stay between your browser and your machine. "
             "The pairing session expires when the companion restarts.</p>"
             f'<a href="{link}" rel="noreferrer">Open the paired full-screen lab ↗</a>'
+            f"<p><strong>Robot connection:</strong> {escape(status)}<br>"
+            f'<a href="{escape(controller, quote=True)}" target="_blank" rel="noreferrer">'
+            "Open Haller controller ↗</a></p>"
+            "<p>You can pair now while the robot is offline. The joint mirror and cameras reconnect "
+            "automatically when Haller starts. No policy profile is needed to view them.</p>"
             "<p>Keep this link private. Hardware actions still require explicit engagement in Haller.</p>",
             headers={
                 "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
@@ -269,6 +293,8 @@ def create_research_app(
             if req.execute and not req.engage_acknowledged:
                 raise HTTPException(409, "Acknowledge MANUAL/torque engagement in Haller before execution")
             arm = current["arms"].get(cfg["arm"], {})
+            if not arm:
+                raise HTTPException(409, f"No fresh measured joints for the selected {cfg['arm']} arm")
             if arm.get("mode") == "policy":
                 raise HTTPException(409, "Selected arm already belongs to another policy")
             if req.execute and (arm.get("mode") != "manual" or not arm.get("torque")):

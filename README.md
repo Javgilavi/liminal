@@ -251,11 +251,15 @@ scripted teachers, simulation comparisons and older unlabeled hardware trials.
 
 ```bash
 uv sync --extra research --extra dev
-./scripts/research_ui.sh \
-  --profile configs/policy/official_haller_right.yaml \
-  --site-url https://javgilavi.github.io/liminal/
+./scripts/research_ui.sh
 # Open http://127.0.0.1:18003/pair on the robot-side machine.
 ```
+
+Haller should be running at `http://127.0.0.1:8000`. Viewing both arms and cameras
+needs no policy profile. Pairing can happen before Haller starts; the companion
+reconnects automatically. To launch FLUX prompts, add `--profile PATH_TO_VERIFIED_PROFILE`
+for the current arm, checkpoint and GPU worker. The lab loads its live MuJoCo scene
+from that companion, and offers an **Open Haller** link after pairing.
 
 **Liminal** is the project; **Haller** is the hardware/controller. Live cameras and
 measured joints travel directly from the local companion to the browser. Trials

@@ -13,7 +13,11 @@ let view,
   latest = null,
   lastReceived = 0,
   cameraURL = null,
-  reconnectTimer = null;
+  reconnectTimer = null,
+  pollTimer = null,
+  polling = false,
+  session = 0,
+  scenePreview;
 const camera = $("#recorded-camera");
 const paired = new URLSearchParams(location.hash.slice(1));
 if (location.hash)
@@ -149,15 +153,17 @@ async function api(path, options = {}) {
   if (!r.ok) {
     let detail;
     try {
-      detail = (await r.json()).detail;
+      detail = (await r.clone().json()).detail;
     } catch {
       detail = await r.text().catch(() => r.statusText);
     }
-    throw new Error(detail || `Companion returned ${r.status}`);
+    const error = new Error(detail || `Companion returned ${r.status}`);
+    error.status = r.status;
+    throw error;
   }
   return r;
 }
-function renderState(state) {
+function renderState(state, transport = "websocket") {
   latest = state;
   lastReceived = performance.now();
   $("#connection-dot").className =
@@ -166,7 +172,16 @@ function renderState(state) {
     ? "Measured hardware"
     : "Bridge paired / robot offline";
   $("#connection-description").textContent =
-    state.error || "Local camera and measured-joint stream";
+    state.error || (transport === "http" ? "HTTP snapshots / live stream reconnecting" : "Local camera and measured-joint stream");
+  const controller = new URL(state.controller || "http://127.0.0.1:8000");
+  if (["127.0.0.1", "localhost", "[::1]"].includes(controller.hostname)) {
+    $("#controller-link").href = controller.origin;
+    $("#controller-link").hidden = false;
+  }
+  if (state.camera_labels) {
+    for (const option of $("#camera-select").options)
+      option.textContent = state.camera_labels[option.value] || option.textContent;
+  }
   $("#telemetry-hz").textContent = state.connected
     ? `${state.observed_hz} Hz`
     : "Offline";
@@ -176,7 +191,7 @@ function renderState(state) {
   $("#trial-state").textContent = state.job?.state || "idle";
   const busy = ["starting", "running"].includes(state.job?.state);
   $("#run-trial").disabled =
-    !state.connected || !state.profile_configured || busy;
+    !state.connected || !state.profile_configured || !state.arms?.[state.active_arm] || busy;
   $("#stop-trial").disabled = !busy;
   $("#instruction-mode").textContent = state.profile_configured
     ? `${state.active_arm} arm / ${state.checkpoint_label || "configured profile"}`
@@ -184,7 +199,7 @@ function renderState(state) {
   if (state.connected && state.poses) {
     if (scene && state.poses.length !== scene.poses.length) {
       message(
-        "The companion scene differs from this published scene. Update the site scene before using the live twin.",
+        "The joint stream differs from the companion scene. Re-pair the lab to reload its model.",
         true,
       );
     } else view?.setPoses(state.poses);
@@ -207,29 +222,59 @@ function renderState(state) {
   $("#camera-title").textContent =
     `Real camera / ${$("#camera-select").selectedOptions[0].textContent}`;
 }
+async function pollState(current) {
+  if (mode !== "live" || current !== session) return;
+  if (polling) {
+    pollTimer = setTimeout(() => pollState(current), 1000);
+    return;
+  }
+  polling = true;
+  try {
+    const state = await (await api("/api/state")).json();
+    if (mode !== "live" || current !== session) return;
+    renderState(state, "http");
+  } catch (error) {
+    if (mode !== "live" || current !== session) return;
+    if ([401, 403].includes(error.status)) {
+      message("The pairing session expired. Disconnect and open the local pairing page again.", true);
+      return;
+    }
+  } finally {
+    polling = false;
+  }
+  if (mode === "live" && current === session && ws?.readyState !== WebSocket.OPEN)
+    pollTimer = setTimeout(() => pollState(current), 1000);
+}
 function socket() {
   if (mode !== "live") return;
+  const current = session;
   const url = new URL(bridge);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = "/ws/twin";
   ws = new WebSocket(url, ["liminal", `token.${token}`]);
+  ws.onopen = () => clearTimeout(pollTimer);
   ws.onmessage = (e) => {
+    if (mode !== "live" || current !== session) return;
     try {
       renderState(JSON.parse(e.data));
     } catch {
       message("The companion sent an invalid state message.", true);
     }
   };
-  ws.onerror = () =>
-    message(
-      "Connection unavailable. Allow local-network access in this browser and check the companion.",
-      true,
-    );
+  ws.onerror = () => {
+    if (current === session && performance.now() - lastReceived > 1200)
+      message(
+        "Live stream unavailable. Checking HTTP snapshots; allow local-network access if requested.",
+        true,
+      );
+  };
   ws.onclose = () => {
-    if (mode === "live") {
+    if (mode === "live" && current === session) {
       reconnectTimer = setTimeout(socket, 2500);
       $("#connection-state").textContent = "Bridge reconnecting";
       $("#run-trial").disabled = true;
+      clearTimeout(pollTimer);
+      pollState(current);
     }
   };
 }
@@ -251,8 +296,9 @@ async function connect(local, secret) {
       );
     bridge = parsed.origin;
     token = secret;
-    await api("/api/state");
+    const state = await (await api("/api/state")).json();
     stopReplay();
+    session++;
     mode = "live";
     $("#recorded-camera").hidden = true;
     $("#real-camera").hidden = false;
@@ -270,8 +316,10 @@ async function connect(local, secret) {
     message(
       "Bridge paired. Waiting for fresh telemetry; observation-only is the default.",
     );
+    renderState(state);
+    scenePreview?.reload();
     socket();
-    cameraLoop();
+    cameraLoop(session);
   } catch (e) {
     message(`Pairing failed: ${e.message}`, true);
     bridge = null;
@@ -279,13 +327,16 @@ async function connect(local, secret) {
     $("#pair-dialog").showModal();
   }
 }
-async function cameraLoop() {
-  while (mode === "live") {
+async function cameraLoop(current) {
+  while (mode === "live" && current === session) {
     try {
       if (latest?.connected && !document.hidden) {
-        const response = await api(`/api/cameras/${$("#camera-select").value}`);
+        const selected = $("#camera-select").value;
+        const response = await api(`/api/cameras/${selected}`);
         const blob = await response.blob();
-        if (mode !== "live") break;
+        if (mode !== "live" || current !== session) break;
+        if (!latest?.connected) continue;
+        if (selected !== $("#camera-select").value) continue;
         const next = URL.createObjectURL(blob);
         $("#real-camera").src = next;
         $("#real-camera").hidden = false;
@@ -294,7 +345,7 @@ async function cameraLoop() {
         cameraURL = next;
       }
     } catch {
-      if (mode === "live") {
+      if (mode === "live" && current === session) {
         $("#camera-notice").hidden = false;
         $("#camera-notice").textContent =
           "Selected camera unavailable. Check the camera binding in Haller.";
@@ -305,7 +356,9 @@ async function cameraLoop() {
 }
 $("#disconnect").onclick = () => {
   mode = "replay";
+  session++;
   clearTimeout(reconnectTimer);
+  clearTimeout(pollTimer);
   ws?.close();
   bridge = null;
   token = null;
@@ -315,6 +368,7 @@ $("#disconnect").onclick = () => {
   cameraURL = null;
   $("#disconnect").hidden = true;
   $("#pair").hidden = false;
+  $("#controller-link").hidden = true;
   $("#replay-controls").hidden = false;
   $("#recorded-camera").hidden = false;
   $("#real-camera").hidden = true;
@@ -342,6 +396,9 @@ $("#disconnect").onclick = () => {
   $("#engage").checked = false;
   $("#execute").onchange();
   $("#camera-select").onchange();
+  for (const option of $("#camera-select").options)
+    option.textContent = {top: "Scene / top", wrist_a: "Left wrist", wrist_b: "Right wrist"}[option.value];
+  scenePreview?.reload();
   message(
     "Disconnected from the bridge. An already running trial continues locally; reconnect to stop it.",
   );
@@ -397,7 +454,7 @@ $("#trial-form").onsubmit = async (e) => {
     );
   } catch (error) {
     message(error.message, true);
-    $("#run-trial").disabled = !latest?.connected;
+    if (latest) renderState(latest);
   }
 };
 $("#stop-trial").onclick = async () => {
@@ -411,11 +468,12 @@ $("#stop-trial").onclick = async () => {
 if (paired.has("bridge") && paired.has("token"))
   connect(paired.get("bridge"), paired.get("token"));
 
-import("./scene-preview.js?v=20261018-resilient")
+import("./scene-preview.js?v=20261018-connection")
   .then(({ createScenePreview }) => {
-    createScenePreview($("#lab-view"), {
+    scenePreview = createScenePreview($("#lab-view"), {
       auto: true,
       dark: true,
+      getScene: () => mode === "live" ? api("/api/scene").then((r) => r.json()) : null,
       controls: $$(".preset"),
       unavailable:
         "3D is unavailable here. Camera video and local pairing still work.",
@@ -423,11 +481,13 @@ import("./scene-preview.js?v=20261018-resilient")
         view = instance;
         scene = data;
         labelTwin();
-        if (mode === "live" && latest?.connected) view.setPoses(latest.poses);
+        if (mode === "live" && latest?.connected && performance.now() - lastReceived < 500)
+          view.setPoses(latest.poses);
         else showReplay();
       },
       onError() {
         view = null;
+        scene = null;
         labelTwin();
       },
     });

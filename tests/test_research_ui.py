@@ -11,7 +11,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from liminal.core.types import SO101_JOINTS
-from liminal.ui.twin import JointMirror, parse_telemetry
+from liminal.ui.twin import JointMirror, parse_telemetry, telemetry_source_age
+
+
+@pytest.mark.parametrize("key,scale", [("t", 1), ("t_ms", 1000)])
+def test_haller_timestamps_reject_old_future_and_nonfinite_samples(monkeypatch, key, scale):
+    monkeypatch.setattr("liminal.ui.twin.time.time", lambda: 1000.0)
+    assert telemetry_source_age({key: 999.8 * scale}) == pytest.approx(0.2)
+    for stamp in (999.0, 1001.0, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="timestamp"):
+            telemetry_source_age({key: stamp * scale})
+    assert telemetry_source_age({}) == 0
 
 
 def test_measured_joint_mirror_preserves_native_coordinates():
@@ -102,6 +112,45 @@ def test_disconnected_and_stale_telemetry_refuse_trials(companion):
     runner.assert_not_called()
 
 
+def test_source_age_is_included_in_trial_freshness(companion):
+    client, runner = companion
+    fresh(client)
+    client.app.state.telemetry.update(received_at=time.monotonic() - 0.3, source_age=0.25)
+    state = client.get("/api/state").json()
+    assert not state["connected"] and state["sample_age_ms"] >= 550
+    assert client.post("/api/run", json={"prompt": "Pick pen"}).status_code == 409
+    runner.assert_not_called()
+
+
+def test_viewing_and_pairing_need_no_policy_profile(companion):
+    from fastapi.testclient import TestClient
+
+    from liminal.ui.research import create_research_app
+
+    _, runner = companion  # reuse the isolated fake mirror and telemetry transport
+    app = create_research_app(site_url="https://javgilavi.github.io/liminal/")
+    with TestClient(app) as client:
+        fresh(client)
+        state = client.get("/api/state").json()
+        assert state["connected"] and not state["profile_configured"]
+        assert state["camera_labels"]["wrist_a"] == "Wrist A"
+        pair = client.get("/pair")
+        assert pair.status_code == 200 and "Fresh measured joints" in pair.text
+        assert client.get("/api/scene").status_code == 200
+        assert client.post("/api/run", json={"prompt": "Pick pen"}).status_code == 409
+    runner.assert_not_called()
+
+
+def test_trial_refuses_missing_policy_arm_even_when_another_arm_is_fresh(companion):
+    client, runner = companion
+    fresh(client)
+    arms = client.app.state.telemetry["arms"]
+    arms["left"] = arms.pop("right")
+    response = client.post("/api/run", json={"prompt": "Pick pen"})
+    assert response.status_code == 409 and "right arm" in response.json()["detail"]
+    runner.assert_not_called()
+
+
 def test_observation_mode_uses_existing_runner_and_prompt(companion):
     client, runner = companion
     fresh(client)
@@ -153,6 +202,8 @@ def test_public_lab_pairing_requires_token_and_keeps_hardware_gates(companion):
     state = client.get("/api/state", headers=headers)
     assert state.status_code == 200
     assert state.headers["access-control-allow-origin"] == headers["Origin"]
+    assert state.json()["camera_labels"]["wrist_a"] == "Wrist A"
+    assert client.get("/api/scene", headers=headers).json()["poses"] == [[0, 0, 0, 1, 0, 0, 0]]
     assert client.post("/api/run", headers=headers, json={"prompt": "Pick pen"}).status_code == 409
     fresh(client)
     assert client.post("/api/run", headers=headers, json={"prompt": "Pick pen", "execute": True}).status_code == 409

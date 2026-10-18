@@ -13,6 +13,14 @@ uv pip install --python .venv/bin/python -e '.[research]'
 
 The initial page is observation-only and can be explored with Haller disconnected. Its interactive replay comes from one saved **scripted MuJoCo demonstration**, not learned or real-robot execution. Both robot arms, the lid and movable objects use recorded poses. Play, pause, scrub, select a camera preset, drag to orbit and scroll to zoom. The displayed source photograph comes from the user's setup recording.
 
+The launcher enables pairing to the project GitHub Pages site by default; pass
+`--site-url` to use another trusted HTTPS deployment. Open
+**http://127.0.0.1:18003/pair** to connect the full-screen public lab. Viewing
+measured joints and cameras requires no policy profile and does not acquire a
+policy connection. The pairing page shows controller availability and links to
+Haller. Pairing while Haller is offline is supported; observation reconnects
+automatically when it becomes available.
+
 ## Connect the existing robot owner
 
 Keep Haller running at `http://127.0.0.1:8000`. The companion subscribes to `/ws/telemetry` and proxies existing `/cameras/{top,wrist_a,wrist_b}/snapshot` images. It never opens serial ports, a V4L device, or Haller's exclusive policy transport merely to show the page. An existing CLI policy can continue while the companion observes it. With a controller on another origin, `--controller http://HOST:PORT` supports read-only observation; use an SSH tunnel for another machine.
@@ -83,6 +91,20 @@ cannot be embedded. Same-origin local UI use remains available. Browser local
 network permissions may require an explicit allow decision; the site does not
 expose Haller publicly. Live frames and telemetry travel directly to the browser,
 not through GitHub. Disconnecting the browser does not stop a local trial.
+
+On pairing, the public lab fetches `/api/scene` from the companion and rebuilds
+its viewer using that exact compiled model. Mesh identifiers are scoped to each
+model, so a new scene cannot accidentally reuse the public replay's geometry.
+Disconnect restores the saved public scene. If the websocket is unavailable,
+authenticated HTTP polling supplies fresh snapshots while it reconnects. Camera
+labels use the profile's verified wrist binding when available; wrist A is not
+assumed to be the physical left arm. Camera switching discards in-flight frames
+from the previous camera or pairing session.
+
+Source freshness accepts Haller's Unix-seconds `t` and legacy `t_ms`, rejecting
+nonfinite or >500 ms clock differences. Sample age includes the source's age at
+arrival plus elapsed time since receipt. Missing policy-arm telemetry blocks
+trial launch even if the other arm remains connected.
 
 The public replay has scene, left-wrist and right-wrist views, a timeline and
 rotatable CAD. It does not send an instruction to a policy until paired, and

@@ -3,9 +3,23 @@
 from __future__ import annotations
 
 import math
+import time
 from pathlib import Path
 
 from liminal.core.types import SO101_JOINTS
+
+
+def telemetry_source_age(message: dict) -> float:
+    """Haller uses Unix seconds in `t`; older bridges may send milliseconds."""
+    stamp = message.get("t")
+    if stamp is None and "t_ms" in message:
+        stamp = float(message["t_ms"]) / 1000
+    if stamp is None:
+        return 0.0  # legacy senders without a timestamp still use receive-age checks
+    age = time.time() - float(stamp)
+    if not math.isfinite(age) or abs(age) > 0.5:
+        raise ValueError("Controller timestamp is stale or clocks differ by >500 ms")
+    return max(0.0, age)
 
 
 class JointMirror:

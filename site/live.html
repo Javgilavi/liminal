@@ -15,7 +15,7 @@
     <script type="importmap">
       { "imports": { "three": "./assets/vendor/three.module.js" } }
     </script>
-    <script type="module" src="live.js?v=20261018-resilient"></script>
+    <script type="module" src="live.js?v=20261018-connection"></script>
   </head>
   <body class="lab-page">
     <header class="lab-top">
@@ -41,6 +41,7 @@
           >
         </div>
         <div>
+          <a id="controller-link" hidden target="_blank" rel="noopener noreferrer">Open Haller ↗</a>
           <button id="disconnect" hidden>Disconnect</button
           ><button id="pair" class="pair-button">Pair local robot ↗</button>
         </div>
@@ -192,8 +193,8 @@ Pick up the red pen and put it in the box.</textarea
       </p>
       <ol>
         <li>
-          Start Haller normally, then launch the research companion on the same
-          machine.
+          Start Haller normally, then run the command below on the robot-side
+          machine. Viewing cameras and joints needs no policy profile.
         </li>
         <li>
           Open the local pairing page. It creates a private session link back to
@@ -205,9 +206,7 @@ Pick up the red pen and put it in the box.</textarea
         </li>
       </ol>
       <pre>
-./scripts/research_ui.sh \
-  --profile configs/policy/official_haller_right.yaml \
-  --site-url https://javgilavi.github.io/liminal/</pre
+./scripts/research_ui.sh</pre
       >
       <a
         id="open-pair"
@@ -218,7 +217,8 @@ Pick up the red pen and put it in the box.</textarea
         >Open local pairing page ↗</a
       >
       <p class="dialog-foot">
-        Use the matching verified profile for your arm and camera mapping.
+        To launch FLUX prompts too, add <code>--profile PATH_TO_VERIFIED_PROFILE</code>
+        using the current checkpoint, GPU transport and camera mapping for your arm.
         Hardware execution stays gated by fresh telemetry, verified units and
         explicit manual engagement.
         <a href="evidence/notes.html">Setup details ↗</a>

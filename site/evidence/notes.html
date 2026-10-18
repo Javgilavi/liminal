@@ -205,17 +205,23 @@
       <pre>
 # In the Liminal source checkout with the research UI changes:
 uv pip install --python .venv/bin/python -e '.[research]'
-./scripts/research_ui.sh \
-  --profile configs/policy/official_haller_right.yaml \
-  --site-url https://javgilavi.github.io/liminal/</pre
+./scripts/research_ui.sh</pre
       >
       <p>
-        Keep the existing Haller controller running locally on port 8000. Use
-        the appropriate verified profile for the actual active arm, checkpoint,
-        units and camera assignment; the example profile selects the right arm
-        and a base-policy checkpoint. It is not the RAW-5k adapter shown in the
-        archived successful videos. The lab shows the active checkpoint label
-        after pairing.
+        Keep Haller running locally on port 8000. No profile is needed to view
+        cameras and measured joints. To launch FLUX prompts, add
+        <code>--profile PATH_TO_VERIFIED_PROFILE</code> with the current arm,
+        checkpoint, worker, units and camera assignment. The repository's
+        <code>official_haller_right.yaml</code> example uses a base checkpoint,
+        rather than the RAW-5k adapter in the archived pen videos. The lab
+        displays the configured checkpoint after pairing.
+      </p>
+      <p>
+        The live viewer loads the companion's compiled MuJoCo scene and applies
+        measured joint poses to it. It freezes on stale telemetry and reconnects
+        automatically. HTTP snapshots provide a fallback if the websocket is
+        unavailable. Haller's source timestamps and receive age both contribute
+        to freshness; wrist labels follow the verified policy binding.
       </p>
       <ol>
         <li>
