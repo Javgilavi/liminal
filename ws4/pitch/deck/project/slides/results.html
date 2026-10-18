@@ -3,19 +3,20 @@
 <div style="display:flex;flex-direction:row;align-items:center;gap:56px">
 <p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:200px;font-weight:700;line-height:1;letter-spacing:-6px;color:#5b3fe0;white-space:nowrap">3/5</p>
 <div style="flex:1;display:flex;flex-direction:column;gap:12px">
-<h2 style="font-size:56px;font-weight:700;line-height:1.1;color:#1c1830">first full inserts on the real arm</h2>
-<p style="font-size:28px;line-height:1.35;color:#625d78">FLUX LoRA RAW 5k, replanning every 16 commands. Zero-shot: 0/16. 5/8 counting the next three attempts.</p>
+<h2 style="font-size:56px;font-weight:700;line-height:1.1;color:#1c1830">first full red-pen inserts on the real arm</h2>
+<p style="font-size:28px;line-height:1.35;color:#625d78">FLUX LoRA RAW 5k, replanning every 16 commands. Zero-shot: 0/16. This morning: 2/3 more, and one in the HMI in 33 s.</p>
 </div>
 </div>
 <table style="font-size:24px;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif">
-<tr><th style="width:42%">Block (5 attempts each)</th><th style="width:12%;text-align:right">Inserts</th><th style="width:16%;text-align:right">Steps of 15</th><th style="width:30%">How attempts ended</th></tr>
-<tr style="background:#ece7ff"><td><b>FLUX RAW 5k, horizon 16</b></td><td style="text-align:right"><b>3/5</b></td><td style="text-align:right">9</td><td>2 stopped without a reach</td></tr>
-<tr><td>FLUX RAW 5k, horizon 32</td><td style="text-align:right">0/5</td><td style="text-align:right">8</td><td>stall freeze 4, keep-out 1</td></tr>
-<tr><td>FLUX EMA 10k / RAW 10k, horizon 32</td><td style="text-align:right">0/5, 0/5</td><td style="text-align:right">4, 3</td><td>stall freeze, keep-out</td></tr>
-<tr><td>ACT on the same data, 100k steps</td><td style="text-align:right">0/5</td><td style="text-align:right">8</td><td>grasp and carry in 4, never inserted</td></tr>
-<tr><td>FLUX RAW 10k, lid held up (unseen scene)</td><td style="text-align:right">0/5</td><td style="text-align:right">0</td><td>held still</td></tr>
+<tr><th style="width:42%">Block</th><th style="width:12%;text-align:right">Success</th><th style="width:16%;text-align:right">Steps</th><th style="width:30%">How attempts ended</th></tr>
+<tr style="background:#ece7ff"><td><b>FLUX RAW 5k, horizon 16</b></td><td style="text-align:right"><b>3/5</b></td><td style="text-align:right">9 of 15</td><td>2 stopped without a reach</td></tr>
+<tr><td>FLUX RAW 5k, horizon 32</td><td style="text-align:right">0/5</td><td style="text-align:right">8 of 15</td><td>stall freeze 4, keep-out 1</td></tr>
+<tr><td>FLUX green pen, RAW 5k (this morning)</td><td style="text-align:right">1/2</td><td style="text-align:right">3 of 6</td><td>1 full insert, 1 no reach</td></tr>
+<tr><td>FLUX yellow cutter, augmented RAW 5k</td><td style="text-align:right">1/6</td><td style="text-align:right">3 of 18</td><td>1 full insert; others before the insert</td></tr>
+<tr><td>ACT on the same data, 100k steps</td><td style="text-align:right">0/5</td><td style="text-align:right">8 of 15</td><td>grasp and carry in 4, never inserted</td></tr>
+<tr><td>FLUX box, every variant</td><td style="text-align:right">0/4</td><td style="text-align:right">0</td><td>no start from rest: replayed in the demo</td></tr>
 </table>
 <p style="font-size:24px;line-height:1.35;color:#625d78">Caveats: small n; horizon 16 came with a 25 deg lift-stall threshold (two changes at once); successes ended with the operator’s stop key after the insert. Chain and per-skill runs: <span style="color:#b45309">[[NUM:CHAIN_SUCCESS]]</span>.</p>
 <p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#625d78">Source: ws4/single_arm/benchmarks/red_pen_2026-10-18.md (05:00 to 05:35 CEST) · ws4/eval/trials.jsonl</p>
-<aside>R1 RESULTS, the arm. "On the arm: the first full inserts, 3 of 5, where ACT grasped but never inserted. The chain: [[NUM:CHAIN_SUCCESS]]." Steps are reach, grasp, insert, scored by Oscar after each attempt; interventions 0 as scored in every block. Successes: A 94 s, B 91 s, C 48 s; D and A stopped by Oscar at 26 s and 43 s without a reach. Right after the block, three more attempts at horizon 16: D success, A 2 steps, D success, so 5/8 in the trial log; say which number you quote. At horizon 32 the stall freeze ended 9 of 15 attempts: the shoulder lift trails at about two thirds of the 60 % torque cap (no contact). Horizon 8: 0/2 in the darkest light. The brief's five columns: successes, attempts, completed steps, failure points, interventions are all here. Replace or add rows with the per-skill rehearsal and chain results from `trial_log.py summary --markdown` before presenting.</aside>
+<aside>R1 RESULTS, the arm. "On the arm: the first full red-pen inserts, 3 of 5, where ACT grasped but never inserted; this morning FLUX also inserted the green pen and the cutter, and Claude confirmed a red-pen insert in 33 seconds. The chain: [[NUM:CHAIN_SUCCESS]]." Red pen: benchmark block 3/5 (A 94 s, B 91 s, C 48 s; 05:00 to 05:35), three attempts right after (5/8), this morning 2/3 graded (A, C), all RAW 5k rows 9/23. HMI: one insert in 33.1 s confirmed by Haiku; the next step passed in 4.2 s with the pen likely still in place (not counted). Green: 1/2 (one full insert, 3/3 steps, 08:33). Cutter: trial log 1/6 (the orchestrator reports reach 5/5 and grasp 4/5 in the first five; the log scores those as 0 steps): reconcile before quoting. Box: 0/3 runner + 0/1 HMI (20 logged rows, all 0): replaced by a scripted replay. Horizon 32 blocks (EMA 10k 4/15 steps, RAW 10k 3/15) and the lid-held scene (0/15) are in the benchmark file. Caveats: small n; horizon 16 came with a 25 deg lift-stall threshold. Steps are reach, grasp, insert; interventions 0 as scored. Update from `trial_log.py summary --markdown` before presenting.</aside>
 </section>

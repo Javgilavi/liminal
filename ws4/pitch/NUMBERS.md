@@ -22,13 +22,14 @@ python ws4/eval/trial_log.py summary --markdown
 
 ## 0. Final demo, Sun 18 Oct: the 4-skill chain (read this section first)
 
-Updated Sun 18 Oct about 07:30 CEST. Sections 1 to 13 below are the Saturday history; where they disagree, this
+Updated Sun 18 Oct about 09:30 CEST. Sections 1 to 13 below are the Saturday history; where they disagree, this
 section wins.
 
 ### 0.1 The chain
 
-Claude Opus plans, Claude Haiku checks each step from the head camera, FLUX 3 Action runs every motion (one LoRA per
-skill on one shared base), the runner's guards bound every command.
+Claude Opus plans, Claude Haiku checks each step from the head camera, the runner's guards bound every command.
+**The box step is a scripted replay, not FLUX** (see below); the three left-arm steps are FLUX 3 Action, one LoRA per
+skill on one shared base.
 
 | # | Arm | Prompt (exact) | Dataset on the Hub (takes) | Haiku check on held-out frames, final scene |
 |---|---|---|---|---|
@@ -43,6 +44,21 @@ teleop (box, green, cutter overnight, about 00:25 to 03:00 CEST at "tonight's sp
 Planner: Claude plans "right arm first, then the three left-arm steps", checked live in 6.4 s for USD 0.02
 (`ws4/orchestrator/README.md`). Chain result: `[[NUM:CHAIN_SUCCESS]]`, steps `[[NUM:CHAIN_STEPS]]` (PENDING,
 demo-rehearsal).
+
+**Box = scripted replay, never call it FLUX.** The FLUX box LoRA went 0/3 live in the runner plus 0/1 in the HMI
+(orchestrator, 09:00; the trial log has 20 `open_box` FLUX rows, all 0, all "stopped before: reach the handle"). It
+barely moves from rest: the from-rest gate (first chunk must move >= 20 deg on every held-out take) failed for every
+box variant, smallest move 4.9 deg (non-aug RAW), 5.3 (aug RAW), 5.5 (aug EMA) (`ws4/research/skills.md`, augmented
+runs table). In the demo the box step replays recorded demo 59 through the same safety stack (1 deg/tick, the box
+kit's keep-out with its envelope, stall freeze, torque cap; the start gate then checks the held lid for the pen
+steps), labelled "SCRIPTED REPLAY OF RECORDED DEMO 59, NOT FLUX" in the HMI, events and trial log (condition
+`scripted`, variant `scripted-replay-ep59`; `ws4/orchestrator/README.md`, `skills.yaml`). Say: "the planner mixes
+learned skills and scripted primitives under the same safety layer". A cutter replay fallback (take 67) also exists.
+
+Executed by, in the demo: box = scripted replay (demo 59); green pen = FLUX non-augmented RAW 5k; yellow cutter = FLUX
+augmented RAW 5k; red pen = FLUX RAW 5k on B84. All four FLUX adapters are public, root = the served adapter,
+`checkpoints/<run>/<step>/{raw,ema}` for the rest: `Oskrt/flux-3-action-so101-haller-{pen,open-box,green-pen,yellow-cutter}-lora`
+(Hub API lists all four, 18 Oct 09:20).
 
 Each skill is its own LoRA adapter, about 0.45 GB, on one shared FLUX base (`ws4/research/pen_lora.md` setup:
 "raw and EMA adapters (0.45 GB each)"). Hot-swapping adapters on one loaded base per step is future work.
@@ -73,8 +89,17 @@ attempt) and `ws4/eval/trials.jsonl`.
 - Zero-shot on the arm stays as in section 1: 0/16 graded attempts on Saturday. Zero-shot B84 and median were
   measured offline only (sections 4 and 0.4); arm attempts `[[NUM:B84_PEN_SUCCESS]]` / `[[NUM:MEDIAN_PEN_SUCCESS]]`
   only if they are run before 12:30, otherwise delete those rows.
-- Per-skill rehearsals (PENDING, demo-rehearsal): box `[[NUM:REH_BOX]]`, green `[[NUM:REH_GREEN]]`, cutter
-  `[[NUM:REH_CUTTER]]`, red pen lid-held `[[NUM:REH_PENLID]]`.
+### 0.2b This morning, per skill, live (trial log, `trial_log.py summary --markdown` at about 09:20)
+
+| Skill | Model | Result | Notes |
+|---|---|---|---|
+| red pen | FLUX RAW 5k, horizon 16 | graded 2/3 (A, C inserts; B 0 steps) | runner, pen84 spot, 07:xx |
+| red pen in the HMI | FLUX RAW 5k | 1 insert, 33.1 s, confirmed by Haiku ("stands upright ... immediately left of the green marker") | run `20261018_074841`; the next step passed in 4.2 s (2 chunks), likely the pen still in place: not counted; the third timed out twice; chain 4/6 steps |
+| red pen, all RAW 5k rows so far | FLUX RAW 5k | 9/23 | trial log total, all horizons and sessions |
+| green pen | FLUX non-aug RAW 5k | 1/2 (one full insert, 3/3 steps, 08:33; one no-reach) | the orchestrator's 1/1 predates the second attempt |
+| yellow cutter | FLUX aug RAW 5k | 1/6 inserts in the trial log | orchestrator 09:00: "reached 5/5, grasped 4/5, 0/5 inserts"; the trial log scores those five as 0 steps and has a sixth attempt with a full insert (3/3). Reconcile before quoting |
+| box | FLUX RAW 5k (all variants) | 0 (0/3 runner + 0/1 HMI per the orchestrator; 20 logged rows, all 0) | replaced by the scripted replay in the demo |
+| red pen, lid held | FLUX RAW 5k | `[[NUM:REH_PENLID]]` | one check attempt planned (expect a hold) |
 
 ### 0.3 The knife edge: FLUX's decision hangs on the wrist camera's view of the room
 
@@ -89,8 +114,10 @@ benchmark's "What each change did", item 1.
   shifts. Sweep: 0 of 27 wrist shifts and 0 of 10 seeds reach on the live room view; averaging never rescues it.
 - Fixes: `ws4/single_arm/align_station.py` (live alignment against a recording's home view: wrist room offset, scale,
   brightness; the benchmark ran at offset -11 px, scale 0.97) and image augmentation (crop + colour jitter) in the
-  new LoRAs (box and cutter gates about 08:00, green about 08:25: `[[NUM:AUG_BOX]]`, `[[NUM:AUG_CUTTER]]`,
-  `[[NUM:AUG_GREEN]]`, PENDING, ws4-datasets).
+  new LoRAs. Pre-robot gates (`ws4/research/skills.md`, augmented runs): from rest the first chunk must move >= 20 deg
+  on every held-out take, also under +-2 px shifts and 0.5x brightness. Cutter aug RAW 44.2 deg (pass, served);
+  green aug RAW 73.3 deg (pass; the served green is the non-aug RAW 5k); box 4.9 to 5.5 deg for every variant (fail,
+  hence the replay). Augmentation left offline MAE about where it was (within 0.2 to 0.6 deg per joint).
 - Brightness also matters: wrist gain x1.6 to 2.0 made the gripper close (notes 08:00). Runbook target: brightness
   0.85 to 1.2 of the recording.
 
@@ -107,7 +134,8 @@ benchmark's "What each change did", item 1.
 | box, LoRA RAW 5k | 5.11 (hold 6.7) | 73 % arm | `ws4/research/skills.md` |
 | box, ACT 20k | 5.6 | 80 % arm | same |
 | green pen, LoRA RAW 5k | 3.95 | 89.1 % (6 joints) | same |
-| yellow cutter | `[[NUM:CUTTER_OFFLINE]]` | | PENDING (ws4-datasets) |
+| yellow cutter, LoRA aug RAW 5k (served) | 5.26 (2.5, 4.7, 7.1, 5.2, 6.8; gripper 11.3 %) | not reported | `skills.md` augmented runs |
+| box / green, LoRA aug RAW 5k | 5.26 / 4.34 | not reported | same |
 
 - RAW beat EMA in every comparison (pen 5k: 3.24 vs 3.62 deg, 87.5 vs 82 % arm direction; green and box likewise):
   at 1,250 updates a 0.999 EMA still carries much of the initial adapter.
@@ -130,6 +158,17 @@ Source: `ws4/orchestrator/README.md` "What each step runs with", `ws4/single_arm
 - On the real arm this morning the keep-out refused ticks in 15 of 33 benchmark attempts and ended 7 of them
   (`red_pen_2026-10-18.json` per-attempt refusals; benchmark "How attempts ended"). No collision or damage was
   reported. Do NOT say "0 keep-out refusals": the dry runs had 0 (box ACT, `skills.md`), the real runs did not.
+
+### 0.6b Team integration and media
+
+- The teammates' behaviour-tree harness (on main) now runs on the ws4 stack: branch `claude/harness-bridge-11f8b6`
+  (exists on origin). Verified on fake arms only; the hardware dry run is PENDING. Say "runs on fake arms" until then.
+- Media for slides and the video: Google Drive folder "liminal", subfolder `00_highlights`: red-pen insert clips
+  (`redpen_insert_layoutA_94s_flux_raw5k_h16.mp4`, `..._layoutB_91s_...`, `..._layoutC_48s_...`,
+  `redpen_insert_morning_A_69s.mp4`, `redpen_insert_morning_C_36s.mp4`), imagination clips
+  (`imagination_replay_imagined_vs_actual_ep101.mp4`, `imagination_lora5k_imagined_vs_actual_ep101.mp4`,
+  `imagination_b84_vs_lora5k_ep101.png`), `knife_edge_wrist_view_training_vs_now.jpg`, `zeroshot_failure_strip.png`,
+  `flux_in_sim_closed_loop_overlay.mp4` (listed 18 Oct 09:25).
 
 ### 0.6 Sim track (final, honest)
 
@@ -398,9 +437,7 @@ Find what is still open: `grep -rn "\[\[" ws4/pitch`. Times are CEST, Sun 18 Oct
 | Placeholder | Meaning | Owner | Expected |
 |---|---|---|---|
 | `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | full 4-skill chain: successes / runs, steps done | demo-rehearsal (Oscar at the arm) | 10:00 to 12:30 |
-| `[[NUM:REH_BOX]]`, `[[NUM:REH_GREEN]]`, `[[NUM:REH_CUTTER]]`, `[[NUM:REH_PENLID]]` | per-skill rehearsal results (3 attempts each) | demo-rehearsal | 08:30 to 10:30 |
-| `[[NUM:AUG_BOX]]`, `[[NUM:AUG_CUTTER]]`, `[[NUM:AUG_GREEN]]` | augmented LoRAs, offline held-out arm MAE / direction | ws4-datasets | 08:00 (box, cutter), 08:25 (green) |
-| `[[NUM:CUTTER_OFFLINE]]` | cutter LoRA offline numbers | ws4-datasets | with the cutter gate, about 08:00 |
+| `[[NUM:REH_PENLID]]` | red pen with the lid held, one check attempt | demo-rehearsal | 09:00 to 11:30 |
 | `[[NUM:B84_PEN_SUCCESS]]`, `[[NUM:MEDIAN_PEN_SUCCESS]]` | zero-shot B84 / median on the arm (only if run) | orchestrator decides | by 12:30, else delete |
 | `[[CLIP:HMI_CHAIN]]` | screen recording of the chain in the HMI | demo-rehearsal | with the chain run |
 | `[[CLIP:IMAGINED_VS_ACTUAL]]` | optional live imagination clip (replay clips exist) | demo-rehearsal / ws4-imagine | with the chain run |
