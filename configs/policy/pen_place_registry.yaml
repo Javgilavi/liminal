@@ -12,7 +12,7 @@ camera_map:
   right: {scene: top, wrist: right_wrist}
 obs_history: 8
 chunk_size: 42
-execute_steps: 32
+execute_steps: 16
 control_hz: 30
 max_observation_age_s: 1
 load_timeout_s: 180

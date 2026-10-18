@@ -13,7 +13,7 @@ def test_pen_profile_preserves_trained_timing_and_dataset_normalization():
     entry = Checkpoint.parse("red_pen_raw_10000", cfg.checkpoints["red_pen_raw_10000"])
     entry.validate(cfg, cfg.midtraining_base, "right")
     assert entry.normalization_profile == "dataset_native"
-    assert (cfg.control_hz, cfg.obs_history, cfg.chunk_size, cfg.execute_steps) == (30, 8, 42, 32)
+    assert (cfg.control_hz, cfg.obs_history, cfg.chunk_size, cfg.execute_steps) == (30, 8, 42, 16)
     task = load_task("configs/tasks/pen_place.yaml")
     skill = task.tree.children[0].skill
     assert skill.prompt == "put the red pen in its slot in the cardboard box"

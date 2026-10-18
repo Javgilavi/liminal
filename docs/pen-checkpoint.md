@@ -21,7 +21,9 @@ not been established.
   Space quantiles. The new `dataset_native` profile verifies their provenance.
 - Model outputs represent joint deltas with absolute gripper position. The saved
   postprocessor integrates them into absolute commands before the supervisor.
-- Preserve eight history frames, 42 predictions, 32 executed steps and 30 Hz.
+- Use eight history frames, 42 predictions and 30 Hz. Execute only the first
+  16 actions per prediction (about 0.53 seconds), then inspect and replan. This
+  runtime override leaves the checkpoint's saved 32-step execution setting unchanged.
   Staging explicitly sets both guidance scales to 1, as documented by the model
   card; the uploaded config otherwise defaults to video guidance 3.
 - Native joint degrees and 0–100 gripper percent; 100 means open. Training starts
