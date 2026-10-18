@@ -17,6 +17,7 @@ PAGES = {
     "live.css",
     "live.js",
     "viewer.js",
+    "scene-preview.js",
     "evidence/results.json",
     "evidence/notes.html",
 }

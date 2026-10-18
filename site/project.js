@@ -1,10 +1,28 @@
-import { TwinView, loadScene, drawViews } from "./viewer.js";
 const $ = (s) => document.querySelector(s),
   $$ = (s) => [...document.querySelectorAll(s)];
 // Video tabs activate on Enter/Space; arrow keys can browse without reloading media.
 function bindTabs(list, panelFor, activate, automatic = false) {
   const buttons = [...list.querySelectorAll("button")];
   list.setAttribute("role", "tablist");
+  const compact = matchMedia("(max-width: 600px)");
+  const chooser = list.previousElementSibling?.querySelector("select");
+  let selectedIndex = 0;
+  function labelPanel() {
+    const panel = panelFor(selectedIndex);
+    panel.setAttribute(
+      "role",
+      chooser && compact.matches ? "region" : "tabpanel",
+    );
+    panel.setAttribute(
+      "aria-labelledby",
+      chooser && compact.matches ? chooser.id : buttons[selectedIndex].id,
+    );
+  }
+  if (chooser) {
+    if (compact.addEventListener)
+      compact.addEventListener("change", labelPanel);
+    else compact.addListener(labelPanel);
+  }
   function select(index) {
     index = (index + buttons.length) % buttons.length;
     buttons.forEach((button, i) => {
@@ -12,7 +30,8 @@ function bindTabs(list, panelFor, activate, automatic = false) {
       button.classList.toggle("active", i === index);
       button.tabIndex = i === index ? 0 : -1;
     });
-    panelFor(index).setAttribute("aria-labelledby", buttons[index].id);
+    selectedIndex = index;
+    labelPanel();
     activate(index);
   }
   buttons.forEach((button, i) => {
@@ -41,26 +60,24 @@ function bindTabs(list, panelFor, activate, automatic = false) {
   return { select };
 }
 let hero, replay, data;
-loadScene()
-  .then((scene) => {
-    hero = new TwinView($("#hero-view"), scene);
-    replay = new TwinView($("#replay-view"), scene);
-    if (data) updateReplay();
+fetch("./assets/replay.json")
+  .then((response) => {
+    if (!response.ok) throw new Error("Replay unavailable");
+    return response.json();
+  })
+  .then((recording) => {
+    data = recording;
+    $("#replay-time").max = recording.duration;
+    updateReplay();
+    if (replay) enableReplay();
   })
   .catch(() => {
-    $$(".viewer").forEach(
-      (e) =>
-        (e.textContent =
-          "The interactive scene could not load. The recorded videos remain available."),
-    );
+    $("#replay-clock").textContent = "Replay unavailable";
   });
-fetch("./assets/replay.json")
-  .then((r) => r.json())
-  .then((r) => {
-    data = r;
-    $("#replay-time").max = r.duration;
-    updateReplay();
-  });
+function enableReplay() {
+  $("#play-replay").disabled = false;
+  $("#replay-time").disabled = false;
+}
 $("#reset-hero").onclick = () => hero?.reset();
 $$(".preset").forEach(
   (b) =>
@@ -88,6 +105,7 @@ range.oninput = () => {
   updateReplay();
 };
 $("#play-replay").onclick = () => {
+  if (!data || !replay) return;
   if (+range.value >= +range.max) range.value = 0;
   playing = !playing;
   offset = +range.value;
@@ -107,7 +125,6 @@ function animate(now) {
       $("#play-replay").textContent = "▶";
     }
   }
-  drawViews();
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
@@ -225,6 +242,19 @@ $$(".task-stages button").forEach(
 taskStage();
 const base = $("#compare-base"),
   lora = $("#compare-lora");
+const comparisonStatus = document.createElement("p");
+comparisonStatus.className = "inline-status";
+comparisonStatus.setAttribute("role", "status");
+comparisonStatus.hidden = true;
+$(".comparison-controls").after(comparisonStatus);
+[base, lora].forEach((video) =>
+  ["pause", "ended", "play"].forEach((event) =>
+    video.addEventListener(event, () => {
+      $("#play-comparison").textContent =
+        base.paused && lora.paused ? "Play both" : "Pause both";
+    }),
+  ),
+);
 $("#play-comparison").onclick = async () => {
   if (!base.paused || !lora.paused) {
     base.pause();
@@ -236,8 +266,18 @@ $("#play-comparison").onclick = async () => {
     base.currentTime = 0;
     lora.currentTime = 0;
   }
-  await Promise.allSettled([base.play(), lora.play()]);
-  $("#play-comparison").textContent = "Pause both";
+  const outcomes = await Promise.allSettled([base.play(), lora.play()]);
+  if (outcomes.some((outcome) => outcome.status === "rejected")) {
+    base.pause();
+    lora.pause();
+    $("#play-comparison").textContent = "Play both";
+    comparisonStatus.textContent =
+      "Playback didn't start. Try the play button in each recording.";
+    comparisonStatus.hidden = false;
+  } else {
+    $("#play-comparison").textContent = "Pause both";
+    comparisonStatus.hidden = true;
+  }
 };
 $("#comparison-time").oninput = (e) => {
   base.pause();
@@ -292,21 +332,40 @@ function showSlide(i) {
   $("#gallery-title").textContent = title;
   $("#gallery-description").textContent = description;
   $("#gallery-count").textContent = `${slide + 1} / ${slides.length}`;
+  $("#gallery-select").value = String(slide);
 }
 const galleryTabs = bindTabs(
   $(".gallery-buttons"),
   () => $("#gallery-panel"),
   showSlide,
 );
+$("#gallery-select").onchange = (event) =>
+  galleryTabs.select(+event.target.value);
 $("#gallery-prev").onclick = () => galleryTabs.select(slide - 1);
 $("#gallery-next").onclick = () => galleryTabs.select(slide + 1);
 let results;
-fetch("./evidence/results.json")
-  .then((r) => r.json())
-  .then((r) => {
-    results = r;
+async function loadResults() {
+  $("#result-metric").disabled = true;
+  try {
+    const response = await fetch("./evidence/results.json", {
+      cache: "no-cache",
+    });
+    if (!response.ok) throw new Error("Results unavailable");
+    results = await response.json();
     renderResults();
-  });
+    $("#result-metric").disabled = false;
+  } catch {
+    const note = document.createElement("div");
+    note.className = "inline-status";
+    note.append("The chart couldn't load. ");
+    const retry = document.createElement("button");
+    retry.textContent = "Reload chart";
+    retry.onclick = loadResults;
+    note.append(retry);
+    $("#result-bars").replaceChildren(note);
+  }
+}
+loadResults();
 function renderResults() {
   if (!results) return;
   const key = $("#result-metric").value,
@@ -366,7 +425,7 @@ const physicalClips = [
     "07:40 session · layout C · real head and wrist camera recordings.",
   ],
 ];
-bindTabs(
+const physicalTabs = bindTabs(
   $(".physical-tabs"),
   () => $("#physical-panel"),
   (index) => {
@@ -378,5 +437,61 @@ bindTabs(
       video.src = `assets/${file}`;
     }
     $("#physical-caption").textContent = caption;
+    $("#physical-select").value = String(index);
   },
 );
+
+$("#physical-select").onchange = (event) =>
+  physicalTabs.select(+event.target.value);
+
+// Core controls above are ready before any 3D module or mesh download starts.
+import("./scene-preview.js?v=20261018-resilient")
+  .then(({ createScenePreview }) => {
+    const desktop =
+      matchMedia("(min-width: 851px)").matches &&
+      !navigator.connection?.saveData;
+    createScenePreview($("#hero-view"), {
+      auto: desktop,
+      controls: [$("#reset-hero")],
+      onReady(view) {
+        hero = view;
+        $(".hero-twin .tag").innerHTML = "<i></i> Interactive MuJoCo scene";
+        $(".orbit-hint").textContent = "Drag to orbit · Scroll to zoom";
+      },
+      onError() {
+        hero = null;
+        $(".hero-twin .tag").innerHTML = "<i></i> Recorded scene preview";
+        $(".orbit-hint").textContent = "Recorded scene preview";
+      },
+    });
+    createScenePreview($("#replay-view"), {
+      auto: desktop ? "visible" : false,
+      controls: $$(".preset"),
+      onReady(view) {
+        replay = view;
+        if (data) {
+          updateReplay();
+          enableReplay();
+        }
+      },
+      onError() {
+        replay = null;
+        playing = false;
+        $("#play-replay").textContent = "▶";
+        $("#play-replay").setAttribute("aria-label", "Play simulation replay");
+        $("#play-replay").disabled = true;
+        $("#replay-time").disabled = true;
+      },
+    });
+  })
+  .catch(() => {
+    $$(".scene-status").forEach((note) => {
+      note.textContent =
+        "The 3D preview is unavailable. Recordings and controls still work.";
+    });
+    $$(".scene-load").forEach((button) => {
+      button.disabled = false;
+      button.textContent = "Reload page";
+      button.onclick = () => location.reload();
+    });
+  });

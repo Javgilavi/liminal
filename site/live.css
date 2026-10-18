@@ -571,3 +571,15 @@ dialog .dialog-foot a {
     grid-template-rows: auto auto;
   }
 }
+@media (max-width: 700px) {
+  .lab-page select,
+  .lab-page textarea {
+    font-size: 16px;
+  }
+  .view-title select {
+    min-height: 38px;
+  }
+  .instruction-row textarea {
+    min-height: 80px;
+  }
+}

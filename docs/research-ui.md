@@ -99,3 +99,14 @@ To stage a reviewed public export without modifying a source checkout:
 This copies only the known static-site files and assets and checks local links.
 Publication uses a separate deployment checkout, preserving unrelated source
 changes. The website has no analytics, remote fonts or third-party embed scripts.
+
+### Loading and device fallbacks
+
+Project navigation, result tabs, recordings and local pairing initialize without
+waiting for the optional 3D modules. On the project page, desktop scenes load
+progressively; phones start with a recorded scene preview and an explicit **Explore in 3D** control.
+Each viewer can fail or lose its graphics context independently, retaining a
+preview and a retry control. Camera views remain separate from these previews.
+Recording and diagnostic selectors use native menus on small screens; desktop
+views retain keyboard-accessible tabs. Missing replay/chart data disables the
+unavailable control and offers recovery without breaking the rest of the page.
