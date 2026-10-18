@@ -1011,7 +1011,8 @@ def test_unclear_recheck_after_home_keeps_the_pass(tmp_path, chain_server, reche
     try:
         checks = ScriptedChecks()
         green = iter([Verdict(True, 0.7, "upright in the green holder", "test"),
-                      Verdict(*recheck, "seating not fully visible", "test")])
+                      Verdict(*recheck, "seating not fully visible", "test")]
+                     + [Verdict(False, 0.9, "not in the slot", "test")] * 200)  # a retry after a contrary re-check
         base = checks.check
         checks.check = lambda step, skill, obs: (next(green) if skill.name == "put_green_pen_in_slot"
                                                  else base(step, skill, obs))
@@ -1019,7 +1020,7 @@ def test_unclear_recheck_after_home_keeps_the_pass(tmp_path, chain_server, reche
         result = s.execute(s.plan("open the box, put the green pen in the green slot").result.plan)
         assert result.status == status, result.failure
         trials = load_trial_log().load(tmp_path / "trials.jsonl")
-        (green_row,) = [t for t in trials if t.task == "put_green_pen_in_slot"]
+        green_row = [t for t in trials if t.task == "put_green_pen_in_slot"][0]
         assert f"True 0.70, {recheck[0]} {recheck[1]:.2f}; last check" in green_row.notes  # pass, then re-check
         assert green_row.success == (status == "succeeded")
     finally:
