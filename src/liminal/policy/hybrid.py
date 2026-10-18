@@ -153,6 +153,10 @@ claim that a pose or task is reached based only on a predicted trajectory.
 """
 
 
+# Current models that return HTTP 400 on tool_choice "tool" / "any" (Claude API docs, model migration notes).
+AUTO_TOOL_MODELS = frozenset({"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"})
+
+
 class Reasoner(Protocol):
     async def decide(self, payload: dict, images: list[dict], schema: dict) -> dict: ...
 
@@ -170,14 +174,25 @@ class ClaudeReasoner:
             content.extend([{"type": "text", "text": image["label"]},
                             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                           "data": image["data"]}}])
-        async with anthropic.AsyncAnthropic(timeout=self.config.timeout_s, max_retries=0) as client:
-            response = await client.messages.create(
-                model=self.config.model, max_tokens=self.config.max_tokens, system=SYSTEM,
-                messages=[{"role": "user", "content": content}],
-                tools=[{"name": "hybrid_decision", "description": "Choose the next bounded robot segment",
-                        "input_schema": schema}],
-                tool_choice={"type": "tool", "name": "hybrid_decision"},
-            )
+        from liminal.orchestration.planner import FALLBACK_BETA, FALLBACK_MODELS, anthropic_api_key
+
+        kwargs = {"model": self.config.model, "max_tokens": self.config.max_tokens, "system": SYSTEM,
+                  "messages": [{"role": "user", "content": content}],
+                  "tools": [{"name": "hybrid_decision", "description": "Choose the next bounded robot segment",
+                             "input_schema": schema}]}
+        if self.config.model in AUTO_TOOL_MODELS:
+            # These models reject a forced tool_choice (HTTP 400): ask for the call instead; the checks below
+            # still refuse any answer that is not exactly one hybrid_decision call.
+            kwargs["tool_choice"] = {"type": "auto"}
+            content.append({"type": "text", "text": "Answer only by calling hybrid_decision exactly once."})
+        else:
+            kwargs["tool_choice"] = {"type": "tool", "name": "hybrid_decision"}
+        async with anthropic.AsyncAnthropic(api_key=anthropic_api_key(), timeout=self.config.timeout_s,
+                                            max_retries=0) as client:
+            if self.config.model in FALLBACK_MODELS:
+                response = await client.beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **kwargs)
+            else:
+                response = await client.messages.create(**kwargs)
         calls = [b for b in response.content if b.type == "tool_use"]
         if response.stop_reason != "tool_use" or len(calls) != 1 or calls[0].name != "hybrid_decision":
             raise ValueError("missing, multiple or truncated hybrid tool response")

@@ -1,0 +1,29 @@
+# Opus 5.5 recovery gate on the Haller, OBSERVATION ONLY: kinematics_verified stays false, so the runner refuses
+# --execute with it (liminal.policy.hybrid.build_hybrid). The FK proposals use the unverified identity joint mapping.
+# Key: ANTHROPIC_API_KEY, else the ws4 key file (liminal.orchestration.planner.anthropic_api_key).
+enabled: true
+model: claude-opus-5-5
+model_path: sim/single_arm/so101.xml
+site: gripperframe
+# q_model_degrees = (q_robot_degrees - joint_offsets_deg) / joint_signs
+# VERIFY these against the physical robot's encoder zeroes and measured TCP poses.
+joint_signs: [1, 1, 1, 1, 1]
+joint_offsets_deg: [0, 0, 0, 0, 0]
+kinematics_verified: false
+frame_description: >-
+  SO-101 MJCF robot root, meters; pose is the gripperframe site,
+  not a camera frame. Quaternion order wxyz. Five arm joints plus gripper.
+  Scene and wrist images have no calibrated root-frame extrinsics supplied.
+timeout_s: 120
+max_tokens: 16000  # Opus 5.5 always thinks; thinking counts against max_tokens
+max_student_steps: 15
+history_turns: 8
+max_position_delta_m: 0.05
+max_rotation_delta_rad: 0.35
+max_joint_step_deg: 2.8647889757
+max_gripper_step: 10
+max_state_drift_deg: 2
+max_gripper_drift: 3
+# VERIFY measured opening/closing endpoints for the installed gripper.
+gripper_open: 100
+gripper_closed: 0

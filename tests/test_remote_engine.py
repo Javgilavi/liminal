@@ -113,3 +113,34 @@ def test_remote_engine_refuses_a_contract_that_does_not_match(served, tmp_path):
         RemoteFluxEngine(FluxConfig(engine="remote", server=url, token_cmd_env=""), "skill_red_pen")
     with pytest.raises(RuntimeError, match="404"):
         RemoteFluxEngine(FluxConfig(engine="remote", server=url, token_file=token, chunk_size=42), "skill_nope")
+
+
+def test_pod_worker_speaks_the_official_live_worker_protocol(served):
+    """scripts/flux_pod_worker.py: official_live's NDJSON worker protocol, answered by a served package."""
+    import base64
+    import io
+    import json
+    import os
+    import subprocess
+    import sys
+
+    from PIL import Image
+
+    url, token, backends = served
+    jpeg = io.BytesIO()
+    Image.new("RGB", (640, 480), (90, 40, 20)).save(jpeg, format="JPEG")
+    frame = base64.b64encode(jpeg.getvalue()).decode()
+    history = [{"state": [0.0, 1.0, 2.0, 3.0, 4.0, 50.0], "command_history": [0.0, 1.0, 2.0, 3.0, 4.0, 50.0],
+                "scene": frame, "wrist": frame} for _ in range(8)]
+    proc = subprocess.run(
+        [sys.executable, "-u", "scripts/flux_pod_worker.py", "--server", url, "--package", "skill_red_pen",
+         "--token-file", token],
+        input=json.dumps({"prompt": "put the red pen in its slot in the cardboard box", "history": history}) + "\n",
+        capture_output=True, text=True, timeout=60, env={**os.environ, "PYTHONPATH": "src"})
+    ready, reply = (json.loads(line) for line in proc.stdout.splitlines())
+    assert ready["type"] == "ready" and ready["integration"].startswith("lerobot.Flux3Policy")
+    assert ready["inference"] == {"chunk_size": 42, "n_action_steps": 16, "fps": 30}
+    assert reply["type"] == "actions" and len(reply["actions"]) == 42 and len(reply["actions"][0]) == 6
+    request = backends["skill_red_pen"].requests[-1]
+    assert request.task == "put the red pen in its slot in the cardboard box"
+    assert request.images["observation.images.wrist"].shape == (2, 256, 256, 3)

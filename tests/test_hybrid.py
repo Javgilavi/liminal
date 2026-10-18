@@ -208,6 +208,7 @@ def test_claude_multimodal_tool_contract_no_network(monkeypatch):
         def __init__(self, **kw):
             seen.update(kw)
             self.messages = self
+            self.beta = SimpleNamespace(messages=self)
         async def __aenter__(self):
             return self
         async def __aexit__(self, *args):
@@ -222,8 +223,15 @@ def test_claude_multimodal_tool_contract_no_network(monkeypatch):
         {"task": "pick"}, [{"label": "scene", "data": "eA=="}], decision_schema("id")))
     assert result == {"ok": True}
     assert seen["max_retries"] == 0 and seen["timeout"] == 30
-    assert seen["tool_choice"] == {"type": "tool", "name": "hybrid_decision"}
+    # Sonnet 5.5 / Opus 5.5 return HTTP 400 on a forced tool_choice: auto, with the call asked for in the prompt,
+    # and the server-side refusal fallback
+    assert seen["tool_choice"] == {"type": "auto"} and seen["fallbacks"] == "default"
     assert seen["messages"][0]["content"][2]["type"] == "image"
+    assert "hybrid_decision exactly once" in seen["messages"][0]["content"][-1]["text"]
+    seen.clear()
+    asyncio.run(ClaudeReasoner(HybridConfig(model="claude-opus-4-8")).decide(
+        {"task": "pick"}, [{"label": "scene", "data": "eA=="}], decision_schema("id")))
+    assert seen["tool_choice"] == {"type": "tool", "name": "hybrid_decision"} and "fallbacks" not in seen
 
 
 def test_schema_rejects_nonfinite_unused_fields():

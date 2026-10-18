@@ -1,0 +1,15 @@
+# Main's direct-driver runner (python -m liminal.policy.official_live) on the green Haller, with FLUX on the ws4
+# policy server (8790 tunnel) instead of the GCP VM: scripts/flux_pod_worker.py. Observation-only by default.
+# Software `right` in this runner = the physical task (pen) arm: board 5B14030445 = /dev/haller_arm_right, robot LEFT.
+# The runner needs Haller stopped (ports 8000 and 8781 free), the ws4 tools closed, and the pen arm's torque OFF.
+arm: right
+expected_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
+calibration_id: haller_right
+prompt: put the red pen in its slot in the cardboard box
+scene_device: /dev/haller_cam_mast
+wrist_device: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.2:1.0-video-index0
+transport: ws4_pod
+server: http://127.0.0.1:8790
+package: skill_red_pen  # B84 + RAW 5k, the 3/5 red-pen model (Oskrt/flux-3-action-so101-haller-pen-lora lora_pen84)
+n_action_steps: 16      # the horizon of the real-arm inserts
+token_cmd_env: WS4_TOKEN_CMD
