@@ -127,6 +127,7 @@ class SessionConfig:
     stall_ticks: int = 15
     keepout_ticks: int = 45
     keepout_window: int = 60  # keep-out stop: keepout_ticks refusals among the last keepout_window policy ticks
+    return_timeout_s: float = 20.0  # finish: home: how long the policy may take to bring the arm back home
     home_speed: float = 1.0  # deg per tick when ramping to the start pose (run_single_arm --return-speed)
     allow_torque_off: bool = False
     read_other_arm: bool = True  # read the parked arm's pose before each FLUX step (keep-out other_arm zone)
@@ -623,6 +624,7 @@ class Session:
             runner=self.runner, robot=self.robot, vocab=self.vocab, verifier=self.verifier,
             resolve_target=self.resolve_target, backends=self.target_backend, events=self.events, fps=cfg.fps,
             realtime=cfg.realtime, clock="ticks" if self.sim is not None else "wall", max_replans=cfg.max_replans,
+            return_timeout_s=cfg.return_timeout_s,
             on_replan=self._on_replan, on_frame=lambda obs, report: self._on_frame(obs),
             max_run_s=cfg.max_run_s,
             # observe sends nothing, so a ramp would never arrive (run_single_arm skips it there too)

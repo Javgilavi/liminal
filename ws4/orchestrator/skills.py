@@ -42,6 +42,7 @@ class Skill:
     # Haiku described a pen in its slot correctly and still answered done=false (green pen, 2026-10-18).
     verify_states: tuple[str, ...] = ()
     park_after: bool = False  # after a verified success: open the gripper, ramp to home, check again, then done
+    finish: str = ""  # "home": after the check passed the POLICY runs on until the arm is home, then the check again
     keepout: str = ""  # keep-out config with this skill's demonstrated envelope (else the arm's station zones only)
     keywords: tuple[str, ...] = ()
     sim: dict | None = None
@@ -78,6 +79,9 @@ class Station:
     home_poses: dict[str, tuple[float, ...]] = field(default_factory=dict)  # per-arm override of home_pose
     poses: dict[str, dict[str, tuple[float, ...]]] = field(default_factory=dict)  # arm -> pose name -> joints
     demo_goal: str = ""  # what the HMI and the CLI propose when the operator has typed nothing
+    # A ramp from where a policy left an arm (it may be inside the box) waits for the operator (e-stop, Resume);
+    # off for open workspaces like the pen-only scene, where run_single_arm also ramps back after every attempt.
+    confirm_unknown_ramps: bool = False
 
     def home_for(self, arm: str) -> tuple[float, ...] | None:
         return self.poses.get(arm, {}).get("home") or self.home_poses.get(arm, self.home_pose)
@@ -152,6 +156,7 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             else:
                 station.poses.setdefault(arm, {})[str(pose)] = tuple(float(v) for v in q)
     station.demo_goal = str(st.get("demo_goal") or "").strip()
+    station.confirm_unknown_ramps = bool(st.get("confirm_unknown_ramps", False))
     for name, spec in (data.get("skills") or {}).items():
         spec = {**defaults, **(spec or {})}
         kind = spec.get("kind")
@@ -165,6 +170,8 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             errors.append(f"{name}: a flux skill needs its exact FLUX prompt")
         if kind == "primitive" and name not in PRIMITIVES:
             errors.append(f"{name}: unknown primitive (have {PRIMITIVES})")
+        if spec.get("finish") not in (None, "", "home"):
+            errors.append(f"{name}: finish must be home or absent")
         if kind == "operator" and not str(spec.get("instruction") or "").strip():
             errors.append(f"{name}: an operator skill needs an instruction for the operator")
         for key in ("start_pose", "other_arm_pose"):
@@ -199,6 +206,7 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             verify_scene=str(spec.get("verify_scene") or "").strip(),
             verify_states=tuple(str(x) for x in spec.get("verify_states") or ()),
             park_after=bool(spec.get("park_after", False)),
+            finish=str(spec.get("finish") or ""),
             keepout=str(spec.get("keepout") or ""),
             keywords=tuple(str(k).lower() for k in spec.get("keywords") or ()),
             sim=spec.get("sim"),

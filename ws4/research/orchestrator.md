@@ -116,12 +116,17 @@ cutter and the red pen in their slots; `orchestrator/skills.yaml` version 3, the
   2026-10-18): `open_box` tucks the pen arm, ramps the box arm home and runs until the lid check passes; then the box
   arm FREEZES holding the lid open (no ramp: the runner holds its last command; the lid closes if it lets go). Each pen
   skill (re-recorded with the box arm holding the lid) first runs the lid check again (`precheck: open_box`): a closed
-  lid latches the e-stop before the pen arm moves (all arms hold; Resume re-checks); then the pen arm ramps tucked ->
-  home with the holding box arm as a live collision capsule, runs its skill and parks at home (`park_after`: let go,
-  ramp home, the same check again; a pen dragged out fails and retries). One arm moves at a time, ramps under the ramp
-  limits, the station keep-out (other arm's capsules included) and the load freeze. Offline check of the tuck <-> home
-  ramps at 1 deg/tick: no keep-out zone touched (deepest 0.0 m in torso, mast, midline, other_arm), inside both arms'
-  calibrated ramp limits (about 103 steps, 3.4 s each). An optional final `tuck` puts the pen arm away.
+  lid latches the e-stop before the pen arm moves (all arms hold; Resume re-checks); then the pen arm ramps from its
+  parked pose `[3, -83.6, 81.9, 82.8, -10.2, 0.9]` (box takes 7 to 74) to home with the holding box arm as a live
+  collision capsule and runs its skill. No scripted ramp ever leaves the box (parent: it could hit it): green and
+  yellow (`finish: home`, their takes end at home) let the POLICY bring the arm back within 10 deg of home after the
+  check passed, then check again (a pen dragged out fails and retries; 20 s at most, else the step counts and the arm
+  holds); the red pen step ends on its check holding at the slot. Any ramp from where a policy left an arm (a retry, a
+  policy that did not come home) farther than 15 deg from its target waits for the operator (e-stop; Release, Resume)
+  on this station (`confirm_unknown_ramps`; off for the pen-only scene, where run_single_arm also ramps back). One arm
+  moves at a time, ramps under the ramp limits, the station keep-out (other arm's capsules included) and the load
+  freeze. Offline check of the parked <-> home ramps at 1 deg/tick against all 65 recorded box-arm holding poses: no
+  keep-out zone touched, inside the calibrated ramp limits.
 - **Holds keep the grip**: an e-stop freezes each arm's joints at the measured pose (run_single_arm's hold_here) but
   keeps each gripper's last command, so the box arm keeps squeezing the lid's tab (and a carried pen is not dropped);
   the stall stop only watches arms that a target drives (the holding box arm lags its command under the lid's weight by
@@ -149,7 +154,7 @@ exactly as `ClaudeVerifier` sends it):
 | open_box: "The lid of the box is open." | 25 (01:30) + 21 held out (takes 25 to 48) | 75 + 63 | 75/75 and 63/63 held out, no false pass, 1.3 s median, USD 0.00015 | 58/75 and 45/63 (71 %) | done |
 | put_green_pen_in_slot | 6 (tuned) + 37 held out (takes 6 to 45) | 18 + 119 | held out: 114/119 (96 %), 2 false passes in 82 not-done frames | 39/56 (passes no end) | shipped; see below |
 | put_yellow_cutter_in_slot | 31 (prompt written before any frame was seen: all held out) | 91 | 91/91, no false pass, 1.2 s median, USD 0.00014 | 15/21 (first 7) | done |
-| put_pen_in_slot | old scene only | 282 | 97.1 % | 62.2 % | re-check in the new scene |
+| put_pen_in_slot | 22 lid-held takes (new scene, all held out) | 66 | 65/66, 1 false pass (take 18: pen against the green pen, 1.5 cm off its strip) | 48/66 | done (prompt unchanged) |
 
 open_box in detail (`research/verify_eval_open_box_2026-10-18.json`): frames = start (closed), 35 % (the arm at the
 lid, still closed; checked by eye on all 25), end (kept takes open; rejects 3, 7, 16, 19, 21 end closed). The scene
@@ -187,6 +192,13 @@ the mat; checked by eye), end (cutter flat in the lower white slot). The FLUX ta
 in the yellow slot". All four task strings are now confirmed by the recordings. Takes 0 to 30: 91/91 correct, no false
 pass (takes 29 and 30 end with the cutter still on the mat and were not passed; rejects 10 and 27, the pen arm saved
 over the box, scored as edge cases).
+
+put_pen_in_slot on the new scene (`ws4/haller_put_the_red_pen_in_its_slot_lid_held`, 22 takes, box at P3, lid held by
+the box arm, green pen and cutter already in their slots): the prompt tuned on the old pen scene, unchanged, scored
+65/66 held out (20 ends in the slot passed; 46 not-done frames incl. reject 12, saved mid-carry with the pen in the
+gripper over the mat: one false pass, reject 18, the pen pressed against the green pen 1.5 cm off its strip, the same
+"beside the slot" case as old reject 100 and green take 44). Not retuned on these held-out takes for one subtle case.
+All four chain checks are now measured on the final scene.
 
 The new scene differs from the pen recordings: the pens and the cutter lie on the black mat, the box (closed at the
 start, a tape handle on the lid's front edge) stands to its right and the box arm swings the lid up and back. The

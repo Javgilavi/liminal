@@ -76,6 +76,10 @@ class StepRun:
     t_home: float = 0.0
     policy_started: bool = False
     attempt_interventions: int = 0
+    returning: bool = False  # finish: home: the check passed, the policy brings the arm back home
+    t_return: float = 0.0
+    return_checked: bool = False
+    ramp_confirmed: bool = False  # the operator resumed after being asked to confirm a ramp from an unknown pose
 
     def to_json(self, now: float) -> dict[str, Any]:
         s = self.step
@@ -122,6 +126,9 @@ class Executor:
         on_replan: Callable[[dict], None] | None = None,
         on_frame: Callable[[dict, Any], None] | None = None,
         frame_period_s: float = 0.2,
+        far_deg: float = 15.0,
+        home_tol_deg: float = 10.0,
+        return_timeout_s: float = 20.0,
         max_run_s: float | None = None,
         home_target: Callable[[str], str | None] | None = None,
         monitors: list[Callable[[Any, dict], str | None]] | None = None,
@@ -144,6 +151,11 @@ class Executor:
         self.on_replan = on_replan
         self.on_frame = on_frame
         self.frame_period_s = frame_period_s
+        # A ramp from where a policy left an arm (it may be inside the box) farther than far_deg from its target needs
+        # the operator's go (e-stop, then Resume); ramps between known poses do not.
+        self.far_deg, self.home_tol_deg, self.return_timeout_s = far_deg, home_tol_deg, return_timeout_s
+        self.known_pose = dict.fromkeys(ARMS, True)  # the start poses are set up by the operator
+        self._state12: np.ndarray | None = None
         self.max_run_s = max_run_s
         self.home_target = home_target  # arm -> primitive target that can run "home" (start_pose: home skills)
         self.monitors = list(monitors or [])  # per-tick checks; a returned reason latches the e-stop
@@ -267,6 +279,8 @@ class Executor:
                 self._account(report)
             last_wall = now_wall
             obs = self.robot.get_observation()
+            if OBS_STATE in obs:
+                self._state12 = np.asarray(obs[OBS_STATE], dtype=float)
             if active and self.state == "running":
                 self._update(report, obs)
                 for monitor in self.monitors:
@@ -413,6 +427,7 @@ class Executor:
         run.chunks, run.verify_at, run.final_check = 0, skill.verify_every_chunks, False
         run.reason, run.phase, run.homing, run.policy_started = "", "", False, False
         run.parking = run.park_checked = False
+        run.returning = run.return_checked = False
         run.prechecking = run.precheck_started = False
         run.attempt_interventions = 0
         if skill.name == "hold":
@@ -451,7 +466,28 @@ class Executor:
             return
         self._start_policy(run)
 
+    def _needs_confirm(self, run: StepRun, arm: str, pose: str) -> bool:
+        """True (and e-stop) when the arm would ramp far from where a policy left it: the operator checks the path
+        (e.g. that the arm is not inside the box) and resumes, or moves the arm by hand first."""
+        if run.ramp_confirmed:
+            run.ramp_confirmed = False
+            return False
+        target = self.home_target(arm) if self.home_target else None
+        if (not self.vocab.station.confirm_unknown_ramps or self.known_pose.get(arm, True) or self._state12 is None
+                or target is None):
+            return False
+        cur = self._state12[arm_slice(arm)]
+        far = float(np.abs(cur[:5] - self.backends[target].goal(pose, cur)[:5]).max())
+        if far <= self.far_deg:
+            return False
+        run.ramp_confirmed, run.phase = True, "waiting for the operator to confirm a ramp"
+        self.estop(f"{run.step.id}: the {arm} arm would ramp {far:.0f} deg to its {pose} pose from where a policy left "
+                   "it (possibly inside the box); check the path or move the arm by hand, then Release and Resume")
+        return True
+
     def _next_move(self, run: StepRun) -> None:
+        if self._needs_confirm(run, *run.moves[0]):
+            return
         arm, pose = run.moves.pop(0)
         target = self.home_target(arm)
         run.move, run.target, run.t_home = (arm, pose), target, self.t
@@ -472,9 +508,13 @@ class Executor:
         target = self.resolve_target(step, skill)
         backend = self.backends.get(target)
         if skill.name in ("home", "tuck"):  # scripted ramps too
+            if self._needs_confirm(run, step.arm, "tucked" if skill.name == "tuck" else "home"):
+                return
             self._ramp(run, True)
         elif skill.is_flux and self.ramp_mode is not None:
             self.ramp_mode(step.arm, False, skill)  # this skill's keep-out (envelope) and the policy limits
+        if skill.is_flux:
+            self.known_pose[step.arm] = False  # from here on the policy decides where the arm is
         try:
             if hasattr(backend, "begin"):
                 backend.begin(target, step.arm, skill)
@@ -527,14 +567,20 @@ class Executor:
             if run.prechecking:
                 self._update_precheck(run, obs)
                 continue
+            if run.returning:
+                self._update_return(run, obs, state6)
+                continue
             if run.parking:
                 self._update_parking(run, backend, report, obs, state6)
                 continue
             if run.homing:
+                if run.move is None:  # waiting for the operator to confirm the ramp
+                    continue
                 arm, pose = run.move
                 if backend.reached(pose, report.command[arm_slice(arm)], state12[arm_slice(arm)]):
                     self.runner.stop(run.target)
                     self._ramp(run, False)
+                    self.known_pose[arm] = True
                     self.events.add("info", f"{step.id}: {arm} arm at its {pose} pose")
                     if run.moves:
                         self._next_move(run)
@@ -563,6 +609,8 @@ class Executor:
                     continue
             if skill.kind == "primitive":
                 if backend.reached(skill.name, report.command[arm_slice(step.arm)], state6):
+                    if skill.name in ("home", "tuck"):
+                        self.known_pose[step.arm] = True
                     self._complete(run, "pose reached")
                     continue
             elif run.verifying is None:
@@ -591,10 +639,17 @@ class Executor:
                         f"({verdict.source}, conf {verdict.confidence:.2f}): {verdict.observation}"
                         + (f" [{verdict.error}]" if verdict.error else ""), step=run.step.id,
                         verdict=verdict.as_dict())
-        if ok and run.skill.park_after and not run.parking:
+        if ok and run.skill.finish == "home" and not run.returning:
+            run.returning, run.t_return, run.return_checked = True, self.t, False
+            run.phase, run.final_check = "returning home (policy)", False
+            self.events.add("info", f"{run.step.id}: check passed ({verdict.observation}); the policy brings the "
+                            f"{run.step.arm} arm back home, then the check runs again")
+        elif ok and run.skill.park_after and not run.parking:
             self._park(run, verdict.observation)
         elif ok:
             self._complete(run, verdict.observation)
+        elif run.returning:
+            self._fail_attempt(run, f"the check failed after the arm returned home: {verdict.observation}")
         elif run.parking:
             self._fail_attempt(run, f"the check failed after parking: {verdict.observation}")
         elif run.final_check:
@@ -647,6 +702,35 @@ class Executor:
             self._ramp(run, True)
             self.runner.start(home, "home")
 
+    def _update_return(self, run: StepRun, obs: dict, state6: np.ndarray) -> None:
+        """finish: home. The demos end at home, so the policy keeps running until the arm is within home_tol_deg of
+        its home pose (a scripted ramp from inside the box could hit it); then the check must pass again. If the policy
+        does not get there in return_timeout_s the step still counts (its check passed) and the arm holds where it is;
+        the next ramp of that arm then asks the operator first."""
+        if run.verifying is not None:
+            if run.verifying.done():
+                fut, run.verifying = run.verifying, None
+                self._on_verdict(run, fut.result())
+            return
+        if run.return_checked:
+            return
+        arm = run.step.arm
+        target = self.home_target(arm) if self.home_target else None
+        near = target is None or float(np.abs(
+            state6[:5] - self.backends[target].goal("home", state6)[:5]).max()) <= self.home_tol_deg
+        if near or self.t - run.t_return > self.return_timeout_s:
+            if run.target is not None and run.target in self.runner.active_targets():
+                self.runner.stop(run.target)
+        if near:
+            self.known_pose[arm] = True
+            run.return_checked, run.final_check = True, True
+            self.events.add("info", f"{run.step.id}: {arm} arm back home; checking again")
+            self._verify(run, obs)
+        elif self.t - run.t_return > self.return_timeout_s:
+            self.events.add("warn", f"{run.step.id}: the policy did not bring the {arm} arm home within "
+                            f"{self.return_timeout_s:.0f} s; it holds where it is (its next ramp asks the operator)")
+            self._complete(run, run.verdicts[-1].observation if run.verdicts else "check passed")
+
     def _update_parking(self, run: StepRun, backend: Any, report: Any, obs: dict, state6: np.ndarray) -> None:
         if run.verifying is not None:
             if run.verifying.done():
@@ -661,6 +745,7 @@ class Executor:
                 self.runner.stop(run.target)
                 self._ramp(run, False)
                 run.target = None
+            self.known_pose[run.step.arm] = True
             run.park_checked, run.final_check = True, True
             self.events.add("info", f"{run.step.id}: {run.step.arm} arm parked; checking again")
             self._verify(run, obs)

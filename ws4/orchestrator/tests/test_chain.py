@@ -32,7 +32,9 @@ def test_vocabulary_is_the_final_chain():
     assert box.arms == ("right",) and box.other_arm_pose == "tucked" and not box.park_after  # it holds the lid
     assert all(v[name].arms == ("left",) for name in CHAIN[1:])
     assert all(v[name].start_pose == "home" for name in CHAIN)
-    assert all(v[n].precheck == "open_box" and v[n].park_after and not v[n].other_arm_pose for n in CHAIN[1:])
+    assert all(v[n].precheck == "open_box" and not v[n].park_after and not v[n].other_arm_pose for n in CHAIN[1:])
+    assert [v[n].finish for n in CHAIN[1:]] == ["home", "home", ""]  # the red pen step ends holding at the slot
+    assert "tuck" not in v  # no scripted ramp out of the box at the end
     assert v.station.home_for("left") == (0, 0, 0, 0, 0, 100)
     assert v.station.home_for("right") == (0, 0.8, 2.0, 0.4, 0, 99.7)
     assert set(v.station.poses_for("left")) == set(v.station.poses_for("right")) == {"home", "tucked"}
@@ -79,10 +81,10 @@ def short_chain_vocab(tmp_path, timeout=3.0):
     return str(path)
 
 
-def chain_session(tmp_path, server, token, **kw):
+def chain_session(tmp_path, server, token, step_timeout=3.0, **kw):
     cfg = SessionConfig(env="haller", robot="fake", policy="remote", server=server, token_file=token,
                         skill_packages=dict(PACKAGES), planner="stub", verifier="manual", realtime=False,
-                        task="final_chain", vocabulary=short_chain_vocab(tmp_path), max_run_s=120,
+                        task="final_chain", vocabulary=short_chain_vocab(tmp_path, step_timeout), max_run_s=120,
                         condition="post_training", variant="lora_chain", checkpoint="ws4/chain-loras@test",
                         trial_log=str(tmp_path / "trials.jsonl"), runs_dir=str(tmp_path / "runs"), **kw)
     return Session(cfg)
@@ -114,10 +116,11 @@ def test_final_chain_end_to_end_over_the_policy_server(tmp_path, chain_server):
         assert result.status == "succeeded" and (result.steps_done, result.steps_total) == (4, 4)
         assert result.interventions == 0
         # Box: pen arm tucked, box arm home, open, then the box arm HOLDS (no ramp). Each pen skill: lid precheck, pen
-        # arm home, skill, park at home. One arm moving at a time.
+        # arm home, skill; green and yellow come back home under their own policy, the red pen step ends at the slot.
+        # No scripted ramp ever leaves the box. One arm moving at a time.
         expected = [("left:prim", "tucked"), ("right:prim", "home"), ("right:lora_open_box", STRINGS["open_box"])]
         for skill in CHAIN[1:]:
-            expected += [("left:prim", "home"), (f"left:{PACKAGES[skill]}", STRINGS[skill]), ("left:prim", "home")]
+            expected += [("left:prim", "home"), (f"left:{PACKAGES[skill]}", STRINGS[skill])]
         assert [(t, task) for t, task, _, _ in starts] == expected
         assert all(active == [] for _, _, _, active in starts)  # nothing else moves when a ramp or skill starts
         poses = s.vocab.station.poses
@@ -131,7 +134,8 @@ def test_final_chain_end_to_end_over_the_policy_server(tmp_path, chain_server):
         for skill, pkg in PACKAGES.items():
             assert {r.task for r in backends[pkg].requests} == {STRINGS[skill]}
         assert checks.calls.count("open_box") == 4  # its own check, then the lid precheck before each pen skill
-        assert all(checks.calls.count(skill) == 2 for skill in CHAIN[1:])  # passed, then again after parking
+        assert [checks.calls.count(skill) for skill in CHAIN[1:]] == [2, 2, 1]  # again once back home; red: once
+        assert s.executor.known_pose == {"left": False, "right": False}  # both arms end where their policies left them
         trials = load_trial_log().load(tmp_path / "trials.jsonl")
         assert [t.task for t in trials if t.task != "final_chain"] == CHAIN
         (chain,) = [t for t in trials if t.task == "final_chain"]
@@ -311,18 +315,81 @@ def test_cli_builds_the_chain_config():
         _config(p.parse_args(["--env", "haller", "--skill-package", "open_box"]))
 
 
-def test_tuck_at_the_end_when_asked(tmp_path, chain_server):
-    server, token, _ = chain_server
-    s = chain_session(tmp_path, server, token)
+def drifting_chain(tmp_path, **kw):
+    """The chain server, except that the green policy keeps rolling the wrist away from home (no keep-out involved)."""
+    from flux.backends import FakeBackend
+    from flux.contract import SO101_CONTRACT
+    from flux.remote import make_server
+
+    drift = np.zeros(6)
+    drift[4] = 1.0  # deg per tick: far from home within a few chunks at any machine load
+    backends = {pkg: FakeBackend(SO101_CONTRACT, velocity=drift if pkg == "lora_green_pen" else 0.0, delay_s=0.005)
+                for pkg in PACKAGES.values()}
+    server = make_server(backends, "127.0.0.1", 0, token="chain-token")
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    token = tmp_path / "flux_token"
+    token.write_text("chain-token\n")
+    return server, chain_session(tmp_path, f"http://127.0.0.1:{server.server_address[1]}", str(token), **kw)
+
+
+def run_until_estop(s, plan, deadline_s=60):
+    out = {}
+    thread = threading.Thread(target=lambda: out.setdefault("r", s.execute(plan)))
+    thread.start()
+    deadline = time.time() + deadline_s
+    while (s.executor is None or s.executor.state != "estopped") and time.time() < deadline:
+        time.sleep(0.01)
+    return thread, out, deadline
+
+
+def resume_and_finish(s, thread, out, deadline):
+    s.release()
+    while s.executor.state != "paused" and time.time() < deadline:
+        time.sleep(0.01)
+    s.resume()
+    thread.join(timeout=60)
+    return out["r"]
+
+
+def test_return_timeout_then_operator_confirms_the_ramp(tmp_path):
+    """finish: home: if the policy does not bring the arm home, the step still counts (its check passed) and the arm
+    holds; the next ramp of that arm from there asks the operator first (e-stop), Resume confirms it."""
+    server, s = drifting_chain(tmp_path, step_timeout=10.0, return_timeout_s=1.0)
     try:
-        s.verifier = ScriptedChecks()
-        plan = s.plan("put the red pen in its slot, then tuck the arm").result.plan
-        assert [(st.skill, st.arm) for st in plan.steps] == [("put_pen_in_slot", "left"), ("tuck", "left")]
-        assert s.execute(plan).status == "succeeded"
-        tucked = s.vocab.station.poses["left"]["tucked"]
-        assert np.abs(s.rig.arms["left"].robot.joints() - tucked).max() <= 3.0
+        s.verifier = ScriptedChecks({"put_green_pen_in_slot": [False] * 2})  # passes with the wrist well off home
+        holds = []
+        s.rig.hold = lambda reason="": holds.append(reason)
+        plan = s.plan("open the box, put the green pen in the green slot, put the yellow cutter in the yellow slot")
+        thread, out, deadline = run_until_estop(s, plan.result.plan)
+        assert s.executor.state == "estopped" and "would ramp" in holds[0] and "left arm" in holds[0]
+        green, yellow = (s.executor.runs[st.id] for st in plan.result.plan.steps[1:])
+        assert green.status == "done" and green.attempt == 1 and not yellow.policy_started
+        assert any("did not bring the left arm home" in e["msg"] for e in s.events.recent())
+        assert resume_and_finish(s, thread, out, deadline).status == "succeeded"  # the operator confirmed the ramp
     finally:
         s.close()
+        server.shutdown()
+        server.server_close()
+
+
+def test_retry_from_an_unknown_pose_asks_the_operator(tmp_path):
+    """A failed attempt leaves the arm where the policy left it: the retry's ramp home waits for the operator."""
+    server, s = drifting_chain(tmp_path, step_timeout=2.0)
+    try:
+        s.verifier = ScriptedChecks({"put_green_pen_in_slot": [False] * 50})
+        holds = []
+        s.rig.hold = lambda reason="": holds.append(reason)
+        plan = s.plan("open the box, put the green pen in the green slot").result.plan
+        thread, out, deadline = run_until_estop(s, plan)
+        assert s.executor.state == "estopped" and "would ramp" in holds[0]
+        assert any("attempt 1 failed" in e["msg"] for e in s.events.recent())
+        s.abort()
+        thread.join(timeout=30)
+        assert out["r"].status == "aborted"
+    finally:
+        s.close()
+        server.shutdown()
+        server.server_close()
 
 
 def test_hold_keeps_the_grip_and_holding_arms_do_not_stall():

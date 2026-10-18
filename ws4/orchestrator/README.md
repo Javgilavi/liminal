@@ -36,10 +36,14 @@ check passes; then the box arm FREEZES and keeps holding the lid open (the lid c
 runner holds its last command). Before each pen skill the lid check runs again (`precheck: open_box`); if the lid is
 not open, the e-stop latches and every arm holds (Resume checks again, Abort ends). Then the pen arm ramps tucked ->
 home `[0, 0, 0, 0, 0, 100]` with the holding box arm as a live collision capsule, its skill's package runs FLUX with
-the exact task string, a Haiku 5.5 check every 2 chunks ends it, and the pen arm lets go, parks at home and must pass
-the check again. One arm moves at a time; ramps run under the ramp limits, the keep-out without the demonstrated
-envelope and the load freeze. The tuck <-> home ramps were checked offline: no keep-out zone touched, inside both
-calibrated ramp limits. An optional `tuck the arm` at the end puts the pen arm away; the box arm keeps holding the lid.
+the exact task string, and a Haiku 5.5 check every 2 chunks decides. No scripted ramp ever leaves the box: the green
+pen and yellow cutter takes end at home, so after their check passes the POLICY keeps running until the arm is back
+within 10 deg of home, then the check runs again (20 s at most; otherwise the step counts and the arm holds); the red
+pen step, the last one, ends on its check with the arm holding at the slot, as its takes end. A ramp from where a
+policy left an arm (a retry, a policy that did not come home) farther than 15 deg from its target waits for the
+operator: e-stop, check the path or move the arm by hand, Release, Resume. One arm moves at a time; ramps run under the
+ramp limits, the keep-out without the demonstrated envelope and the load freeze. The parked <-> home ramps of the pen
+arm were checked offline against all 65 recorded box-arm holding poses: no keep-out zone touched.
 Safety per arm: soft limits from each calibration, the FK keep-out with each arm's `other_arm` zone following
 the other arm's live pose every tick, stall (only for a driven arm: the box arm holding the lid lags its command by
 design), keep-out (45 of 60 policy ticks) and load freezes; an e-stop freezes both arms' joints at their measured pose
@@ -49,7 +53,7 @@ imagined head | wrist view next to the real one (ws4/imagine serving: no added l
 Checks (research/orchestrator.md, "Final chain"; re-run with `python -m orchestrator.verify_eval --snapshot <dir>
 --dataset <name> --skill <skill>`): `open_box` 63/63 on 21 held-out takes (75/75 on the 25 it was written on), no
 false pass; green pen 114/119 held out (2 false passes in 82); yellow cutter 91/91 on 31 takes, no false
-pass; the red pen check was tuned on the old pen scene (97 %) and needs a re-check in the new one.
+pass; red pen 65/66 on the 22 lid-held takes (1 false pass: the pen pressed against the green pen, off its strip).
 
 Tested without hardware (`tests/test_chain.py`): both fake arms, flux.remote's real HTTP server with one fake package
 per skill and a token, the whole chain end to end (the box arm frozen holding the lid from open_box on, the lid

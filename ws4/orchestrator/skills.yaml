@@ -12,8 +12,9 @@
 # line (`--skill-package open_box=<pkg>`). The planner only picks skills from this file and never writes a prompt.
 #
 # Fields: see skills_sim_pack_box.yaml. Extra: `start_pose: home` ramps the arm to its home pose first (release, then
-# move, through the ramp guard); `park_after` makes a verified success also open the gripper, ramp home and pass the
-# check again before the step is done (the right arm must clear the box before the left arm starts); `keepout` names the
+# move, through the ramp guard); `finish: home` lets the POLICY bring the arm back home after the check passed (the
+# demos end at home; a scripted ramp from inside the box could hit it), then checks again; without it the step ends on
+# the check and the arm holds where it is; `park_after` (unused here) would ramp home instead; `keepout` names the
 # keep-out config with that skill's demonstrated envelope (ws4/single_arm/calibration); without it the policy runs under
 # the arm's station zones only. `verify_scene` / `verify_hint`: the success check's prompt (verify_eval.py tunes them).
 version: 3
@@ -38,6 +39,8 @@ station:
     right:  # robot RIGHT arm = the box arm (haller "left")
       home: [0, 0.8, 2.0, 0.4, 0, 99.7]
       tucked: [3.1, -102.7, 96.7, 78.4, 13.0, 1.5]
+  # the arms work inside the box: a ramp from where a policy left an arm waits for the operator (executor)
+  confirm_unknown_ramps: true
   demo_goal: >-
     open the box, put the green pen in the green slot, put the yellow cutter in the yellow slot, put the red pen in its
     slot
@@ -46,10 +49,10 @@ station:
     (open_box), then the robot's LEFT arm puts the green pen in the green slot, the yellow cutter in the yellow slot and
     the red pen in its slot, in that order. The box must be open before any left-arm step, and after open_box the right
     arm keeps holding the lid open (the lid closes if it lets go): never give the right arm another step after
-    open_box. The executor moves the arms into each skill's start poses and parks the left arm at home after each of
-    its skills, so never add home or tuck steps between them yourself; add one tuck step for the left arm at the very
-    end only when the operator asks for the arm to be put away. When the operator says they reset the pen by hand between repetitions, put one operator_reset
-    step between consecutive put_pen_in_slot steps (none after the last one).
+    open_box. The executor moves the arms into each skill's start pose, the green pen and yellow cutter steps bring the
+    left arm back home by themselves, and the red pen step ends with the left arm holding at the slot: never add home
+    steps yourself, and end the plan with the red pen step. When the operator says they reset the pen by hand between
+    repetitions, put one operator_reset step between consecutive put_pen_in_slot steps (none after the last one).
   # Default success-check prompt for this station. DRAFT, VERIFY: tune on the new takes with verify_eval.py.
   verify_scene: >-
     You check the state of a tabletop scene in an image from a robot's head camera, which looks down at the table at
@@ -128,7 +131,7 @@ skills:
       alone does not count.
     start_pose: home
     precheck: open_box  # the lid must still be open, else e-stop and hold
-    park_after: true
+    finish: home  # the demos end at home: the policy brings the arm out of the box, then the check again
     keywords: ["green pen", "green slot", "green marker"]
 
   put_yellow_cutter_in_slot:
@@ -157,7 +160,7 @@ skills:
       cutter and says nothing about it.
     start_pose: home
     precheck: open_box  # the lid must still be open, else e-stop and hold
-    park_after: true
+    finish: home  # the demos end at home: the policy brings the arm out of the box, then the check again
     keywords: ["yellow cutter", "yellow slot", "cutter", "knife"]
 
   put_pen_in_slot:
@@ -187,7 +190,8 @@ skills:
       the box; or the white holder is empty.
     start_pose: home
     precheck: open_box  # the lid must still be open, else e-stop and hold
-    park_after: true
+    # the last skill: it ends on the check and the arm holds at the slot (its takes end there; a scripted ramp out of
+    # the box could hit it, parent 2026-10-18)
     keepout: haller_right_workspace_final.json  # envelope of the 84 good pen takes (ws4/single_arm, so101-zeroshot)
     keywords: ["put the pen in", "put the red pen in", "pen in the box", "pen in its slot", "put it back", "put it in",
                "insert"]
@@ -215,10 +219,3 @@ skills:
     arms: [left, right]
     description: "Move the arm slowly to the home pose (also where every FLUX step starts)."
     timeout_s: 30
-
-  tuck:
-    kind: primitive
-    arms: [left, right]
-    description: "Fold the arm slowly into its tucked pose, out of the way (only at the very end, if asked)."
-    timeout_s: 30
-    keywords: ["tuck", "fold the arm", "put the arm away"]
