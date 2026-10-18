@@ -1,4 +1,5 @@
-# WS4: dual-arm MuJoCo scene with actuators named left_* / right_*.
+# WS4: dual-arm MuJoCo scene with actuators named left_* / right_*. Same format and units as the real
+# configs (so101_dual.yaml, xlerobot.yaml): arm joints in LeRobot degrees, gripper 0-100 % (MujocoArm converts).
 name: mujoco_dual
 mujoco:
   xml: examples/dual_so101_sim/scene.xml   # relative to liminal/; versioned Haller rig (2x SO-101)
@@ -12,3 +13,13 @@ cameras:
   top:         {type: mujoco, mj_camera: top}
   left_wrist:  {type: mujoco, mj_camera: left_wrist}
   right_wrist: {type: mujoco, mj_camera: right_wrist}
+# MJCF joint ranges (examples/dual_so101_sim/so101/so101.xml) in degrees, rounded inward; max_step as so101_dual.
+limits:
+  left:  {lower: [-110, -100, -96, -95, -157, 0], upper: [110, 100, 96, 95, 162, 100], max_step: 8}
+  right: {lower: [-110, -100, -96, -95, -157, 0], upper: [110, 100, 96, 95, 162, 100], max_step: 8}
+home:  # the twin's rest pose (examples/dual_so101_sim/twin/scene.py REST_DEG)
+  left:  [0, -60, 60, 30, 0, 30]
+  right: [0, -60, 60, 30, 0, 30]
+bases:  # scene.xml left_mount / right_mount
+  left:  {xy: [-0.15, 0.0], reach_m: 0.30}
+  right: {xy: [ 0.15, 0.0], reach_m: 0.30}
