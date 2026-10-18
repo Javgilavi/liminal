@@ -20,3 +20,18 @@ This is not learned-policy task success. Selected checkpoint and diagnostic
 videos come from the source repository's labeled `media/` archive.
 
 Real-run website copies are encoded as H.264/yuv420p with fast-start metadata; original MP4V recordings in `media/` remain intact.
+
+Drive media review, 18 October 2026: two gallery screen recordings were replaced
+with the team's 60-second project film and an outside view of the cutter trial.
+The five red-pen camera recordings and matched simulation comparisons are unchanged.
+Sources in the team Drive linked from `media/README.md`:
+
+- `05_video/liminal_60s_v1.mp4` → `assets/liminal-overview.mp4`
+  (full 60 seconds; original audio and the film's speed/replay labels retained).
+- `20261018_093134.mp4` → `assets/real-cutter-trial.mp4`
+  (full 32.4 seconds at recorded speed; ambient audio omitted).
+
+The cutter recording shows grasp and carry toward the box, without a completed
+release. It is presented as a recorded trial, not an additional scored success.
+Both website copies use H.264/yuv420p and fast-start metadata. Their posters are
+frames from those same clips, at 6 seconds and 14 seconds respectively.
