@@ -8,25 +8,32 @@ text-prompted skills on one arm. Everything above that is this repo: deciding
 *why* a skill is needed, *when* the other arm is ready, *which conditions must stay
 true*, and *whether the goal really happened*.
 
-```
-            goal ("put the block in the box")
-                         │
-       ┌─────────────────▼──────────────────┐
-       │ Planner   template | LLM | Gemini ER│  proposes a task tree (YAML)
-       └─────────────────┬──────────────────┘
-       ┌─────────────────▼──────────────────┐   ┌──────────────────────┐
-       │ Behavior tree executor             │◄──┤ World state + memory │◄── perception
-       │ AFTER · WHILE · UNTIL · retry      │   │ predicates, event log│    (cameras, VLM)
-       └───────┬─────────────────┬──────────┘   └──────────────────────┘
-       ┌───────▼─────────────────▼──────────┐
-       │ Safety supervisor                  │  arm ownership, zones, limits, e-stop
-       └───────┬─────────────────┬──────────┘
-        ┌──────▼──────┐   ┌──────▼──────┐
-        │ left arm    │   │ right arm   │   skills → FLUX (independent model per arm)
-        │ hold / FLUX │   │ hold / FLUX │          → scripted fallback / mock
-        └─────────────┘   └─────────────┘          → primitives (hold, release, home)
-         SO-101 (LeRobot) · MuJoCo · mock
-```
+[![Liminal architecture: a deterministic behavior-tree harness coordinates independent left and right FLUX 3 Action policies adapted with task LoRA. A skill registry selects checkpoint bundles; safety checks gate robot commands. Scene and wrist cameras feed Qwen3-VL-4B-Instruct perception, which updates verified world-state predicates for the harness.](docs/assets/liminal-architecture.png)](docs/assets/liminal-architecture.png)
+
+*Configured runtime: FLUX 3 Action + task LoRA on each arm; Qwen3-VL-4B-Instruct for
+perception. The harness, registry and safety checks are deterministic software.
+Full learned dual-arm hardware performance remains unverified.*
+
+<details>
+<summary>Figure details and design references</summary>
+
+The figure shows the main learned-skill path. Local hold/release primitives bypass
+VLA inference; optional task-planning models and the disabled standalone hybrid
+controller are omitted. Each policy receives its arm's joint state and camera
+observations; joint states come from the arm drivers. The robot artwork is schematic.
+See [the architecture](docs/architecture.md) for the complete contracts.
+
+Original artwork generated with the built-in image-generation tool;
+[reproducible art brief](docs/assets/architecture-prompt.txt).
+Visual references: [OpenVLA](https://openvla.github.io/) and its
+[GitHub repo](https://github.com/openvla/openvla),
+[Diffusion Policy](https://diffusion-policy.cs.columbia.edu/) and its
+[GitHub repo](https://github.com/real-stanford/diffusion_policy),
+[π₀](https://www.pi.website/blog/pi0), and
+[Nerfies](https://nerfies.github.io/).
+These informed the layout and visual hierarchy, not the Liminal architecture.
+
+</details>
 
 Strategy and key decisions: [PLAN.md](PLAN.md). Full design: [docs/architecture.md](docs/architecture.md).
 Who does what, and by when: [TASK.md](TASK.md). Rules for humans and coding agents:
