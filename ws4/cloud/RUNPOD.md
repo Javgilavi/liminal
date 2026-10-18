@@ -479,6 +479,26 @@ Timeline (UTC):
     - Swaps keep the gap short: `pen_serve.sh <step>` starts `lora_adapter.py serve --replace-pid <old>`, which
       loads and folds the new models on the CPU while the old server keeps serving, then stops it and moves to
       the GPU. `/workspace/serve/swap_5k.sh` runs the 5k swap as soon as that adapter lands.
+    - **5k swap, 21:37:53 to 21:43 UTC** (`swap_5k.sh`):
+      - memory OK (97.2 GB available, 64.2 GB needed for 3 packages);
+      - code `/workspace/serve/ws4`;
+      - new models loaded and folded on the CPU, then the old server (pid 431318) replaced;
+      - serving `base`, `lora_5000`, `median` since 21:42:05, warm-up done 21:43 (`base` 51 s with compile);
+      - 50.2 GB on the GPU.
+      - Laptop check: all three 6-D, chunk 42, finite; round trip 0.62 to 0.65 s, server 0.36 s.
+      - so101-zeroshot's fake-robot rehearsal on it (about 21:50 UTC, nothing logged, no arm): base, median and
+        lora_5000 ran through the runner in Oscar's order; round trip 0.66 to 0.69 s, server 0.36 to 0.37 s.
+    - **4-package swap, 22:09 to 22:15 UTC:** `lora_5000_raw` added through `pen_extra.txt` (the orchestrator chose RAW 5k for
+      the graded LoRA row). Memory OK: 97.2 GB available, 82.2 GB needed. Serving base, median, lora_5000,
+      lora_5000_raw since 22:14:05; 66 GB. Laptop check: all 6-D, server 0.35 s. so101-zeroshot's fake-robot check
+      passed on all four (graded order base, median, lora_5000_raw; warm-up round trip 0.73 to 0.80 s, server
+      0.36 to 0.37 s).
+    - **10k swap, 23:44 to 23:51 UTC:** RAW 10k beat RAW 5k on the held-out eval (arm MAE 3.15 vs 3.24 deg, direction
+      88.6 vs 83.3 %, gripper direction 92 vs 62 %).
+      - Announced to so101-zeroshot; no hold.
+      - Serving base, median, lora_10000 (EMA) and lora_10000_raw since 23:50:01; 66 GB.
+      - Laptop check: all 6-D, server 0.36 to 0.37 s.
+      - RAW 10k is staged for the Hub, not uploaded.
     - Median normalization check (orchestrator, 20:30 UTC), on real-serve-6000 at 20:36 to 20:43 UTC:
       - `/workspace/packages/so101_haller_pen_M` (stats `/workspace/real_lora/a0r_M_median.json`): held-out eval and
         speed check, results in `ws4/research/pen_lora.md`.
@@ -552,3 +572,129 @@ LoRA step time (LeRobot `lerobot_train`, `examples/flux3/lora.json`, text encode
 - Spend on this RunPod account on 17 Oct as of 20:15 UTC: $13.38 billed; four pods running at $6.42/h.
 - Writes go under `/workspace/serve/` and `/workspace/imagine/` only. `/workspace/liminal/ws4` is the training
   run's code, so other ws4 copies go to their own folders (for example `/workspace/imagine/ws4`).
+
+## Per-skill LoRAs for the 4-skill demo chain (ws4-datasets, 18 Oct night)
+
+Plan (orchestrator, 17 Oct about 22:30 UTC):
+- Three new VR datasets, about 60 takes each: open the box (robot RIGHT arm, operator `left_*`), green pen and yellow
+  cutter (robot LEFT arm, `right_*`). Each gets the pen recipe on its own RTX PRO 6000 pod in EUR-IS-1 on
+  real-train-is.
+- Pods: one per skill, $2.49/h each, 30 min job watchdog. Oscar approved the agent directly (18 Oct about 00:35
+  CEST) to create each one when its dataset is ready, so the orchestrator does not create them.
+  - Spec: copy of real-train-6000. SECURE cloud, `dataCenterIds` ["EUR-IS-1"], GPU "NVIDIA RTX PRO 6000 Blackwell
+    Server Edition" x1, image `runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404`, disk 40 GB, ports ["22/tcp"],
+    network mount hnh342zg4i at /workspace.
+  - Env: HF_HOME, HF_TOKEN (RunPod secret reference), LIMINAL, UV dirs, WS4_ROOT, and the same PUBLIC_KEY.
+  - Created right after the skill's `prep` upload, then `skill_lora.sh train` arms the watchdog and starts the run.
+- Tool `ws4/cloud/skill_lora.sh`:
+  - `prep SKILL SRC SIDE`: laptop, low CPU, because the 30 Hz VR recording runs there. Checks the final split, reads
+    the task string verbatim, and rsyncs the closed raw dataset to `/workspace/skills/SKILL/raw` under
+    `nice -n 19`, `ionice -c3` and 2 threads;
+  - `train SKILL HOST PORT`: on the skill's pod; per-arm conversion and B stats on the train takes, base
+    `/workspace/packages/so101_haller_SKILL_B`, watchdog, `real_lora.sh train`, 5,000 microsteps, about 1 h 40 min;
+  - `eval`: zero-shot B, RAW and EMA at 5k on the held-out takes, same protocol as the pen curve;
+  - `report`: the table and the pick.
+- Checked end to end on the closed pen dataset (pen_dryrun):
+  - `prep` through the serve pod took 30 s wall and 3 s of laptop CPU for 475 MB, all 104 episodes arrived;
+  - `train` with NO_TRAIN=1 on the serve pod converted, computed stats and built the package in 1.8 min, with
+    quantiles identical to B84;
+  - `eval` with DRY=1 generates a correct script.
+- Split: ws4-vr2's `ws4_split.json` per dataset (last 3 good takes per box position held out).
+- Serving:
+  - 8790 keeps base, median, lora_5000 and lora_5000_raw until Oscar's graded pen session is done.
+  - The four skill packages (about 66 GB, one 7B copy is about 16.5 GB with the text encoder on the CPU) go on a
+    second serve pod that the orchestrator creates: the final-demo server.
+  - No shared-trunk work tonight.
+- Tests of `skill_lora.sh` run on the laptop CPU or the serve pod, never on a training GPU.
+- Storage (orchestrator, 18 Oct about 01:10 CEST): the orchestrator grew real-train-is to 250 GB (about $0.23/day
+  more) after it reached 109 of 150 GB.
+  - Skill runs save every 1,000 microsteps, about 6 GB each.
+  - `skill_lora.sh train` checks `du` first and keeps at least 40 GB free; 120 GB were used at 01:15 CEST.
+  - Deleting the pen probes, `lora_pen_prov` and the test merge needs a person; the safety check blocks the agent.
+  - The skills' `raw/` copies stay: the ACT session reuses them.
+- Datasets (ws4-vr2): box `~/.cache/huggingface/lerobot/ws4/haller_open_the_box`, task "open the box by pulling its
+  handle". Every new dataset records head, left_wrist and right_wrist (both wrists rotated 180). The pen arm's
+  calibration was restored to the pen dataset's at 00:20 CEST, so skills 2 to 4 share it.
+- Timing (UTC): box data about 23:30 to 00:00, LoRA done about 01:45; green about 02:45; yellow about 03:45.
+- Hub uploads for these need Oscar's OK, as for the pen.
+- 18 Oct 01:15 CEST (orchestrator): volume `real-train-is` grown from 150 to 250 GB. It held 109 GB with the pen run at 9k,
+  and the rest of the pen run plus three 5k skill LoRAs would have passed 150 GB mid-checkpoint (the sim volume hit
+  its quota that way on 17 Oct). About $0.23 per day more until the volume is deleted.
+
+### open_box (robot RIGHT arm, `left_*`), 18 Oct
+- Dataset `haller_open_the_box`: 75 episodes, 31,678 frames, task "open the box by pulling its handle".
+- Split final at 01:25:06 CEST: positions P1 0 to 2, P2 3 to 38, P3 39 to 74. 59 train (P1 folded in), 6 held-out
+  (P2 36 to 38, P3 72 to 74), 10 dropped.
+- 23:25 UTC prep: 39 s wall, 3.6 s laptop CPU, 524 MB raw to `/workspace/skills/open_box/raw` through the serve
+  pod.
+- 23:26:41 UTC pod `skill-open-box-6000`, id `g4n67t55ac58jk`: 1x RTX PRO 6000 (18 vCPU), EUR-IS-1, $2.49/h,
+  volume real-train-is.
+- SSH `root@157.157.221.29 -p 58324`. Watchdog `pod_job_watchdog.sh 30` armed 23:27:42 UTC.
+- 23:29:46 UTC LoRA `/workspace/skills/open_box/lora` started.
+  - Conversion on the pod (--side left, scene head, wrist left_wrist), B stats on 59 train takes (24,609
+    frames), base `so101_haller_open_box_B`, all within 2 min.
+  - LeRobot reports 59 train / 6 eval. 1.25 s per microstep (pen pod 1.0 s); the first model load took 4 min
+    on the cold host. ETA about 01:35 UTC.
+- `/workspace/skills/eval_after_train.sh open_box 5000` waits on the pod for training to exit, then runs
+  zero-shot B, RAW 5k and EMA 5k on the 6 held-out takes. The pod idle-stops 30 min after that.
+
+### green_pen (robot LEFT arm, `right_*`), 18 Oct
+- Dataset `haller_put_the_green_pen_in_the_green_slot`: 66 episodes, 28,832 frames, task "put the green pen in the
+  green slot". One box position. The box arm (`left_*`) holds the lid at a constant pose.
+- Split final: 58 train, 3 held-out (63 to 65), 5 dropped (14, 18, 25, 44, 50).
+- 23:52 UTC prep: 26 s wall, 3.5 s laptop CPU, 420 MB raw.
+- 23:52:56 UTC pod `skill-green-pen-6000`, id `uru7zrg7iun19g`: 1x RTX PRO 6000 (32 vCPU), EUR-IS-1, $2.49/h.
+- SSH `root@157.157.221.30 -p 56923`. Watchdog armed 23:55:16 UTC.
+- 23:56:47 UTC LoRA `/workspace/skills/green_pen/lora` started: LeRobot reports 58 train / 3 eval; stats on
+  25,435 frames. Base `so101_haller_green_pen_B`.
+- `eval_after_train.sh` (it now waits for the checkpoint first, then for training to exit) runs the held-out
+  evals.
+
+### One serve pod, used in sequence (orchestrator, 18 Oct about 02:05 CEST)
+- RunPod billed $34.5 for 17 Oct. A second serve pod would push the hackathon past Oscar's $100, so real-serve-6000
+  stays the only server.
+- First Oscar's graded pen session (base, median, the best pen LoRA). Then one swap to the final-demo set:
+  skill_open_box, skill_green_pen, skill_yellow_cutter, skill_red_pen, about 4 x 16.5 GB.
+- `/workspace/serve/demo_serve.sh` does that swap.
+  - Packages from `/workspace/serve/demo_packages.txt` (NAME=BASE+ADAPTER, filled in as each winner lands),
+    prompts from `/workspace/serve/demo_prompts.txt`.
+  - Same memory check and short-gap replacement as `pen_serve.sh`; DRY=1 checks only (passed at 00:05 UTC).
+  - Not run until the orchestrator or Oscar says the graded session is done; announced to so101-zeroshot and
+    ws4-orchestrator first.
+- Skill pods idle-stop 30 min after their evals. real-train-6000's watchdog stops it after the pen run's 20k eval;
+  terminating it is left to the orchestrator or Oscar.
+
+### HOLD on new pods (Oscar via the orchestrator, 18 Oct about 02:05 CEST)
+- Oscar: "I would hold on deploying another pod. My friend has credits on his account we should use instead of
+  reloading mine".
+- No new pods on this RunPod account, the yellow cutter's included, until the orchestrator says otherwise. The cutter
+  gets `prep` (raw upload to the volume) as usual and stops before pod creation.
+- Running pods keep running. GPU work left at 00:04 UTC:
+  - pen: about 160 min, to about 02:45 UTC;
+  - open_box: about 96 min, to about 01:41;
+  - green_pen: about 110 min, to about 01:55.
+  - Each pod idle-stops about 30 min after its last job.
+
+### Budget stop (orchestrator, 18 Oct about 02:30 CEST): about $7 left on Oscar's account
+- Stopped by the orchestrator: real-serve-6000 and real-train-6000. The pen run ends at 12,145 microsteps (last
+  checkpoint 012000); RAW 10k stays the red-pen model, so there are no 15k/20k evals. Neither pod is restarted.
+- Finishing: skill-open-box-6000 and skill-green-pen-6000 (5k LoRAs and held-out evals of RAW and EMA 5k). The
+  zero-shot B evals are skipped to save budget (orchestrator, option (a)); the pen has the zero-shot
+  comparisons.
+- `/workspace/skills/stop_after_rescue.sh SKILL` on each pod stops it as soon as its evals have ended and the laptop
+  copy is done (marker `/workspace/skills/SKILL/rescued`, at most 30 min wait), instead of after 30 idle minutes.
+- Rescue to the laptop, `~/haller_rescue/`, by a nice/ionice rsync job:
+  - pen: RAW and EMA 10k adapters, B84 and median normalizers, stats, split, evals, training log;
+  - each skill: RAW and EMA 5k adapters, base normalizers, stats, split, evals, training log;
+  - no 14 GB weights (they are the stock `black-forest-labs/flux-3-action-so101`).
+- Serving and the cutter LoRA move to a friend's RunPod account later.
+
+### yellow_cutter (robot LEFT arm, `right_*`), 18 Oct: prep only (hold on new pods)
+- Dataset `haller_put_the_yellow_cutter_in_the_yellow_slot`: 70 episodes, 30,514 frames, task "put the yellow cutter in
+  the yellow slot". One box position (P3).
+- Split final: 59 train, 3 held-out (67 to 69), 8 dropped.
+- 00:38 UTC prep: raw (440 MB) to `/workspace/skills/yellow_cutter/raw` through the open_box pod, 45 s, 3.8 s laptop
+  CPU. No pod created.
+- The friend's RunPod account needs its own network volume (volumes belong to one account and one data center):
+  bootstrap (about 11 min with the weight prefetch), ws4/ sync, then `skill_lora.sh prep` with UPLOAD_HOST/PORT on
+  that pod and `train`.

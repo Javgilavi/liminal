@@ -68,6 +68,8 @@ def eval_main(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(prog="lora_adapter.py eval")
     ap.add_argument("--package", required=True, help="base package the run trained from")
     ap.add_argument("--adapter", default=None, help="checkpoint adapter dir; omit for the zero-shot base")
+    ap.add_argument("--guidance-action", type=float, default=None,
+                    help="action guidance when it differs from offline_diag's --guidance (which sets both)")
     ap.add_argument("diag_args", nargs=argparse.REMAINDER, help="-- then offline_diag.py arguments (not --package)")
     args = ap.parse_args(argv)
     rest = args.diag_args[1:] if args.diag_args[:1] == ["--"] else args.diag_args
@@ -75,6 +77,8 @@ def eval_main(argv: list[str]) -> None:
     import offline_diag
 
     def load_backend(package, overrides, text_encoder_on_cpu, device="cuda"):
+        if args.guidance_action is not None:
+            overrides = {**overrides, "guidance_scale_action": args.guidance_action}
         label = f"{package}+{args.adapter}" if args.adapter else package
         return to_backend(load_policy(package, args.adapter), package, overrides, text_encoder_on_cpu, label, device)
 
@@ -84,6 +88,7 @@ def eval_main(argv: list[str]) -> None:
     out = Path(rest[rest.index("--out") + 1])
     result = json.loads(out.read_text())
     result["adapter"] = args.adapter
+    result["guidance_action"] = args.guidance_action
     out.write_text(json.dumps(result, indent=2, default=float))
 
 
