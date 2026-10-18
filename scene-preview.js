@@ -4,7 +4,7 @@ let viewerModule,
   attempt = 0;
 async function getViewer() {
   if (!viewerModule) {
-    const version = `20261018-resilient-${attempt++}`;
+    const version = `20261018-connection-${attempt++}`;
     viewerModule = import(`./viewer.js?v=${version}`).catch((error) => {
       viewerModule = null;
       throw error;
@@ -18,7 +18,8 @@ export function createScenePreview(element, options = {}) {
   const status = element.querySelector(".scene-status");
   const controls = options.controls || [];
   let state = "idle",
-    view;
+    view,
+    generation = 0;
   controls.forEach((control) => {
     control.disabled = true;
   });
@@ -41,13 +42,15 @@ export function createScenePreview(element, options = {}) {
   async function load() {
     if (state === "loading" || state === "ready") return;
     element.dataset.sceneState = state = "loading";
+    const request = ++generation;
     button.disabled = true;
     button.textContent = "Loading 3D…";
     status.textContent =
       "The recorded preview stays visible while the scene loads.";
     try {
       const module = await getViewer();
-      const scene = await module.loadScene();
+      const scene = await (options.getScene?.() || module.loadScene());
+      if (request !== generation) return;
       view = new module.TwinView(element, scene, options.dark || false);
       element.dataset.sceneState = state = "ready";
       controls.forEach((control) => {
@@ -71,7 +74,7 @@ export function createScenePreview(element, options = {}) {
         requestAnimationFrame(draw);
       }
     } catch {
-      unavailable();
+      if (request === generation) unavailable();
     }
   }
   button.onclick = load;
@@ -91,5 +94,14 @@ export function createScenePreview(element, options = {}) {
       requestIdleCallback(load, { timeout: 1200 });
     else setTimeout(load, 0);
   }
-  return { load };
+  function reload() {
+    generation++;
+    view?.dispose();
+    view = null;
+    options.onError?.();
+    element.replaceChildren(...fallback);
+    state = "idle";
+    return load();
+  }
+  return { load, reload };
 }

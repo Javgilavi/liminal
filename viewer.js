@@ -1,12 +1,15 @@
 import * as T from "three";
 import { OrbitControls } from "./assets/vendor/OrbitControls.js";
 const views = [],
-  meshCache = new Map();
+  sceneMeshes = new WeakMap();
 const quaternion = (a) => new T.Quaternion(a[1], a[2], a[3], a[0]);
 const unpack = (b, A) =>
   new A(Uint8Array.from(atob(b), (c) => c.charCodeAt(0)).buffer);
 export class TwinView {
   constructor(element, data, dark = false) {
+    // Mesh IDs belong to one compiled model, not to every scene in this browser.
+    if (!sceneMeshes.has(data)) sceneMeshes.set(data, new Map());
+    const meshCache = sceneMeshes.get(data);
     this.element = element;
     this.scene = new T.Scene();
     this.scene.background = new T.Color(dark ? "#1c3022" : "#edf1e7");
