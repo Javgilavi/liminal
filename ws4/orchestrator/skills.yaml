@@ -114,10 +114,11 @@ skills:
     # `backend: replay` here) replays recorded take 59's box-arm actions instead of FLUX (ws4/single_arm/replay.py):
     # time-warped to 1 deg/tick, through the same guard, this kit's keep-out with its envelope and the freezes; the lid
     # check runs once the take has been replayed to its end; the HMI, events and trial notes say "scripted replay of
-    # recorded demo 59", never FLUX; its trial rows have condition scripted. Take 59: P3, nearest the box home at its
-    # start, widest pen-skill gate margins at its end (single_arm/replay.py DEFAULT_EPISODE).
+    # recorded demo 72", never FLUX; its trial rows have condition scripted. Take 72: P3 held out, its first head frame
+    # is skills/box/layouts/P3_ep072_head.jpg (place the box on it), all pen-skill gates pass at its end; 73 second
+    # (single_arm/replay.py DEFAULT_EPISODE). `--replay-episode open_box=N` picks another take.
     backend: flux
-    replay: {episode: 59, root: ~/.cache/huggingface/lerobot/ws4/haller_open_the_box, columns: left}
+    replay: {episode: 72, root: ~/.cache/huggingface/lerobot/ws4/haller_open_the_box, columns: left}
     # box takes 7-74, right-arm midline +0.17 m (box only), approved overrides recorded in skills/box/skill.json
     keepout: skills/box/workspace.json
     keywords: ["open the box", "open the lid", "open it", "pull its handle", "pull the handle"]

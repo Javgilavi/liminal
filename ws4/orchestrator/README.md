@@ -74,11 +74,12 @@ verbatim task must equal the FLUX prompt, its `runner_args` and `other_arm_gate`
   default. The settings in force are in the events at start and in every attempt's trial notes.
 
 **Box fallback: `--skill-backend open_box=replay`** (the FLUX box LoRA went 0/4 on the arm, 18 Oct): the box step
-replays recorded take 59 (`replay:` in skills.yaml, `--replay-episode N` for another take) instead of FLUX, through the
-same stack (1 deg/tick time warp, the box kit's keep-out with its envelope, the freezes, `finish: hold`); its lid check
-runs once the take has ended. The step card says `REPLAY scripted replay of recorded demo 59, not FLUX`, the events
-say `SCRIPTED REPLAY OF RECORDED DEMO 59, NOT FLUX`, its attempts are logged with condition `scripted` and variant
-`scripted-replay-ep59` (never with the FLUX rows), and the chain's trial line notes and checkpoint name it; prefetch is
+replays recorded take 72 (`replay:` in skills.yaml; `--replay-episode open_box=73` for another take) instead of FLUX,
+through the same stack (1 deg/tick time warp with the gripper on its recorded timing, the box kit's keep-out with its
+envelope, the freezes, `finish: hold`); its lid check runs once the take has ended. Place the box on
+`ws4/single_arm/skills/box/layouts/P3_ep072_head.jpg` (the take's first head frame; the events name it). The step card
+says `REPLAY scripted replay of recorded demo 72, not FLUX`, the events say `SCRIPTED REPLAY OF RECORDED DEMO 72, NOT
+FLUX`, its attempts are logged with condition `scripted` and variant `scripted-replay-ep72` (never with the FLUX rows), and the chain's trial line notes and checkpoint name it; prefetch is
 forced off (it would skip recorded steps).
 
 **Cutter fallback: `--skill-backend put_yellow_cutter_in_slot=replay`** (last resort: the augmented FLUX cutter grasped

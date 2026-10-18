@@ -924,9 +924,20 @@ def test_replay_backend_needs_a_replay_entry(tmp_path, chain_server):
     p = argparse.ArgumentParser()
     _session_args(p)
     cfg = _config(p.parse_args(["--env", "haller", "--skill-backend", "open_box=replay", "--replay-episode", "40"]))
-    assert cfg.skill_backends == {"open_box": "replay"} and cfg.replay_episode == 40
+    assert cfg.skill_backends == {"open_box": "replay"} and cfg.replay_episodes == {"*": 40}
+    cfg = _config(p.parse_args(["--env", "haller", "--replay-episode", "open_box=72", "--replay-episode",
+                                "put_yellow_cutter_in_slot = 67"]))
+    assert cfg.replay_episodes == {"open_box": 72, "put_yellow_cutter_in_slot": 67}
+    s = chain_session(tmp_path, server, token, replay_episodes={"open_box": 72})
+    try:  # one skill's take only: the cutter keeps its own
+        episodes = {n: s.vocab[n].replay["episode"] for n in ("open_box", "put_yellow_cutter_in_slot")}
+        assert episodes == {"open_box": 72, "put_yellow_cutter_in_slot": 67}
+    finally:
+        s.close()
+    with pytest.raises(ValueError, match="has no replay entry"):
+        chain_session(tmp_path, server, token, replay_episodes={"put_green_pen_in_slot": 3})
     v = load_vocabulary(DEFAULT_VOCABULARY)
-    assert v["open_box"].backend == "flux" and v["open_box"].replay["episode"] == 59  # FLUX unless asked
+    assert v["open_box"].backend == "flux" and v["open_box"].replay["episode"] == 72  # FLUX unless asked
 
 
 def test_cutter_replay_in_the_chain_slow_near_the_box_arm(tmp_path, monkeypatch):
