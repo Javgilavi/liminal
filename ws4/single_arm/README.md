@@ -52,6 +52,11 @@ Options added for it:
   head and wrist next to the reference take with a blend, the wrist room offset/scale/inliers, brightness and a hint.
 - `WS4_ACTION_STEPS=N` (or `--action-steps N`): execute N commands of each 42-command chunk before replanning
   (default 32). 16 gave the inserts; without prefetching the arm waits about 0.6 s per chunk (about 50 % at 16).
+- `WS4_PREFETCH_TICKS=P` (or `--prefetch-ticks P`, off by default and for graded runs until the red-pen RAW 5k block
+  is rerun with it): request the next chunk when P commands are left and keep executing; the new chunk replaces the
+  queue from the index of the commands executed since its request (`flux/dual_arm_runner.py`, tests in
+  `flux/tests/test_runner.py`). On the fake arm at 0.65 s latency: horizon 32 + P 32 never waits and replans about
+  every 0.7 s (8 chunks in 6 s), against 38 % waiting (4 chunks) without prefetch and 50 % (5) at horizon 16.
 - `WS4_LIFT_STALL_DEG=D` (or `--lift-stall-deg D`): the shoulder lift's stall threshold. The 7.4 V lift trails its
   command by 8-10 deg under load near the 60 % torque cap, which stopped 9 of 15 attempts at 8 deg; the load freeze
   still catches a real push.

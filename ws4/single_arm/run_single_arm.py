@@ -989,6 +989,7 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
         notes=f"{args.note + '; ' if args.note else ''}prompt={task!r}; guidance {args.guidance_note}; "
         f"{f'action horizon {args.action_steps} per chunk; ' if getattr(args, 'action_steps', None) else ''}"
         f"{f'lift stall {args.lift_stall_deg} deg; ' if getattr(args, 'lift_stall_deg', None) else ''}"
+        f"{f'chunk prefetch at {args.prefetch_ticks} commands left; ' if getattr(args, 'prefetch_ticks', None) else ''}"
         f"{'start ' + meta['layout_ref'] + '; ' if meta.get('layout_ref') else ''}"
         f"safety: {args.max_step} deg/tick guard, LeRobot cap "
         f"{args.max_relative_target} deg, torque limit {args.torque_limit:.0f}%; "
@@ -1143,6 +1144,9 @@ def main(argv: list[str] | None = None) -> None:
                    help="--backend act: commands executed per chunk before re-planning (default: the checkpoint's)")
     p.add_argument("--action-steps", type=int, default=_env_int("WS4_ACTION_STEPS"),
                    help="remote/fake: commands executed per chunk before re-planning (default: the package's 32)")
+    p.add_argument("--prefetch-ticks", type=int, default=_env_int("WS4_PREFETCH_TICKS"),
+                   help="request the next chunk when this many commands are left, executing meanwhile (0/unset = "
+                        "off: the arm holds for each round trip; env WS4_PREFETCH_TICKS)")
     p.add_argument("--fake-delay", type=float, default=0.6, help="fake inference latency, s")
     p.add_argument("--fake-velocity", type=float, nargs=ARM_DIM, default=[0.2, 0.2, -0.2, 0.2, 0.0, 0.0],
                    help="fake policy drift, deg per tick per joint")  # fmt: skip
@@ -1270,7 +1274,10 @@ def main(argv: list[str] | None = None) -> None:
         guard_cfg, keepout, args.slot, lambda: robot.last_q)
     if args.slow_zone is not None and isinstance(guard, KeepOutGuard):
         guard.slow_zone, guard.slow_step = args.slow_zone, args.slow_step
-    runner = DualArmRunner(robot, [target], {"policy": backend}, guard, async_inference=True)
+    runner = DualArmRunner(robot, [target], {"policy": backend}, guard, async_inference=True,
+                           prefetch_ticks=args.prefetch_ticks or 0)  # fmt: skip
+    if args.prefetch_ticks:
+        print(f"chunk prefetch: next request when {args.prefetch_ticks} commands are left", flush=True)
     runner.ramp_config = ramp_cfg  # scripted ramps (start pose, return, park) use the ramp limits
     if args.home or args.park_pose is not None:
         home = np.array(args.park_pose if args.park_pose is not None else json.loads(REST_FILE.read_text())["rest"])

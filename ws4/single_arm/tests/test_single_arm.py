@@ -405,3 +405,17 @@ def test_ramp_falls_back_to_joint_by_joint_around_the_keepout(monkeypatch):
     assert rsa.joint_order(PanFirst(), robot.joints(), goal)[0] == 0
     assert rsa.move_to(robot, goal, cfg, 2.0, keys, PanFirst())  # pan first, then the rest
     assert np.allclose(robot.joints(), goal, atol=1e-6)
+
+
+def test_prefetch_cuts_the_waiting(tmp_path, monkeypatch):
+    def waiting_share(meta_dir):
+        trace = np.load(next(meta_dir.glob("*/attempt01/trace.npz")))
+        status = trace["status"]
+        first = int(np.argmax(status != "waiting"))  # after the first chunk arrived
+        return float(np.mean(status[first:] == "waiting"))
+
+    common = ("--keepout-ticks", "100000", "--fake-delay", "0.3", "--seconds", "3")
+    _run(tmp_path / "off", monkeypatch, *common)
+    (meta,) = _run(tmp_path / "on", monkeypatch, *common, "--prefetch-ticks", "32")
+    assert meta["args"]["prefetch_ticks"] == 32
+    assert waiting_share(tmp_path / "off") > 0.15 and waiting_share(tmp_path / "on") < 0.05

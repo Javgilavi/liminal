@@ -283,3 +283,81 @@ def test_lerobot_bimanual_robot_adapter_maps_bi_so_follower_keys():
     assert obs[IMG_LEFT_WRIST].max() == 2 and obs[IMG_HEAD].max() == 1
     robot.send_action(np.arange(12.0) * 2)
     assert fake.sent["right_shoulder_pan.pos"] == 12.0
+
+
+LONG = ModelContract(
+    name="long", action_dim=6, camera_keys=(SO101_SCENE, SO101_WRIST), n_obs_steps=4, chunk_size=20,
+    n_action_steps=10, image_hw=(16, 16),
+)  # fmt: skip
+
+
+class GatedBackend:
+    """Chunk c holds pan = 100 c + index; every call after the first blocks until the test opens the gate."""
+
+    def __init__(self, contract):
+        from flux.backends import PolicyResponse
+
+        self.contract, self.calls, self.gate, self.response = contract, 0, threading.Event(), PolicyResponse
+
+    def predict(self, request):
+        c, self.calls = self.calls, self.calls + 1
+        if c:
+            assert self.gate.wait(5)
+            self.gate.clear()
+        cmds = np.zeros((self.contract.chunk_size, 6))
+        cmds[:, 0] = 100 * c + np.arange(self.contract.chunk_size)
+        return self.response(cmds, 0.0)
+
+
+def _settle(runner, name="left"):
+    pending = runner._targets[name].pending  # noqa: SLF001
+    deadline = time.time() + 5
+    while pending is not None and not pending.done():
+        assert time.time() < deadline
+        time.sleep(0.002)
+
+
+def test_prefetch_requests_early_and_aligns_the_new_chunk():
+    backend = GatedBackend(LONG)
+    robot = FakeRobot()
+    runner = DualArmRunner(robot, [per_arm_target("left", "m")], {"m": backend}, SafetyGuard(WIDE),
+                           async_inference=True, prefetch_ticks=4)  # fmt: skip
+    runner.start("left", "a")
+    assert runner.step().status == {"left": "waiting"}  # first chunk: nothing to execute yet
+    _settle(runner)
+    assert runner.step().status == {"left": "replanned"} and robot.sent[-1][0] == 0
+    sent = [runner.step() for _ in range(6)]  # 1..6; at the tick of 6, 4 commands were left: request 2 goes out
+    assert all(r.status == {"left": "executing"} for r in sent) and robot.sent[-1][0] == 6
+    assert runner._targets["left"].pending is not None  # noqa: SLF001 - the early request is in flight
+    runner.step()  # 7: still executing while the request is in flight
+    assert robot.sent[-1][0] == 7
+    backend.gate.set()
+    _settle(runner)
+    r = runner.step()  # chunk 2 answers the observation at command 6; 7 has been executed since: start at index 2
+    assert r.status == {"left": "replanned"} and robot.sent[-1][0] == 102
+    runner.close()
+
+
+def test_prefetch_waiting_ticks_do_not_count_as_executed():
+    backend = GatedBackend(LONG)
+    robot = FakeRobot()
+    runner = DualArmRunner(robot, [per_arm_target("left", "m")], {"m": backend}, SafetyGuard(WIDE),
+                           async_inference=True, prefetch_ticks=4)  # fmt: skip
+    runner.start("left", "a")
+    runner.step()
+    _settle(runner)
+    for _ in range(10):  # 0..9: the whole first chunk, request 2 went out at command 6
+        runner.step()
+    assert robot.sent[-1][0] == 9
+    waits = [runner.step().status for _ in range(3)]  # queue empty, request in flight: the arm holds
+    assert waits == [{"left": "waiting"}] * 3 and robot.sent[-1][0] == 9
+    backend.gate.set()
+    _settle(runner)
+    runner.step()  # 6, 7, 8, 9 executed since the request (4), the 3 waiting ticks do not count
+    assert robot.sent[-1][0] == 104
+    runner.close()
+
+
+def test_prefetch_needs_async():
+    with pytest.raises(ValueError):
+        DualArmRunner(FakeRobot(), [per_arm_target("left", "m")], {"m": FakeBackend(SMALL)}, prefetch_ticks=4)

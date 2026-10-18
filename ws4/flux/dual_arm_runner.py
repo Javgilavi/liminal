@@ -9,6 +9,11 @@ chunk holds its arms still until the chunk arrives, and its history does not adv
 (lerobot@146d847:docs/source/flux3.mdx:214-224). With ``async_inference=True`` the wait happens in a worker
 thread per backend, so the other arm keeps executing its own queue meanwhile.
 
+``prefetch_ticks=P`` (async only, default 0 = off) requests the next chunk when P commands are left in the queue and
+keeps executing meanwhile, with the history advancing every tick. The new chunk replaces the rest of the queue from
+the index matching the commands executed since its request (ticks spent waiting with an empty queue do not count:
+the arm held still), so the arm does not stop for the round trip when P covers the latency.
+
 Every command goes through ``SafetyGuard.filter`` (step limit and joint limits, robot units) before
 ``robot.send_action``. Model outputs are unbounded (model card, "Out-of-scope use").
 
@@ -181,6 +186,8 @@ class _TargetState:
     pending: Future | None = None
     last_response: PolicyResponse | None = None
     n_chunks: int = 0
+    executed: int = 0  # commands executed in this episode (prefetch alignment)
+    request_executed: int = 0  # ``executed`` when the pending request's observation was taken
 
 
 @dataclass
@@ -200,11 +207,15 @@ class DualArmRunner:
         backends: dict[str, FluxBackend],
         guard: SafetyGuard | None = None,
         async_inference: bool = False,
+        prefetch_ticks: int = 0,
     ):
+        if prefetch_ticks < 0 or (prefetch_ticks and not async_inference):
+            raise ValueError("prefetch_ticks needs async_inference and must be >= 0")
         self.robot = robot
         self.backends = backends
         self.guard = guard or SafetyGuard()
         self.async_inference = async_inference
+        self.prefetch_ticks = prefetch_ticks
         self._targets: dict[str, _TargetState] = {}
         for cfg in targets:
             if cfg.name in self._targets:
@@ -260,6 +271,7 @@ class DualArmRunner:
         if ts.pending is not None:
             ts.pending.cancel()
         ts.pending = None
+        ts.executed = ts.request_executed = 0
 
     def active_targets(self) -> list[str]:
         return [name for name, ts in self._targets.items() if ts.active]
@@ -284,11 +296,18 @@ class DualArmRunner:
         window = ts.history.window(image_ticks=ticks)
         return PolicyRequest(ts.task, window.states, window.commands, window.images, ticks, target=ts.config.name)
 
-    def _accept(self, ts: _TargetState, response: PolicyResponse, state12: np.ndarray) -> None:
+    def _accept(self, ts: _TargetState, response: PolicyResponse, state12: np.ndarray, skip: int = 0,
+                replace: bool = False) -> None:  # fmt: skip
         chunk = np.asarray(response.commands, dtype=np.float64)
         if chunk.ndim != 2 or chunk.shape[0] < ts.contract.n_action_steps:
             raise ValueError(f"target {ts.config.name!r}: backend returned {chunk.shape}")
-        chunk = chunk[: ts.contract.n_action_steps]
+        chunk = chunk[skip : skip + ts.contract.n_action_steps]
+        if replace:
+            ts.queue.clear()
+        ts.last_response = response
+        ts.n_chunks += 1
+        if not len(chunk):  # the request took longer than the chunk: wait for the next one
+            return
         joints_now = np.concatenate(
             [ts.config.calibration[arm].to_model(state12[arm_slice(arm)]) for arm in ts.config.arms]
         )
@@ -296,8 +315,6 @@ class DualArmRunner:
         if joints.shape != (chunk.shape[0], ARM_DIM * len(ts.config.arms)):
             raise ValueError(f"adapter returned {joints.shape}")
         ts.queue.extend(zip(chunk, joints, strict=True))
-        ts.last_response = response
-        ts.n_chunks += 1
 
     # ------------------------------------------------------------------ control tick
     def release_estop(self) -> None:
@@ -307,6 +324,24 @@ class DualArmRunner:
         for ts in self._targets.values():
             if ts.active:
                 self._reset_target(ts)
+
+    def _prefetch(self, name: str, ts: _TargetState, obs: dict[str, Any], state12: np.ndarray,
+                  status: dict[str, str]) -> bool:  # fmt: skip
+        """Prefetch mode for one target and tick: push the observation, take a finished chunk (aligned to the commands
+        executed since its request), request the next one early. True when a command is ready to execute."""
+        ts.history.push(self._model_state(ts, state12), self._model_images(ts, obs))
+        if ts.pending is not None and ts.pending.done():
+            future, ts.pending = ts.pending, None
+            self._accept(ts, future.result(), state12, skip=ts.executed - ts.request_executed, replace=True)
+            status[name] = "replanned"
+        if ts.pending is None and len(ts.queue) <= self.prefetch_ticks:
+            ts.request_executed = ts.executed
+            backend = self.backends[ts.config.backend]
+            ts.pending = self._executors[ts.config.backend].submit(backend.predict, self._request(ts))
+        if not ts.queue:
+            status.setdefault(name, "waiting")
+            return False
+        return True
 
     def step(self) -> TickReport:
         if self.guard.estopped:
@@ -328,8 +363,11 @@ class DualArmRunner:
         for name, ts in self._targets.items():
             if not ts.active:
                 continue
-            fresh_obs = True
-            if ts.pending is not None:
+            if self.prefetch_ticks:
+                if not self._prefetch(name, ts, obs, state12, status):
+                    continue
+            fresh_obs = not self.prefetch_ticks
+            if fresh_obs and ts.pending is not None:
                 if not ts.pending.done():
                     status[name] = "waiting"
                     continue
@@ -349,6 +387,7 @@ class DualArmRunner:
                     self._accept(ts, backend.predict(request), state12)
                     status[name] = "replanned"
             model_cmd, joint_cmd = ts.queue.popleft()
+            ts.executed += 1
             status.setdefault(name, "executing")
             if ts.last_response is not None:
                 latencies[name] = ts.last_response.latency_s
