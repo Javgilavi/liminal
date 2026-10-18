@@ -1007,7 +1007,9 @@ def test_unclear_recheck_after_home_keeps_the_pass(tmp_path, chain_server, reche
     re-check said "upright in the green holder, seating not fully visible" at 0.60 and failed it. Now only a confident
     "not done" fails the step; an unclear re-check keeps the pass, and the trial row lists both verdicts."""
     server, token, _ = chain_server
-    s = chain_session(tmp_path, server, token)
+    # no replan: after a failed step ws4 would wait for an operator to approve the new plan (the liminal bridge
+    # runs with max_replans 0 too)
+    s = chain_session(tmp_path, server, token, max_replans=0)
     try:
         checks = ScriptedChecks()
         green = iter([Verdict(True, 0.7, "upright in the green holder", "test"),
