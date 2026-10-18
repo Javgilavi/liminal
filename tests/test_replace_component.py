@@ -7,7 +7,7 @@ from liminal.orchestration import load_task, run_task
 from liminal.perception import FixtureVisionModel, SceneAssessment, SceneInspector
 from liminal.policy.mock import Fault, MockBackend
 
-TASK = "configs/tasks/replace_component.yaml"
+TASK = "configs/tasks/archive/replace_component.yaml"
 
 
 def _response(**values: bool | str) -> dict:

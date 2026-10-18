@@ -1,6 +1,6 @@
 # Oskrt raw step 10000, pinned at e85fc5831ae9d28a27ef175aa1c0196b6bc5ec16.
 # Bundle staged on prd-inf-vm-01; rerun prepare_pen_checkpoint.py to resolve another deployment.
-# Logical right matches dataset right_*; the model card calls the physical arm LEFT.
+# Physical LEFT is the main task arm; historical dataset right_* columns refer to this arm.
 midtraining_base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
 embodiment: so101
 joint_order: &joints [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper]
@@ -9,7 +9,7 @@ action_semantics: absolute_position  # Saved postprocessor integrates model delt
 action_dim: 6
 camera_roles: [scene, wrist]
 camera_map:
-  right: {scene: top, wrist: right_wrist}
+  left: {scene: top, wrist: left_wrist}
 obs_history: 8
 chunk_size: 42
 execute_steps: 16
@@ -20,8 +20,8 @@ inference_timeout_s: 30
 device: cuda
 checkpoints:
   red_pen_raw_10000:
-    path: /liminal/models/so101-haller-pen-raw10000-e85fc583
-    sha256: '4fc883b8e486a75ff9c5b7be032bbeac8d418de0445926a3a8647f1aab420f09'
+    path: /liminal/models/so101-haller-pen-raw10000-e85fc583-left
+    sha256: '43e4c9c772d1a475ecf2b964d8f8d5504e763f86e46ba9538fddfe0e2b55f858'
     base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
     embodiment: so101
     joint_order: *joints
@@ -29,7 +29,7 @@ checkpoints:
     action_semantics: absolute_position
     action_dim: 6
     camera_roles: [scene, wrist]
-    targets: [right]
+    targets: [left]
     obs_history: 8
     chunk_size: 42
     control_hz: 30

@@ -17,23 +17,10 @@ TASKS = sorted(Path("configs/tasks").glob("*.yaml"))
 @pytest.mark.parametrize("path", TASKS, ids=lambda p: p.stem)
 def test_shipped_tasks_succeed_on_mock(path, make_ctx):
     ctx = make_ctx()
-    if path.stem == "replace_component":
-        known = {
-            "predicates": {
-                "lid_open": {"value": "true", "evidence": "box is open"},
-                "access_clear": {"value": "true", "evidence": "route is clear"},
-                "access_blocked": {"value": "false", "evidence": "no obstruction"},
-                "faulty_component_in_red_cup": {"value": "true", "evidence": "component is in cup"},
-                "replacement_in_slot": {"value": "true", "evidence": "replacement is seated"},
-                "main_arm_home": {"value": "true", "evidence": "right arm is home"},
-            }
-        }
-        ctx.inspector = SceneInspector(
-            FixtureVisionModel([known, known, known]),
-            ctx.cameras,
-            ctx.world,
-            confirmations=1,
-        )
+    if path.stem == "assemble_components":
+        from liminal.orchestration.component_assembly import DEFINITIONS
+        known = {"predicates": {key: {"value": True, "evidence": "fixture"} for key in DEFINITIONS}}
+        ctx.inspector = SceneInspector(FixtureVisionModel([known] * 8), ctx.cameras, ctx.world, confirmations=1)
     report = asyncio.run(run_task(load_task(path, arms=ctx.arm_names), ctx))
     assert report.goal_verified, report
 

@@ -1,3 +1,6 @@
+> Historical review of the earlier cable/replacement task. The current box assembly
+> task and its six-order symbolic validation are documented in `../showcase-runtime.md`.
+
 # Independent runtime review
 
 Reviewed base: `origin/integrate/harness-main`, commit

@@ -4,7 +4,7 @@ goal: red_pen_in_slot
 tree:
   sequence:
     - skill:
-        arm: right
+        arm: left
         name: put_red_pen_in_slot
         prompt: put the red pen in its slot in the cardboard box
         success: red_pen_in_slot

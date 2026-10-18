@@ -17,6 +17,6 @@ The [research briefs](research/) describe workstream goals. They are plans, not
 validation results. Single-arm experiments do not establish bimanual or long-horizon
 performance.
 
-- [Component replacement runtime and checkpoint registry](showcase-runtime.md)
+- [Box assembly runtime and checkpoint registry](showcase-runtime.md)
 
 - [Pinned Oskrt red-pen checkpoint](pen-checkpoint.md)

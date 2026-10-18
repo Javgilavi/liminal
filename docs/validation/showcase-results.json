@@ -1,128 +1,160 @@
 {
-  "base_commit": "6975d2f87ec73559d48d9f2c6abb5e4bb0768bf2",
-  "scenarios": [
+  "validation": "symbolic only; accelerated timing, 4 predicted / 2 executed actions; deployment uses 42 / 16",
+  "results": [
     {
       "evidence": "symbolic simulation; no learned inference or physical grasp validation",
-      "scenario": "clear",
-      "recovery_injected": false,
+      "placement_order": [
+        "green_pen",
+        "red_pen",
+        "yellow_boxcutter"
+      ],
       "status": "success",
       "goal_verified": true,
       "atomic_skills": [
-        "open_lid",
-        "remove_to_red_cup",
-        "green_cup_to_slot"
+        "open_box",
+        "put_green_pen_in_slot",
+        "put_red_pen_in_slot",
+        "put_yellow_boxcutter_in_slot"
       ],
       "checkpoint_sessions": [
-        {
-          "name": "open_lid",
-          "base": "symbolic-base@v1",
-          "sha256": "913cb5fcbeaf1fd862b738d7dfd7ff3482ed83d9ff499d82410d355f7d2a57e4"
-        },
-        {
-          "name": "remove_to_red_cup",
-          "base": "symbolic-base@v1",
-          "sha256": "f68b3f39ccca1ba6a867c053a49f4df6e9f9fb41a1b29dad37e3e1ab781eb2da"
-        },
-        {
-          "name": "green_cup_to_slot",
-          "base": "symbolic-base@v1",
-          "sha256": "19acb90d015e7c419bbee5eabd956cb706d9a2755c6ddde311a31f8c551f6c15"
-        }
+        "open_box",
+        "put_green_pen_in_slot",
+        "red_pen_raw_10000",
+        "put_yellow_boxcutter_in_slot"
       ],
       "commands": {
-        "left": 2,
-        "right": 7
+        "left": 6,
+        "right": 2
       }
     },
     {
       "evidence": "symbolic simulation; no learned inference or physical grasp validation",
-      "scenario": "blocked",
-      "recovery_injected": false,
+      "placement_order": [
+        "green_pen",
+        "yellow_boxcutter",
+        "red_pen"
+      ],
       "status": "success",
       "goal_verified": true,
       "atomic_skills": [
-        "open_lid",
-        "clear_cable_to_hold",
-        "remove_to_red_cup",
-        "green_cup_to_slot",
-        "restore_cable"
+        "open_box",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot",
+        "put_red_pen_in_slot"
       ],
       "checkpoint_sessions": [
-        {
-          "name": "open_lid",
-          "base": "symbolic-base@v1",
-          "sha256": "913cb5fcbeaf1fd862b738d7dfd7ff3482ed83d9ff499d82410d355f7d2a57e4"
-        },
-        {
-          "name": "clear_cable_to_hold",
-          "base": "symbolic-base@v1",
-          "sha256": "6faa4ac61146040f14798b296656678c471a343ede23bd6ea4667a55980ff8d7"
-        },
-        {
-          "name": "remove_to_red_cup",
-          "base": "symbolic-base@v1",
-          "sha256": "f68b3f39ccca1ba6a867c053a49f4df6e9f9fb41a1b29dad37e3e1ab781eb2da"
-        },
-        {
-          "name": "green_cup_to_slot",
-          "base": "symbolic-base@v1",
-          "sha256": "19acb90d015e7c419bbee5eabd956cb706d9a2755c6ddde311a31f8c551f6c15"
-        },
-        {
-          "name": "restore_cable",
-          "base": "symbolic-base@v1",
-          "sha256": "c68e3b3b4d4a206318bea846f3b802763dab2199dd2b6938b5856ca7cd6d6c20"
-        }
+        "open_box",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot",
+        "red_pen_raw_10000"
       ],
       "commands": {
         "left": 6,
-        "right": 7
+        "right": 2
       }
     },
     {
       "evidence": "symbolic simulation; no learned inference or physical grasp validation",
-      "scenario": "blocked",
-      "recovery_injected": true,
+      "placement_order": [
+        "red_pen",
+        "green_pen",
+        "yellow_boxcutter"
+      ],
       "status": "success",
       "goal_verified": true,
       "atomic_skills": [
-        "open_lid",
-        "clear_cable_to_hold",
-        "remove_to_red_cup",
-        "green_cup_to_slot",
-        "green_cup_to_slot",
-        "restore_cable"
+        "open_box",
+        "put_red_pen_in_slot",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot"
       ],
       "checkpoint_sessions": [
-        {
-          "name": "open_lid",
-          "base": "symbolic-base@v1",
-          "sha256": "913cb5fcbeaf1fd862b738d7dfd7ff3482ed83d9ff499d82410d355f7d2a57e4"
-        },
-        {
-          "name": "clear_cable_to_hold",
-          "base": "symbolic-base@v1",
-          "sha256": "6faa4ac61146040f14798b296656678c471a343ede23bd6ea4667a55980ff8d7"
-        },
-        {
-          "name": "remove_to_red_cup",
-          "base": "symbolic-base@v1",
-          "sha256": "f68b3f39ccca1ba6a867c053a49f4df6e9f9fb41a1b29dad37e3e1ab781eb2da"
-        },
-        {
-          "name": "green_cup_to_slot",
-          "base": "symbolic-base@v1",
-          "sha256": "19acb90d015e7c419bbee5eabd956cb706d9a2755c6ddde311a31f8c551f6c15"
-        },
-        {
-          "name": "restore_cable",
-          "base": "symbolic-base@v1",
-          "sha256": "c68e3b3b4d4a206318bea846f3b802763dab2199dd2b6938b5856ca7cd6d6c20"
-        }
+        "open_box",
+        "red_pen_raw_10000",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot"
       ],
       "commands": {
         "left": 6,
-        "right": 10
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "red_pen",
+        "yellow_boxcutter",
+        "green_pen"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_red_pen_in_slot",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "red_pen_raw_10000",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "yellow_boxcutter",
+        "green_pen",
+        "red_pen"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot",
+        "put_red_pen_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot",
+        "red_pen_raw_10000"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "yellow_boxcutter",
+        "red_pen",
+        "green_pen"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "put_red_pen_in_slot",
+        "put_green_pen_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "red_pen_raw_10000",
+        "put_green_pen_in_slot"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
       }
     }
   ]

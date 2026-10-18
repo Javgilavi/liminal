@@ -8,7 +8,7 @@ model:
   max_new_tokens: 150
 
 inspection:
-  cameras: [top, right_wrist]
+  cameras: [top, left_wrist]
   confirmations: 2
   timeout_s: 10
   retry_delay_s: 0.1

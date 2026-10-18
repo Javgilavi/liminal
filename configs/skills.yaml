@@ -6,18 +6,20 @@ skills:
   home: "primitive - move to the safe rest pose"
   open_gripper: "primitive"
   close_gripper: "primitive"
-  put_red_pen_in_slot: "VLA - Oskrt red-pen task adapter; pick and place using its exact trained prompt"
+  open_box: "VLA - RIGHT helper opens the box; tree maintains lid-open hold during LEFT-arm placement"
+  put_green_pen_in_slot: "VLA - LEFT main arm places the green pen into its designated slot"
+  put_yellow_boxcutter_in_slot: "VLA - LEFT main arm places the yellow boxcutter into its designated slot"
+  put_red_pen_in_slot: "VLA - LEFT main arm, Oskrt red-pen task adapter; pick and place using its exact trained prompt"
   pick_place: "VLA - pick an object and place it somewhere; describe both in the prompt"
   open_lid: "VLA - grasp a hinged lid and lift it open"
   lift_aside: "VLA - lift an obstacle (lid, flap) up and out of the way, then hold"
   push_aside: "VLA - push an object sideways out of a corridor, no grasp"
   pick_aside: "VLA - pick an obstacle and drop it in the free zone"
-  clear_cable_to_hold: "VLA - helper arm grasps the cable and moves it clear; the tree takes over position hold"
-  remove_to_red_cup: "VLA - main arm removes the faulty component and places it inside the red cup"
-  green_cup_to_slot: "VLA - main arm takes the green replacement from its cup and seats it in the box slot"
-  restore_cable: "VLA - helper arm returns the cable to its resting route and releases it"
   open_lid_and_insert: "bimanual VLA (option B only, arm: both) - left opens and holds the lid, right inserts"
 predicates:
+  - green_pen_in_slot
+  - yellow_boxcutter_in_slot
+  - components_assembled
   - red_pen_in_slot
   - lid_open
   - object_inserted
@@ -25,11 +27,5 @@ predicates:
   - block_in_bowl
   - left_holding
   - right_holding
-  - access_clear
-  - access_blocked
-  - cable_secured_clear
-  - faulty_component_in_red_cup
-  - replacement_in_slot
-  - cable_restored
   - helper_arm_home
   - main_arm_home

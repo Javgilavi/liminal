@@ -30,7 +30,7 @@ not been established.
   were generally near home with an open gripper. Camera roles are head/scene and
   task-arm wrist; the training wrist image was rotated 180 degrees.
 - The model card calls the physical task arm LEFT while its dataset columns are
-  `right_*`. The registry uses logical `right`, matching the existing pen profiles.
+  `right_*`. The registry now uses physical `left`, with `top` and `left_wrist` cameras.
   Verify the physical mapping in the robot configuration before any engagement.
   This document and the staging scripts do not engage motors.
 
@@ -43,7 +43,7 @@ available locally, run from this branch's repository root:
 python scripts/prepare_pen_checkpoint.py \
   --base /liminal/models/so101 \
   --adapter /liminal/models/pen-adapter-e85fc583 --download \
-  --output /liminal/models/so101-haller-pen-raw10000-e85fc583 \
+  --output /liminal/models/so101-haller-pen-raw10000-e85fc583-left \
   --registry /liminal/models/pen_place_resolved.yaml
 python scripts/check_checkpoint_registry.py /liminal/models/pen_place_resolved.yaml
 ```
@@ -86,3 +86,11 @@ chunk in approximately 601 ms for its first prediction. Inputs were blank images
 and the open-gripper home vector; no motor commands were sent. This is loading and
 inference evidence, not a physical pen-placement trial or a real checkpoint-swap
 trial. See [the recorded identities and result](validation/pen-checkpoint-smoke.json).
+
+## Left-arm deployment
+
+The staged `...e85fc583-left` bundle links the same validated weights and processors,
+with a separate provenance file allowing `left`. Its digest is
+`43e4c9c772d1a475ecf2b964d8f8d5504e763f86e46ba9538fddfe0e2b55f858`.
+The original bundle and recorded GPU smoke evidence retain their historical `right`
+deployment label. This metadata remapping is not a new physical grasp validation.
