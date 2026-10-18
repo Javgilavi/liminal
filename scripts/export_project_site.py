@@ -22,6 +22,10 @@ PAGES = {
     "evidence/notes.html",
 }
 ASSETS = {
+    "liminal-overview.mp4",
+    "preview-liminal-overview.jpg",
+    "real-cutter-trial.mp4",
+    "preview-real-cutter-trial.jpg",
     "paper-texture.svg",
     "preview-zero-shot-red.jpg",
     "preview-lora-red.jpg",
