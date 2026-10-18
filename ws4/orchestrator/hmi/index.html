@@ -18,6 +18,8 @@
     --shadow: 0 1px 2px rgba(40, 24, 90, .05), 0 8px 24px rgba(40, 24, 90, .06);
     --sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --hdr: 64px;   /* header height, kept in sync by syncHeader() */
+    --gap: 14px; --side: 20px;
     color-scheme: light;
   }
   * { box-sizing: border-box; }
@@ -35,21 +37,24 @@
   button:hover:not(:disabled) { box-shadow: var(--shadow); transform: translateY(-1px); }
   button:active:not(:disabled) { transform: translateY(0); }
   button:disabled { opacity: .4; cursor: default; }
+  .c, .tile .v, #cost, .st { font-variant-numeric: tabular-nums; }
+  .clip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
-  /* header */
-  header { position: sticky; top: 0; z-index: 10; background: rgba(255, 255, 255, .78); backdrop-filter: blur(14px);
+  /* header: always on screen, one row on wide screens */
+  header { position: sticky; top: 0; z-index: 20; background: rgba(255, 255, 255, .82); backdrop-filter: blur(14px);
            -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); transition: background .2s; }
-  header:has(#estop.latched) { background: rgba(255, 233, 236, .92); border-bottom-color: #ffc2ca; }
-  .bar1 { display: flex; align-items: center; gap: 12px; padding: 12px 22px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -.4px; }
+  header:has(#estop.latched) { background: rgba(255, 233, 236, .94); border-bottom-color: #ffc2ca; }
+  .hbar { display: flex; align-items: center; gap: 8px 12px; padding: 10px var(--side); flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -.4px; flex: none; }
   .logo { width: 30px; height: 30px; border-radius: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 6px;
           background: linear-gradient(135deg, var(--left), var(--pink) 55%, var(--right)); }
   .logo i { background: rgba(255, 255, 255, .92); border-radius: 3px; }
   .logo i:last-child { opacity: .55; }
   .brand small { font-weight: 600; font-size: 12px; color: var(--muted); letter-spacing: .2px; margin-left: 2px; }
   .state { font-weight: 700; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; padding: 5px 12px 5px 10px;
-           border-radius: 999px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid transparent; }
-  .state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+           border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+           border: 1px solid transparent; min-width: 132px; white-space: nowrap; flex: none; }
+  .state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
   .s-idle { background: var(--panel2); color: var(--muted); border-color: var(--line); }
   .s-ready { background: var(--left-soft); color: var(--left); }
   .s-running { background: var(--blue-soft); color: var(--blue); } .s-running::before { animation: blink 1s infinite; }
@@ -58,61 +63,75 @@
   .s-paused, .s-awaiting_replan { background: var(--amber-soft); color: #b77700; }
   @keyframes blink { 50% { opacity: .25; } }
   .spacer { flex: 1; }
-  .ctl { display: flex; gap: 8px; align-items: center; }
+  .meta { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .meta::-webkit-scrollbar { display: none; }
+  .ctl { display: flex; gap: 8px; align-items: center; flex: none; }
   #estop { background: linear-gradient(135deg, #ff4d5e, #e1123a); color: #fff; border: 0; border-radius: 16px; padding: 12px 22px;
            font-size: 16px; font-weight: 800; letter-spacing: .8px; display: inline-flex; align-items: center; gap: 10px;
+           justify-content: center; flex: none; white-space: nowrap;
            box-shadow: 0 6px 20px rgba(239, 59, 79, .35), inset 0 -2px 0 rgba(0, 0, 0, .12); }
   #estop:hover { box-shadow: 0 10px 28px rgba(239, 59, 79, .45); }
-  #estop svg { width: 20px; height: 20px; }
+  #estop svg { width: 20px; height: 20px; flex: none; }
   #estop.latched { animation: pulse 1s infinite; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(239, 59, 79, .22), 0 6px 20px rgba(239, 59, 79, .4); } }
   kbd { font: 600 11px var(--mono); background: rgba(255, 255, 255, .25); border-radius: 6px; padding: 2px 6px; }
-  .bar2 { display: flex; align-items: center; gap: 8px; padding: 0 22px 12px; flex-wrap: wrap; }
   .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line);
-          color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+          color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; flex: none; }
   .chip b { color: var(--text); font-weight: 700; }
   .chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-  #cfg { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-  #cost { font-family: var(--mono); color: var(--text); background: linear-gradient(90deg, #fff7d6, #ffe9f3); border-color: #f5dcb0; }
+  #cfg { display: inline-flex; gap: 6px; flex: none; }
+  #cost { font-family: var(--mono); color: var(--text); background: linear-gradient(90deg, #fff7d6, #ffe9f3); border-color: #f5dcb0;
+          margin-left: auto; }
 
-  /* layout */
-  main { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; padding: 18px 22px 30px;
-         max-width: 1600px; margin: 0 auto; }
-  @media (max-width: 1050px) { main { grid-template-columns: 1fr; } }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 16px 18px;
-            margin-bottom: 18px; box-shadow: var(--shadow); }
-  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 12px;
-               font-weight: 800; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  section h2 .dot { width: 10px; height: 10px; border-radius: 4px; }
+  /* layout: one column on phones, task | cameras below 1400 px, task | cameras | events on wide screens */
+  main { display: grid; gap: var(--gap); padding: var(--gap) var(--side) 24px; grid-template-columns: minmax(0, 1fr);
+         grid-template-areas: "task" "cams" "side"; }
+  .col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
+  .col-task { grid-area: task; } .col-cams { grid-area: cams; } .col-side { grid-area: side; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 14px 16px;
+            box-shadow: var(--shadow); min-width: 0; }
+  section h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 10px;
+               font-weight: 800; display: flex; align-items: center; gap: 10px; min-width: 0; line-height: 18px; }
+  section h2 .dot { width: 10px; height: 10px; border-radius: 4px; flex: none; }
+  section h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 600; flex: 1 1 auto; }
   .muted { color: var(--muted); } .small { font-size: 12px; } .err { color: var(--red); }
-  textarea { width: 100%; min-height: 70px; resize: vertical; background: var(--panel2); color: var(--text);
-             border: 1.5px solid var(--line); border-radius: 14px; padding: 12px 14px; font: 500 15px/1.45 var(--sans); }
+  textarea { display: block; width: 100%; min-height: 70px; height: 70px; resize: vertical; background: var(--panel2); color: var(--text);
+             border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 14px; font: 500 15px/1.45 var(--sans); }
   textarea:focus { outline: none; border-color: var(--left); box-shadow: 0 0 0 4px var(--left-soft); background: #fff; }
-  .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
   input[type=number] { width: 70px; background: var(--panel2); color: var(--text); border: 1.5px solid var(--line);
                        border-radius: 10px; padding: 7px 8px; font: 600 13px var(--mono); }
   label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
   .primary { background: linear-gradient(135deg, #7a5cff, #5b3cf0); color: #fff; border: 0; padding: 10px 22px;
              box-shadow: 0 6px 16px rgba(108, 76, 245, .30); }
   .go { background: linear-gradient(135deg, #22d39a, #0fb57f); color: #fff; border: 0; padding: 11px 22px; font-size: 15px;
-        box-shadow: 0 6px 16px rgba(15, 181, 127, .30); }
+        box-shadow: 0 6px 16px rgba(15, 181, 127, .30); flex: none; }
 
-  /* plan lanes */
-  .rationale { font-size: 13.5px; color: #4b4662; margin: 2px 0 12px; padding: 10px 12px; border-radius: 12px;
-               background: linear-gradient(90deg, var(--left-soft), var(--right-soft)); }
+  /* plan: chain strip, then the lanes in their own scroll box so a growing card never moves the page */
+  #plansec { display: flex; flex-direction: column; }
+  .rationale { font-size: 13px; color: #4b4662; margin: 0 0 10px; padding: 8px 12px; border-radius: 12px;
+               background: linear-gradient(90deg, var(--left-soft), var(--right-soft)); display: -webkit-box;
+               -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; flex: none; }
   .rationale:empty { display: none; }
-  .lanes { display: grid; grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr); gap: 10px 0; }
-  .chainstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; }
+  #errors { flex: none; } #errors:not(:empty) { margin-bottom: 10px; }
+  #banners { flex: none; }
+  .chainstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; flex: none; }
   .chainstrip:empty { display: none; }
-  .chainstrip .lk { padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; border: 1.5px solid var(--line2);
-    background: var(--panel); color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .chainstrip .lk { padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 700; border: 1.5px solid var(--line2);
+    background: var(--panel); color: var(--muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .chainstrip .lk b { font-family: var(--mono); font-size: 11px; opacity: .7; }
+  .chainstrip .lk .mk { font-style: normal; display: inline-block; width: .8em; margin-left: -2px; }
   .chainstrip .lk.arm-left { border-color: var(--left); } .chainstrip .lk.arm-right { border-color: var(--right); }
   .chainstrip .lk.running { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); }
   .chainstrip .lk.done { background: var(--green-soft); color: var(--green); border-color: var(--green); }
   .chainstrip .lk.failed { background: var(--red-soft); color: var(--red); border-color: var(--red); }
   .chainstrip .ar { color: var(--faint); font-weight: 800; }
-  #imaginesec .cams { grid-template-columns: 1fr; } #imaginesec .cams img { aspect-ratio: 2 / 1; object-fit: contain; }
+  .lanebox { overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; max-height: 70vh; min-height: 120px;
+             margin-right: -8px; padding-right: 8px; container-type: inline-size; }
+  .lanes { display: grid; grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr); gap: 10px 0; padding-bottom: 4px; }
+  .lanes.one { grid-template-columns: minmax(0, 1fr); }
+  .lanehdr { grid-column: 1 / -1; display: grid; grid-template-columns: inherit; position: sticky; top: 0; z-index: 2;
+             background: var(--panel); padding-bottom: 2px; box-shadow: 0 6px 8px -6px rgba(255, 255, 255, 1); }
   .lanehead { font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: .9px; padding: 6px 12px;
               border-radius: 10px; display: flex; align-items: center; gap: 8px; }
   .lanehead::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
@@ -122,7 +141,7 @@
   .par span { font: 800 15px var(--sans); color: #fff; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
               background: linear-gradient(135deg, var(--left), var(--right)); box-shadow: 0 4px 12px rgba(236, 79, 166, .3); }
   .cell { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  .card { border: 1.5px solid var(--line); border-radius: 16px; padding: 11px 13px 11px 16px; background: #fff; min-width: 0;
+  .card { border: 1.5px solid var(--line); border-radius: 16px; padding: 10px 12px 10px 16px; background: #fff; min-width: 0;
           position: relative; transition: box-shadow .2s, border-color .2s; }
   .card::before { content: ""; position: absolute; left: 5px; top: 12px; bottom: 12px; width: 4px; border-radius: 4px;
                   background: var(--armc, var(--faint)); }
@@ -132,53 +151,86 @@
   .card.failed { background: var(--red-soft); border-color: #ffc2ca; }
   .card.interrupted { background: var(--amber-soft); border-color: #f8dd9e; }
   .card.proposed { border-style: dashed; border-color: var(--line2); }
-  .card .t { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-weight: 800; }
-  .card .t > span:first-child { overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 13px; }
+  .card .t { display: flex; gap: 8px; align-items: flex-start; font-weight: 800; min-width: 0; }
+  .card .t .id { flex: 1 1 auto; overflow-wrap: anywhere; font-family: var(--mono); font-size: 13px; min-width: 0; line-height: 1.35; }
+  .card .armtag { display: none; font: 700 10px var(--sans); text-transform: uppercase; letter-spacing: .6px; padding: 2px 7px;
+                  border-radius: 999px; color: var(--armc); background: var(--panel2); flex: none; }
   .card .st { font: 700 10.5px var(--sans); text-transform: uppercase; letter-spacing: .6px; padding: 3px 8px; border-radius: 999px;
-              background: var(--panel2); color: var(--muted); white-space: nowrap; }
+              background: var(--panel2); color: var(--muted); white-space: nowrap; flex: none; }
   .card.running .st { background: var(--blue-soft); color: var(--blue); }
   .card.done .st { background: var(--green-soft); color: var(--green); }
   .card.failed .st { background: #fff; color: var(--red); }
   .card.interrupted .st { background: #fff; color: #b77700; }
-  .card .p { font-size: 13px; margin-top: 5px; color: #3a3550; word-break: break-word; }
+  .card .p { font-size: 13px; margin-top: 4px; color: #3a3550; word-break: break-word; }
   .card .p b { color: var(--armc, var(--text)); font-weight: 700; }
-  .card .c { font-size: 12px; color: var(--muted); margin-top: 3px; }
-  .card .v { font-size: 12px; margin-top: 7px; padding: 6px 8px; border-radius: 10px; background: var(--green-soft); color: #08744f; }
+  .card .c { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .card .live:empty, .card .acts:empty { display: none; }
+  .card .live .c { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .live .c.err { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .card .v { font-size: 12px; line-height: 17px; margin-top: 6px; padding: 6px 8px; border-radius: 10px; background: var(--green-soft);
+             color: #08744f; word-break: break-word; }
+  .card .v > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-height: 34px; }
   .card .v.no { background: var(--panel2); color: #5d5874; }
-  .card .bar { height: 6px; background: var(--panel2); border-radius: 6px; margin-top: 7px; overflow: hidden; }
+  .card.running .v { height: 46px; }   /* two lines, fixed: a new verdict never changes the card height */
+  .card .bar { height: 6px; background: var(--panel2); border-radius: 6px; margin-top: 6px; overflow: hidden; }
   .card .bar > div { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--blue), var(--teal)); }
-  .ov { display: flex; gap: 6px; margin-top: 8px; } .ov button { padding: 3px 10px; font-size: 11px; border-radius: 8px; }
-  .ov button.confirm { padding: 7px 14px; font-size: 13px; font-weight: 700; color: #fff; background: var(--green); border-color: var(--green); }
+  .ov { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; } .ov button { padding: 3px 10px; font-size: 11px; border-radius: 8px; }
+  .ov button.confirm { padding: 9px 14px; font-size: 13.5px; font-weight: 700; color: #fff; background: var(--green); border-color: var(--green);
+                       flex: 1 1 auto; text-align: left; box-shadow: 0 6px 16px rgba(15, 181, 127, .30); }
   .kind-primitive .p { color: var(--teal); }
   .kind-hold { background: repeating-linear-gradient(135deg, #fff, #fff 8px, var(--panel2) 8px, var(--panel2) 16px); }
-  .banner { padding: 11px 14px; border-radius: 14px; margin-bottom: 12px; font-weight: 600; }
+  .banner { padding: 10px 14px; border-radius: 14px; margin-bottom: 10px; font-weight: 600; }
   .banner.estop { background: var(--red-soft); color: #b3172b; border: 1.5px solid #ffc2ca; }
   .banner.replan { background: var(--amber-soft); color: #8a5a00; border: 1.5px solid #f8dd9e; }
-  .empty { grid-column: 1 / -1; text-align: center; padding: 26px 10px; color: var(--muted); border: 1.5px dashed var(--line2);
+  .empty { grid-column: 1 / -1; text-align: center; padding: 22px 10px; color: var(--muted); border: 1.5px dashed var(--line2);
            border-radius: 16px; background: var(--panel2); }
-  .approve-row { justify-content: space-between; }
-  .approve-row .muted { max-width: 520px; }
+  .approve-row { justify-content: space-between; flex-wrap: nowrap; padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--line); flex: none; }
+  .approve-row .muted { max-width: 520px; min-width: 0; }
+  /* narrow plan box (phone, or a narrow task column): one list in execution order, the arm named on each card */
+  @container (max-width: 480px) {
+    .lanes.two { grid-template-columns: minmax(0, 1fr); }
+    .lanes.two .lanehdr, .lanes.two .par, .lanes.two .cell:empty { display: none; }
+    .lanes.two .card .armtag { display: inline-block; }
+  }
 
-  /* stat tiles */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
-  .tile { border-radius: 14px; padding: 10px 12px; background: var(--panel2); border: 1px solid var(--line); min-width: 0; }
-  .tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 700; }
-  .tile .v { font-size: 14px; font-weight: 700; margin-top: 3px; word-break: break-word; }
+  /* run figures: fixed-height box, every value on one line, so a longer number never reflows the column */
+  #runkv { height: 132px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; align-content: start; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+  .tile { border-radius: 12px; padding: 6px 10px; background: var(--panel2); border: 1px solid var(--line); min-width: 0; }
+  .tile .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); font-weight: 700;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .v { font-size: 13px; font-weight: 700; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile.c0 { background: var(--left-soft); border-color: #ddd3ff; } .tile.c1 { background: var(--right-soft); border-color: #ffd9cb; }
   .tile.c2 { background: var(--blue-soft); border-color: #cfe1ff; } .tile.c3 { background: var(--green-soft); border-color: #c4eedd; }
   .tile.c4 { background: #fff7d6; border-color: #f5e3a6; } .tile.c5 { background: #ffe9f5; border-color: #f9cde5; }
+  #runkv .empty { padding: 14px 10px; }
 
-  /* cameras + log */
-  .cams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .cams figure { margin: 0; position: relative; border-radius: 16px; padding: 3px; }
-  .cams figure.head { grid-column: span 2; background: linear-gradient(135deg, var(--left), var(--pink), var(--right)); }
+  /* cameras: every tile keeps its aspect ratio; a missing feed shows a placeholder, never a broken image */
+  .cams { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .cams figure { margin: 0; position: relative; border-radius: 16px; padding: 3px; min-width: 0; transition: background .2s; }
+  .cams figure.head { grid-column: 1 / -1; background: linear-gradient(135deg, var(--left), var(--pink), var(--right)); }
   .cams figure.lw { background: var(--left); } .cams figure.rw { background: var(--right); }
-  .cams img { width: 100%; border-radius: 13px; display: block; aspect-ratio: 4 / 3; object-fit: cover; background: #e9e6f2; }
+  .cams img { width: 100%; border-radius: 13px; display: block; aspect-ratio: 4 / 3; object-fit: contain; background: #e9e6f2; }
+  .cams figure[data-cam="wait"] img, .cams figure[data-cam="off"] img { visibility: hidden; }
+  .cams figure[data-cam="off"] { background: var(--line2); }
+  .cams .ph { position: absolute; inset: 3px; border-radius: 13px; display: none; place-items: center; text-align: center; padding: 12px;
+              font: 700 12px/1.4 var(--sans); letter-spacing: .5px; text-transform: uppercase; color: var(--faint);
+              background: repeating-linear-gradient(135deg, #f3f0f9 0 12px, #eeebf5 12px 24px); }
+  .cams figure[data-cam="wait"] .ph, .cams figure[data-cam="off"] .ph { display: grid; }
+  .cams figure[data-cam="off"] .ph { color: var(--muted); }
   figcaption { position: absolute; left: 12px; top: 12px; font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .6px;
-               padding: 4px 9px; border-radius: 999px; background: rgba(255, 255, 255, .92); color: var(--text); }
+               padding: 4px 9px; border-radius: 999px; background: rgba(255, 255, 255, .92); color: var(--text); z-index: 1;
+               max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   figure.lw figcaption { color: var(--left); } figure.rw figcaption { color: var(--right); }
-  #log { height: 320px; overflow: auto; font: 12px/1.55 var(--mono); background: #fcfbff; border-radius: 14px; padding: 8px 10px;
-         border: 1px solid var(--line); }
+  figure[data-cam="off"] figcaption { color: var(--muted); }
+  #imaginesec .cams { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  #imaginesec .cams img { aspect-ratio: 2 / 1; }
+  #imcap { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  /* events */
+  #eventsec { display: flex; flex-direction: column; }
+  #log { height: 300px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; font: 12px/1.55 var(--mono);
+         background: #fcfbff; border-radius: 14px; padding: 8px 10px; border: 1px solid var(--line); }
   #log div { white-space: pre-wrap; word-break: break-word; padding: 2px 0 2px 14px; position: relative; }
   #log div::before { content: ""; position: absolute; left: 2px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
   #log .l-error { color: #c01d33; } #log .l-error::before { background: var(--red); }
@@ -186,31 +238,79 @@
   #log .l-info { color: #2f2a45; } #log .l-info::before { background: var(--blue); }
   #log .l-debug { color: var(--faint); }
 
+  /* laptops and up: the cameras get a column sized from the screen height so head + both wrists fit without scrolling */
+  @media (min-width: 1000px) {
+    main { --camw: clamp(400px, calc((100vh - var(--hdr) - 104px) * 8 / 9), 54vw);
+           grid-template-columns: minmax(0, 1fr) calc(var(--camw) + 34px);
+           grid-template-rows: auto 1fr; grid-template-areas: "task cams" "side cams"; }
+    .col-task, .col-side { align-self: start; }
+    .col-cams > section { position: sticky; top: calc(var(--hdr) + var(--gap)); }
+    /* the task column fills the first screen exactly; the plan lanes take what the goal and banners leave */
+    .col-task { height: max(560px, calc(100vh - var(--hdr) - 2 * var(--gap))); }
+    #plansec { flex: 1 1 0; min-height: 280px; }
+    .lanebox { flex: 1 1 0; max-height: none; }
+  }
+  /* wide screens: a fixed cockpit, nothing scrolls but the plan lanes and the event log */
+  @media (min-width: 1400px) {
+    main { --camw: clamp(420px, calc((100vh - var(--hdr) - 100px) * 8 / 9), calc(100vw - 840px));
+           height: calc(100vh - var(--hdr)); padding-bottom: var(--gap);
+           grid-template-columns: minmax(0, 1fr) calc(var(--camw) + 34px) minmax(0, .72fr);
+           grid-template-rows: minmax(0, 1fr); grid-template-areas: "task cams side"; }
+    .col-task, .col-side { align-self: stretch; }
+    .col-task { height: auto; }
+    .col-cams > section { position: static; }
+    #plansec { flex: 1 1 0; min-height: 300px; }
+    .lanebox { flex: 1 1 0; max-height: none; }
+    #eventsec { flex: 1 1 0; min-height: 0; }
+    #log { flex: 1 1 0; height: auto; min-height: 64px; }
+    /* on shorter screens the imagined / actual pair shrinks (keeping 2:1) so the run figures and events still fit */
+    #imaginesec .cams { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+    #imaginesec .cams figure { width: 100%; max-width: max(220px, calc(100vh - var(--hdr) - 520px)); }
+  }
+  /* the config chips get their own header row when the bar is too narrow for one line */
+  @media (max-width: 1599px) {
+    .meta { order: 9; flex: 1 1 100%; }
+    .ctl { margin-left: auto; }
+  }
+  @media (max-width: 900px) {
+    .brand small, #estop kbd { display: none; }
+  }
   @media (max-width: 640px) {
-    .bar1, .bar2 { padding-left: 14px; padding-right: 14px; } main { padding: 14px; }
-    .ctl { width: 100%; } #estop { flex: 1; justify-content: center; }
-    .lanes { grid-template-columns: 1fr; } .par { display: none; }
+    :root { --gap: 12px; --side: 12px; }
+    /* phone header: brand and state, then a full-width row with the E-STOP and the run buttons, then the chips */
+    .hbar { gap: 6px 8px; padding-top: 8px; padding-bottom: 8px; }
+    .hbar::before { content: ""; order: 2; flex: 0 0 100%; height: 0; }
+    .brand { font-size: 17px; }
+    .state { order: 1; min-width: 0; }
+    #estop { order: 3; flex: 1 1 auto; padding: 11px 14px; }
+    .ctl { order: 4; margin-left: 0; gap: 6px; } .ctl button { padding: 7px 10px; }
+    section { padding: 12px; border-radius: 16px; }
+    .approve-row { flex-wrap: wrap; } .approve-row .go { flex: 1 1 auto; }
+    .lanebox { max-height: 65vh; }
+    .lanes.two { grid-template-columns: minmax(0, 1fr); }
+    .lanes.two .lanehdr, .lanes.two .par, .lanes.two .cell:empty { display: none; }
+    .lanes.two .card .armtag { display: inline-block; }
+    #log { height: 260px; }
   }
 </style>
 </head>
 <body>
 <header>
-  <div class="bar1">
+  <div class="hbar">
     <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>liminal <small>operator console</small></div>
     <span id="state" class="state s-idle">idle</span>
-    <span class="spacer"></span>
+    <div class="meta"><span id="cfg"></span><span class="chip" id="cost">USD 0.0000</span></div>
     <div class="ctl">
       <button id="release" title="Release the e-stop latch">Release</button>
       <button id="resume" title="Restart interrupted steps">Resume</button>
       <button id="abort" title="Stop the run and log it as aborted">Abort</button>
-      <button id="estop" title="Stop both arms (spacebar)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z"/><path d="M12 7.5v6M12 16.5v.5" stroke-linecap="round"/></svg>E-STOP <kbd>space</kbd></button>
     </div>
+    <button id="estop" title="Stop both arms (spacebar)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M8.2 2.5h7.6l5.7 5.7v7.6l-5.7 5.7H8.2l-5.7-5.7V8.2z"/><path d="M12 7.5v6M12 16.5v.5" stroke-linecap="round"/></svg>E-STOP <kbd>space</kbd></button>
   </div>
-  <div class="bar2"><span id="cfg"></span><span class="spacer"></span><span class="chip" id="cost">USD 0.0000</span></div>
 </header>
 <main>
-  <div>
-    <section>
+  <div class="col col-task">
+    <section id="goalsec">
       <h2><span class="dot" style="background:var(--left)"></span>Goal</h2>
       <textarea id="goal" placeholder="Describe the task" oninput="goalTouched = true"></textarea>
       <div class="row">
@@ -224,41 +324,43 @@
         </span>
       </div>
     </section>
-    <section>
-      <h2><span class="dot" style="background:linear-gradient(135deg,var(--left),var(--right))"></span>Plan <span id="planmeta" class="muted small" style="text-transform:none;letter-spacing:0;font-weight:600"></span></h2>
+    <section id="plansec">
+      <h2><span class="dot" style="background:linear-gradient(135deg,var(--left),var(--right))"></span>Plan <span id="planmeta" class="muted small sub clip"></span></h2>
       <div id="banners"></div>
       <div id="rationale" class="rationale"></div>
       <div id="errors" class="err small"></div>
       <div id="chain" class="chainstrip"></div>
-      <div id="lanes" class="lanes"></div>
+      <div id="lanebox" class="lanebox"><div id="lanes" class="lanes"></div></div>
       <div class="row approve-row">
         <span class="muted small">A human approves every plan. Claude only picks skills from the vocabulary; nothing it writes reaches the motors.</span>
         <button class="go" id="approve" disabled>Approve and run</button>
       </div>
     </section>
-    <section>
-      <h2><span class="dot" style="background:var(--blue)"></span>Run</h2>
-      <div class="tiles" id="runkv"></div>
-    </section>
   </div>
-  <div>
-    <section>
+  <div class="col col-cams">
+    <section id="camsec">
       <h2><span class="dot" style="background:var(--pink)"></span>Cameras</h2>
       <div class="cams">
-        <figure class="head"><img id="cam-head" alt="head camera"><figcaption>head camera</figcaption></figure>
-        <figure class="lw"><img id="cam-left_wrist" alt="left wrist camera"><figcaption>left wrist</figcaption></figure>
-        <figure class="rw"><img id="cam-right_wrist" alt="right wrist camera"><figcaption>right wrist</figcaption></figure>
+        <figure class="head" data-cam="wait" data-off="not connected"><img id="cam-head" alt="head camera"><span class="ph">connecting</span><figcaption>head camera</figcaption></figure>
+        <figure class="lw" data-cam="wait" data-off="not connected"><img id="cam-left_wrist" alt="left wrist camera"><span class="ph">connecting</span><figcaption>left wrist</figcaption></figure>
+        <figure class="rw" data-cam="wait" data-off="not connected"><img id="cam-right_wrist" alt="right wrist camera"><span class="ph">connecting</span><figcaption>right wrist</figcaption></figure>
       </div>
     </section>
+  </div>
+  <div class="col col-side">
     <section id="imaginesec" style="display:none">
       <h2><span class="dot" style="background:var(--yellow)"></span>Imagined vs actual</h2>
       <div class="cams">
-        <figure class="lw"><img id="cam-imagined" alt="imagined"><figcaption>FLUX imagined: head | wrist</figcaption></figure>
-        <figure class="rw"><img id="cam-actual" alt="actual"><figcaption>actual: head | wrist</figcaption></figure>
+        <figure class="lw" data-cam="wait" data-off="no imagined frame"><img id="cam-imagined" alt="imagined"><span class="ph">waiting for the first imagined chunk</span><figcaption>FLUX imagined: head | wrist</figcaption></figure>
+        <figure class="rw" data-cam="wait" data-off="no frame"><img id="cam-actual" alt="actual"><span class="ph">waiting for the first imagined chunk</span><figcaption>actual: head | wrist</figcaption></figure>
       </div>
-      <div class="c" id="imcap" style="margin-top:8px"></div>
+      <div class="c clip" id="imcap"></div>
     </section>
-    <section>
+    <section id="runsec">
+      <h2><span class="dot" style="background:var(--blue)"></span>Run</h2>
+      <div class="tiles" id="runkv"></div>
+    </section>
+    <section id="eventsec">
       <h2><span class="dot" style="background:var(--teal)"></span>Events</h2>
       <div id="log"></div>
     </section>
@@ -278,6 +380,9 @@ async function post(path, body = {}) {
 }
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 function addLocal(level, msg) { const d = document.createElement("div"); d.className = "l-" + level; d.textContent = "(hmi) " + msg; $("log").appendChild(d); $("log").scrollTop = 1e9; }
+// Presentation only: touch the DOM only when the markup changed, so the poll does not replace a button under the
+// cursor (a click that spans a re-render can be lost) and an identical update does not reflow anything.
+function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } return el; }
 
 function estop() { $("estop").classList.add("latched"); post("/api/estop"); }
 $("estop").onclick = estop;
@@ -294,65 +399,124 @@ document.addEventListener("keydown", (e) => {
   if (running || !typing) { e.preventDefault(); estop(); }
 });
 
-function card(st, isRun) {
+// the header height feeds the cockpit layout (it wraps to more rows on narrow screens)
+const headerEl = document.querySelector("header");
+let headerPx = "";
+function syncHeader() { const h = headerEl.offsetHeight + "px"; if (h !== headerPx) { headerPx = h; document.documentElement.style.setProperty("--hdr", h); } }
+syncHeader();
+addEventListener("resize", syncHeader);
+if (window.ResizeObserver) new ResizeObserver(syncHeader).observe(headerEl);
+
+// one step card in four parts, each patched on its own: title, static description, live progress, buttons
+function cardParts(st, isRun) {
   const kind = st.skill === "hold" ? "kind-hold" : "kind-" + (st.kind || "flux");
   const status = st.status || "proposed";
-  let html = `<div class="card ${status} ${kind} arm-${esc(st.arm)}"><div class="t"><span>${esc(st.id)}</span><span class="st">${esc(status)}${st.attempt ? " " + st.attempt + "/" + st.max_attempts : ""}</span></div>`;
-  if (st.skill === "hold") html += `<div class="p">holds until <b>${esc((st.hold_until || []).join(", "))}</b> are done</div>`;
-  else if (st.kind === "primitive") html += `<div class="p">scripted: <b>${esc(st.skill)}</b></div>`;
-  else if (st.kind === "operator") html += `<div class="p">operator: <b>${esc(st.instruction || st.skill)}</b></div>`;
-  else if (st.driver) html += `<div class="p"><b>REPLAY</b> ${esc(st.driver)}, not FLUX</div>`;
-  else html += `<div class="p"><b>FLUX</b> "${esc(st.prompt || "")}"</div>`;
-  if (st.success_check) html += `<div class="c">check: ${esc(st.success_check)}</div>`;
-  if (st.depends_on && st.depends_on.length) html += `<div class="c">after ${esc(st.depends_on.join(", "))}</div>`;
+  const cls = `card ${status} ${kind} arm-${st.arm}`;
+  const head = `<span class="id" title="${esc(st.id)}">${esc(st.id)}</span><span class="armtag">${esc(st.arm)}</span><span class="st">${esc(status)}${st.attempt ? " " + st.attempt + "/" + st.max_attempts : ""}</span>`;
+  let body = "";
+  if (st.skill === "hold") body += `<div class="p">holds until <b>${esc((st.hold_until || []).join(", "))}</b> are done</div>`;
+  else if (st.kind === "primitive") body += `<div class="p">scripted: <b>${esc(st.skill)}</b></div>`;
+  else if (st.kind === "operator") body += `<div class="p">operator: <b>${esc(st.instruction || st.skill)}</b></div>`;
+  else if (st.driver) body += `<div class="p"><b>REPLAY</b> ${esc(st.driver)}, not FLUX</div>`;
+  else body += `<div class="p"><b>FLUX</b> "${esc(st.prompt || "")}"</div>`;
+  if (st.success_check) body += `<div class="c">check: ${esc(st.success_check)}</div>`;
+  if (st.depends_on && st.depends_on.length) body += `<div class="c">after ${esc(st.depends_on.join(", "))}</div>`;
+  let live = "";
   if (isRun && status === "running") {
     const pct = Math.min(100, 100 * (st.elapsed_s || 0) / (st.timeout_s || 1));
-    html += `<div class="c">${(st.elapsed_s || 0).toFixed(1)} s of ${st.timeout_s} s, ${st.chunks} chunks${st.phase ? ", " + esc(st.phase) : ""}${st.verifying ? ", checking..." : ""}</div><div class="bar"><div style="width:${pct}%"></div></div>`;
+    const prog = `${(st.elapsed_s || 0).toFixed(1)} s of ${st.timeout_s} s, ${st.chunks} chunks${st.phase ? ", " + esc(st.phase) : ""}${st.verifying ? ", checking..." : ""}`;
+    live += `<div class="c" title="${prog}">${prog}</div><div class="bar"><div style="width:${pct}%"></div></div>`;
+    if (!st.last_verdict && st.kind !== "operator") live += `<div class="v no"><span>not checked yet</span></div>`;
   }
   if (isRun && st.last_verdict) {
-    const v = st.last_verdict;
-    html += `<div class="v ${v.done ? "" : "no"}">${v.done ? "&#10003;" : "&#8230;"} ${esc(v.source)} (${(v.confidence ?? 0).toFixed(2)}): ${esc(v.observation)}</div>`;
+    const v = st.last_verdict, txt = `${esc(v.source)} (${(v.confidence ?? 0).toFixed(2)}): ${esc(v.observation)}`;
+    live += `<div class="v ${v.done ? "" : "no"}" title="${txt}"><span>${v.done ? "&#10003;" : "&#8230;"} ${txt}</span></div>`;
   }
-  if (isRun && st.reason && status !== "done") html += `<div class="c err">${esc(st.reason)}</div>`;
+  if (isRun && st.reason && status !== "done") live += `<div class="c err" title="${esc(st.reason)}">${esc(st.reason)}</div>`;
+  let acts = "";
   if (isRun && st.kind === "operator" && status === "running" && st.phase === "waiting for the operator")
-    html += `<div class="ov"><button class="confirm" onclick="post('/api/confirm',{step:'${esc(st.id)}'})">Done: ${esc(st.instruction || "continue")}</button></div>`;
+    acts += `<div class="ov"><button class="confirm" onclick="post('/api/confirm',{step:'${esc(st.id)}'})">Done: ${esc(st.instruction || "continue")}</button></div>`;
   if (isRun && status !== "done" && S.run && !TERMINAL.includes(S.run.state))
-    html += `<div class="ov"><button onclick="post('/api/override',{step:'${esc(st.id)}',done:true})">mark done</button><button onclick="post('/api/override',{step:'${esc(st.id)}',done:false})">mark failed</button></div>`;
-  return html + "</div>";
+    acts += `<div class="ov"><button onclick="post('/api/override',{step:'${esc(st.id)}',done:true})">mark done</button><button onclick="post('/api/override',{step:'${esc(st.id)}',done:false})">mark failed</button></div>`;
+  return { cls, head, body, live, acts };
 }
 
 function renderChain(steps, lv) {
   // the chain in execution order: one numbered chip per step (hold steps left out), coloured by arm and status
   const order = steps.filter(s => s.skill !== "hold").slice().sort((a, b) => lv(a) - lv(b));
-  $("chain").innerHTML = order.map((s, i) => `<span class="lk arm-${esc(s.arm)} ${esc(s.status || "")}" title="${esc(s.arm)} arm: ${esc(s.skill)}"><b>${i + 1}</b>${esc(s.skill.replaceAll("_", " "))}${s.status === "done" ? " &#10003;" : s.status === "failed" ? " &#10007;" : ""}</span>`).join('<span class="ar">&#8594;</span>');
+  setHTML($("chain"), order.map((s, i) => `<span class="lk arm-${esc(s.arm)} ${esc(s.status || "")}" title="${esc(s.arm)} arm: ${esc(s.skill)}"><b>${i + 1}</b>${esc(s.skill.replaceAll("_", " "))}<i class="mk">${s.status === "done" ? "&#10003;" : s.status === "failed" ? "&#10007;" : ""}</i></span>`).join('<span class="ar">&#8594;</span>'));
+}
+
+let laneKey = "", activeStep = null;
+function revealCard(box, el) {
+  // scroll the lanes box (never the page) so the card is fully visible below the sticky lane header
+  if (!el || !el.isConnected || box.scrollHeight <= box.clientHeight) return;
+  const b = box.getBoundingClientRect(), r = el.getBoundingClientRect(), hdr = box.querySelector(".lanehdr");
+  const top = b.top + (hdr && hdr.offsetParent ? hdr.offsetHeight : 0) + 8, bottom = b.bottom - 8;
+  let dy = 0;
+  if (r.height > bottom - top) dy = r.bottom - bottom;  // taller than the box: its buttons (at the bottom) matter most
+  else if (r.top < top) dy = r.top - top;
+  else if (r.bottom > bottom) dy = r.bottom - bottom;
+  if (dy) box.scrollTo({ top: box.scrollTop + dy, behavior: "smooth" });
 }
 
 function renderLanes(steps, levels, pairs, isRun) {
-  const lanes = $("lanes");
-  if (!steps || !steps.length) { $("chain").innerHTML = ""; lanes.innerHTML = '<div class="empty">No plan yet. Type a goal and press <b>Plan</b>.</div>'; return; }
+  const lanes = $("lanes"), box = $("lanebox");
+  if (!steps || !steps.length) {
+    setHTML($("chain"), "");
+    if (laneKey !== "empty") { laneKey = "empty"; lanes.className = "lanes one"; lanes.innerHTML = '<div class="empty">No plan yet. Type a goal and press <b>Plan</b>.</div>'; }
+    activeStep = null; return;
+  }
   const lv = (s) => (levels && levels[s.id] != null) ? levels[s.id] : (s.level ?? 0);
   renderChain(steps, lv);
   const maxL = Math.max(...steps.map(lv));
   const pairSet = new Set((pairs || []).map(p => p[0] + "|" + p[1]));
-  let html = '<div class="lanehead left">left arm</div><div></div><div class="lanehead right">right arm</div>';
+  const used = ["left", "right"].filter(a => steps.some(s => s.arm === a));
+  const two = used.length !== 1;  // a plan on one arm gets one full-width lane
+  const order = [], slot = (list) => { order.push(...list); return list.map(() => '<div class="card"><div class="t"></div><div class="b"></div><div class="live"></div><div class="acts"></div></div>').join(""); };
+  let html = two ? '<div class="lanehdr"><div class="lanehead left">left arm</div><div></div><div class="lanehead right">right arm</div></div>'
+                 : `<div class="lanehdr"><div class="lanehead ${used[0]}">${used[0]} arm</div></div>`;
   for (let l = 0; l <= maxL; l++) {
-    const L = steps.filter(s => s.arm === "left" && lv(s) === l), R = steps.filter(s => s.arm === "right" && lv(s) === l);
-    const conc = L.some(a => R.some(b => pairSet.has(a.id + "|" + b.id)));
-    html += `<div class="cell">${L.map(s => card(s, isRun)).join("")}</div>`;
-    html += `<div class="par" title="${conc ? "runs in parallel" : ""}">${conc ? "<span>&#8741;</span>" : ""}</div>`;
-    html += `<div class="cell">${R.map(s => card(s, isRun)).join("")}</div>`;
+    if (two) {
+      const L = steps.filter(s => s.arm === "left" && lv(s) === l), R = steps.filter(s => s.arm === "right" && lv(s) === l);
+      const conc = L.some(a => R.some(b => pairSet.has(a.id + "|" + b.id)));
+      html += `<div class="cell">${slot(L)}</div>`;
+      html += `<div class="par" title="${conc ? "runs in parallel" : ""}">${conc ? "<span>&#8741;</span>" : ""}</div>`;
+      html += `<div class="cell">${slot(R)}</div>`;
+    } else {
+      const C = steps.filter(s => s.arm === used[0] && lv(s) === l);
+      if (C.length) html += `<div class="cell">${slot(C)}</div>`;
+    }
   }
-  lanes.innerHTML = html;
+  // the skeleton (which card sits where) changes only with a new plan; the cards themselves are patched in place
+  const key = (two ? "2|" : "1|") + order.map(s => esc(s.id)).join(",") + "|" + html;
+  if (key !== laneKey) {
+    laneKey = key; activeStep = null;
+    lanes.className = "lanes " + (two ? "two" : "one"); lanes.innerHTML = html; box.scrollTop = 0;
+  }
+  const els = lanes.querySelectorAll(".card");
+  order.forEach((s, i) => {
+    const el = els[i]; if (!el) return;
+    const p = cardParts(s, isRun);
+    if (el.className !== p.cls) el.className = p.cls;
+    setHTML(el.children[0], p.head); setHTML(el.children[1], p.body); setHTML(el.children[2], p.live); setHTML(el.children[3], p.acts);
+  });
+  // keep the active step (the one waiting for the operator first) in view, but only when it changes
+  const act = isRun ? (order.find(s => s.status === "running" && s.kind === "operator" && s.phase === "waiting for the operator")
+                       || order.find(s => s.status === "running")) : null;
+  const actId = act ? act.id : null;
+  if (actId !== activeStep) { activeStep = actId; if (act) requestAnimationFrame(() => revealCard(box, els[order.indexOf(act)])); }
 }
 
 function tiles(rows) { return rows.map(([k, v], i) => `<div class="tile c${i % 6}"><div class="k">${esc(k)}</div><div class="v">${v}</div></div>`).join(""); }
 
 function render() {
   if (!S) return;
+  syncHeader();
   const c = S.config;
   const dots = { env: "var(--teal)", policy: "var(--left)", planner: "var(--pink)", verifier: "var(--right)", gate: "var(--green)" };
-  $("cfg").innerHTML = [["env", c.env], ["policy", c.policy], ["planner", c.planner_model || c.planner], ["verifier", c.verifier], ["gate", c.gate ? "on" : "off"]]
-    .map(([k, v]) => `<span class="chip"><i style="background:${dots[k]}"></i>${k} <b>${esc(v)}</b></span>`).join("");
+  setHTML($("cfg"), [["env", c.env], ["policy", c.policy], ["planner", c.planner_model || c.planner], ["verifier", c.verifier], ["gate", c.gate ? "on" : "off"]]
+    .map(([k, v]) => `<span class="chip"><i style="background:${dots[k]}"></i>${k} <b>${esc(v)}</b></span>`).join(""));
   $("simctl").style.display = c.env === "sim" ? "" : "none";
   if (!goalTouched && c.demo_goal && !$("goal").value) { $("goal").value = c.demo_goal; $("goal").placeholder = "Describe the task, e.g. " + c.demo_goal; }
   if (!seedSynced && c.seed != null && document.activeElement !== $("seed")) { $("seed").value = c.seed; $("lidonbox").checked = !!c.lid_on_box; seedSynced = true; }
@@ -368,24 +532,25 @@ function render() {
   let banners = "";
   if (S.estopped) banners += `<div class="banner estop">&#9888; E-STOP latched: both arms hold their last command. Release, then Resume or Abort.</div>`;
   if (run && run.state === "awaiting_replan") banners += `<div class="banner replan">&#8635; A step failed. ${p && p.kind === "replan" ? "Claude proposed a new plan below: approve it to continue." : "Waiting for the planner..."}</div>`;
-  $("banners").innerHTML = banners;
+  setHTML($("banners"), banners);
   if (p && (!active || p.kind === "replan")) {
     proposalVersion = p.ok ? p.version : null;
     $("approve").disabled = !p.ok || (p.kind === "plan" && active);
     $("approve").textContent = p.kind === "replan" ? "Approve replan and continue" : "Approve and run";
     $("planmeta").textContent = `v${p.version} from ${p.source}, ${p.attempts} attempt(s), ${p.latency_s} s, USD ${p.cost_usd.toFixed(4)}` + (p.concurrent_pairs && p.concurrent_pairs.length ? `, ${p.concurrent_pairs.length} parallel pair(s)` : "");
     $("rationale").textContent = p.plan ? (p.plan.rationale || "") : "";
-    $("errors").innerHTML = (p.errors || []).map(e => "&#9888; " + esc(e)).join("<br>");
+    setHTML($("errors"), (p.errors || []).map(e => "&#9888; " + esc(e)).join("<br>"));
     const steps = p.plan ? p.plan.steps.map(s => ({ ...s, kind: (S.vocabulary.find(v => v.name === s.skill) || {}).kind, prompt: (S.vocabulary.find(v => v.name === s.skill) || {}).prompt, driver: (S.vocabulary.find(v => v.name === s.skill) || {}).driver })) : [];
     renderLanes(steps, p.levels, p.concurrent_pairs, false);
   } else if (run) {
     proposalVersion = null; $("approve").disabled = true; $("approve").textContent = "Approve and run";
-    $("planmeta").textContent = `running plan v${run.plan_version}`; $("errors").innerHTML = ""; $("rationale").textContent = "";
+    $("planmeta").textContent = `running plan v${run.plan_version}`; setHTML($("errors"), ""); $("rationale").textContent = "";
     renderLanes(run.steps, null, run.concurrent_pairs, true);
   } else { proposalVersion = null; $("approve").disabled = true; renderLanes([], null, [], false); }
+  $("planmeta").title = $("planmeta").textContent; $("rationale").title = $("rationale").textContent;
   const im = S.imagination || {};
   $("imaginesec").style.display = im.enabled ? "" : "none";
-  if (im.enabled) $("imcap").textContent = im.ready ? `${im.arm} arm, imagined ${im.ahead_s} s ahead of its chunk, fetched ${im.age_s} s ago (${im.fetched} chunks)` : (im.error ? "imagination: " + im.error : "waiting for the first chunk's imagination");
+  if (im.enabled) { $("imcap").textContent = im.ready ? `${im.arm} arm, imagined ${im.ahead_s} s ahead of its chunk, fetched ${im.age_s} s ago (${im.fetched} chunks)` : (im.error ? "imagination: " + im.error : "waiting for the first chunk's imagination"); $("imcap").title = $("imcap").textContent; }
   const rows = [];
   if (run) {
     const cc = run.concurrency || {};
@@ -399,14 +564,19 @@ function render() {
   if (S.gate) rows.push(["collision gate", `${S.gate.chunks} chunks, ${S.gate.truncated} truncated, ${S.gate.refused} refused, ${S.gate.ms_per_frame ?? "-"} ms/frame`]);
   for (const [k, v] of Object.entries(cost.by_purpose || {})) rows.push([`Claude ${k}`, `${v.calls} calls, USD ${v.cost_usd.toFixed(4)}, median ${v.median_latency_s?.toFixed(1)} s`]);
   if (S.last_result && S.last_result.trial) { const t = S.last_result.trial; rows.push(["last trial", `${esc(t.task)}/${esc(t.variant)} #${t.attempt}: ${t.steps_done}/${t.steps_total} steps, ${t.success ? "success" : "fail"}`]); }
-  $("runkv").innerHTML = rows.length ? tiles(rows) : '<div class="empty">Nothing has run yet.</div>';
+  const kv = $("runkv"), kvHTML = rows.length ? tiles(rows) : '<div class="empty">Nothing has run yet.</div>';
+  if (kv._html !== kvHTML) { setHTML(kv, kvHTML); kv.querySelectorAll(".tile").forEach(t => { t.title = t.innerText.replace(/\n+/g, " "); }); }
   const log = $("log"), stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
   for (const e of S.events) {
     if (e.seq <= lastSeq) continue; lastSeq = e.seq;
     const d = document.createElement("div"); d.className = "l-" + e.level;
     d.textContent = new Date(e.time * 1000).toLocaleTimeString() + "  " + e.msg; log.appendChild(d);
   }
-  while (log.childElementCount > 600) log.removeChild(log.firstChild);
+  if (log.childElementCount > 600) {
+    const h = log.scrollHeight;
+    while (log.childElementCount > 600) log.removeChild(log.firstChild);
+    if (!stick) log.scrollTop -= h - log.scrollHeight;  // keep the lines being read where they are
+  }
   if (stick) log.scrollTop = 1e9;
 }
 
@@ -414,11 +584,22 @@ async function poll() {
   try { const r = await fetch("/api/state"); S = await r.json(); render(); } catch (e) {}
   setTimeout(poll, 300);
 }
+// a feed that fails twice in a row is shown as not connected (e.g. the right wrist with the pen-only vocabulary)
+const camMiss = {};
+function camState(n, ok) {
+  const img = $("cam-" + n), fig = img && img.closest("figure");
+  if (!fig) return;
+  camMiss[n] = ok ? 0 : (camMiss[n] || 0) + 1;
+  const want = ok ? "live" : camMiss[n] >= 2 ? "off" : fig.dataset.cam;
+  if (fig.dataset.cam === want) return;
+  fig.dataset.cam = want;
+  if (want === "off") fig.querySelector(".ph").textContent = fig.dataset.off || "not connected";
+}
 function cams() {
   const t = Date.now();
   const names = ["head", "left_wrist", "right_wrist"];
   if (S && S.imagination && S.imagination.ready) names.push("imagined", "actual");
-  for (const n of names) { const img = new Image(); img.onload = () => { $("cam-" + n).src = img.src; }; img.src = `/api/frame/${n}.jpg?t=${t}`; }
+  for (const n of names) { const img = new Image(); img.onload = () => { $("cam-" + n).src = img.src; camState(n, true); }; img.onerror = () => camState(n, false); img.src = `/api/frame/${n}.jpg?t=${t}`; }
   setTimeout(cams, 250);
 }
 poll(); cams();
