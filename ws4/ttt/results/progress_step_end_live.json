@@ -1,0 +1,117 @@
+{
+ "condition": "flux_sim_closed_loop.py --backend scripted --plan open_lid:left,close_lid:left --seed 0 --episodes 6 --max-chunks 20 (the Sec. 11.10 dry run)",
+ "runs": {
+  "check_ended/old": {
+   "monitor": {
+    "all": {
+     "stage_acc": 0.5384615384615384,
+     "replans": 78
+    },
+    "flux": {
+     "stage_acc": 0.5384615384615384,
+     "replans": 78
+    },
+    "scripted": {
+     "stage_acc": null,
+     "replans": 0
+    }
+   },
+   "flag": "--stand-in-stops-on-check",
+   "episodes": 6,
+   "flux_success": {
+    "open_lid": {
+     "success": 6,
+     "steps": 6
+    },
+    "close_lid": {
+     "success": 6,
+     "steps": 6
+    }
+   }
+  },
+  "check_ended/new": {
+   "monitor": {
+    "all": {
+     "stage_acc": 1.0,
+     "replans": 78
+    },
+    "flux": {
+     "stage_acc": 1.0,
+     "replans": 78
+    },
+    "scripted": {
+     "stage_acc": null,
+     "replans": 0
+    }
+   },
+   "flag": "--stand-in-stops-on-check",
+   "episodes": 6,
+   "flux_success": {
+    "open_lid": {
+     "success": 6,
+     "steps": 6
+    },
+    "close_lid": {
+     "success": 6,
+     "steps": 6
+    }
+   }
+  },
+  "run_to_end/old": {
+   "monitor": {
+    "all": {
+     "stage_acc": 0.9930555555555556,
+     "replans": 144
+    },
+    "flux": {
+     "stage_acc": 0.9930555555555556,
+     "replans": 144
+    },
+    "scripted": {
+     "stage_acc": null,
+     "replans": 0
+    }
+   },
+   "flag": "",
+   "episodes": 6,
+   "flux_success": {
+    "open_lid": {
+     "success": 6,
+     "steps": 6
+    },
+    "close_lid": {
+     "success": 6,
+     "steps": 6
+    }
+   }
+  },
+  "run_to_end/new": {
+   "monitor": {
+    "all": {
+     "stage_acc": 1.0,
+     "replans": 144
+    },
+    "flux": {
+     "stage_acc": 1.0,
+     "replans": 144
+    },
+    "scripted": {
+     "stage_acc": null,
+     "replans": 0
+    }
+   },
+   "flag": "",
+   "episodes": 6,
+   "flux_success": {
+    "open_lid": {
+     "success": 6,
+     "steps": 6
+    },
+    "close_lid": {
+     "success": 6,
+     "steps": 6
+    }
+   }
+  }
+ }
+}

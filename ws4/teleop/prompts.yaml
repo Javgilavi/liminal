@@ -1,0 +1,15 @@
+# Frozen instruction strings, one per dataset (validate.py --prompts checks every episode against this list).
+# LeRobot keys tasks by exact string: a retyped variant silently splits a dataset into two conditioning groups.
+# Paste from here into the cockpit's Dataset tab; never retype.
+#
+# PROPOSAL, from ws4/research/xlerobot_recording_protocol.md. Not frozen until the team picks the demo task.
+# Write them WITHOUT an arm suffix: to_flux.py appends " with the left arm" / " with the right arm" (robot sides)
+# to the per-arm datasets, the same convention ws4/data/fetch_public.sh used for the public sets. The deployment
+# prompt for a per-arm policy is therefore "<prompt> with the <robot side> arm".
+prompts:
+  s1_push_bottle: Push the bottle away from the box
+  s2_open_hold_lid: Open the box lid and hold it open
+  s3_apple_in_box: Put the apple in the box
+  s4_block_in_box: Put the yellow block in the box
+  s5_close_lid: Close the box lid
+  calib_free_motion: Move both arms through the workspace

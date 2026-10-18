@@ -1,0 +1,22 @@
+{
+  "v": 4,
+  "createdOnFiles": {"v": 1, "at": "2026-10-17T19:55:00Z"},
+  "lists": "css",
+  "title": "liminal: a robot that imagines, then acts",
+  "order": ["cover", "zeroshot", "contract", "diagnosis", "architecture", "orchestrator", "teach", "heldout", "results", "knifeedge", "imagination", "imaginebetter", "safety", "memory", "sim", "realworld", "team", "next", "close"],
+  "sections": {
+    "s1": {"description": "Hook: the Haller and the task", "start": "cover"},
+    "s2": {"description": "Problem: the released checkpoint failed every graded zero-shot attempt", "start": "zeroshot"},
+    "s3": {"description": "Diagnosis: a calibration contract, fixed offline without training", "start": "contract"},
+    "s4": {"description": "Approach: the 4-skill chain, VR demos, one LoRA per skill, guarded runners", "start": "architecture"},
+    "s5": {"description": "Results: held-out offline, the first inserts on the arm, the knife-edge finding", "start": "heldout"},
+    "s6": {"description": "Imagine, then act: decoded imagination, improved by fine-tuning", "start": "imagination"},
+    "s7": {"description": "Final only: safety, memory, simulation", "start": "safety"},
+    "s8": {"description": "Close: real-world use, team, next steps", "start": "realworld"}
+  },
+  "faces": {
+    "plus-jakarta-sans": {"family": "Plus Jakarta Sans", "href": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"},
+    "jetbrains-mono": {"family": "JetBrains Mono", "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"}
+  },
+  "designSystems": []
+}

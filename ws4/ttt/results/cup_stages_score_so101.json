@@ -1,0 +1,42 @@
+{
+ "stages": [
+  "reach",
+  "carry",
+  "in_cup"
+ ],
+ "models": {
+  "none": {
+   "n": 440,
+   "stage_acc": 0.7863636363636364,
+   "stage_acc_repeat": NaN,
+   "occurrence_acc": 1.0,
+   "skill_acc": 0.7863636363636364,
+   "progress_mae": 0.3599861959614327,
+   "stage_progress_mae": 0.2836717151881506,
+   "done_auroc": NaN,
+   "done_f1": 0.0
+  },
+  "gru": {
+   "n": 440,
+   "stage_acc": 0.35909090909090907,
+   "stage_acc_repeat": NaN,
+   "occurrence_acc": 1.0,
+   "skill_acc": 0.35909090909090907,
+   "progress_mae": 0.298982208458106,
+   "stage_progress_mae": 0.24276664830508413,
+   "done_auroc": NaN,
+   "done_f1": 0.0
+  },
+  "ttt": {
+   "n": 440,
+   "stage_acc": 0.5340909090909091,
+   "stage_acc_repeat": NaN,
+   "occurrence_acc": 1.0,
+   "skill_acc": 0.5340909090909091,
+   "progress_mae": 0.3442483641420898,
+   "stage_progress_mae": 0.25037206511146254,
+   "done_auroc": NaN,
+   "done_f1": 0.0
+  }
+ }
+}

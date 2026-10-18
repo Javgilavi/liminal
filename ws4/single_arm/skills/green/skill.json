@@ -1,0 +1,183 @@
+{
+ "skill": "green",
+ "arm": "left",
+ "dataset": "/home/oscar-devos/.cache/huggingface/lerobot/ws4/haller_put_the_green_pen_in_the_green_slot",
+ "snapshot": "/home/oscar-devos/liminal/ws4/.cache/single_arm_diag/skill_green_20261018_021053",
+ "task": "put the green pen in the green slot",
+ "workspace": "ws4/single_arm/skills/green/workspace.json",
+ "layouts": "ws4/single_arm/skills/green/layouts",
+ "home_ref": "ws4/single_arm/skills/green/layouts",
+ "eval_layouts": "P3 P3 P3 P3 P3",
+ "split": {
+  "source": "ws4_split.json 2026-10-18T01:50:33+02:00",
+  "heldout": {
+   "P3": [
+    63,
+    64,
+    65
+   ]
+  },
+  "drop": [
+   14,
+   18,
+   25,
+   44,
+   50
+  ],
+  "train": [
+   0,
+   1,
+   2,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   16,
+   17,
+   19,
+   20,
+   21,
+   22,
+   24,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   42,
+   43,
+   45,
+   46,
+   48,
+   49,
+   51,
+   52,
+   53,
+   54,
+   55,
+   56,
+   57,
+   58,
+   59,
+   60,
+   61,
+   62
+  ],
+  "provisional": false,
+  "excluded": [
+   3,
+   15,
+   23,
+   41,
+   47
+  ]
+ },
+ "parked_other_arm": {
+  "median": [
+   12.1,
+   -13.8,
+   12.3,
+   37.5,
+   29.9,
+   0.9
+  ],
+  "min": [
+   12.0,
+   -13.8,
+   12.3,
+   37.5,
+   29.9,
+   0.9
+  ],
+  "max": [
+   12.3,
+   -13.8,
+   12.3,
+   37.5,
+   29.9,
+   0.9
+  ],
+  "max_dev_deg": 0.2,
+  "source": "left_* columns over 56 good takes"
+ },
+ "validation": {
+  "station": {
+   "steps": 48456,
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
+  },
+  "heldout_with_envelope": {
+   "steps": 2288,
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
+  },
+  "zones": [
+   "table",
+   "base",
+   "fold",
+   "torso",
+   "mast",
+   "midline",
+   "other_arm",
+   "joint_env",
+   "tcp_env"
+  ],
+  "ok": true
+ },
+ "overrides": {
+  "exclude": [
+   3,
+   15,
+   23,
+   41,
+   47
+  ],
+  "midline": 0.23,
+  "env_gap": 0.02,
+  "env_voxels_trimmed": 7,
+  "reason": "green slot sits in the box on the robot's right; demos reach -0.179 measured / -0.198 commanded; takes 3, 15, 23, 41, 47 are small outliers (box-arm clearance, mast, table), left out of the safety envelope only; 2 cm envelope trim near the lid-holding box arm (approved by the orchestrator 18 Oct)"
+ },
+ "refs": true,
+ "built": "2026-10-18 02:13:42",
+ "other_arm_gate": {
+  "joint_lo": [
+   -2.5,
+   -38.9,
+   -25.9,
+   -30.6,
+   24.9,
+   0.0
+  ],
+  "joint_hi": [
+   26.9,
+   31.5,
+   53.4,
+   46.9,
+   93.9,
+   100.0
+  ],
+  "demo_poses": "ws4/single_arm/skills/green/demo_poses.npz",
+  "n_demo_poses": 3036,
+  "max_below": 0.01,
+  "box_end_takes": 59,
+  "reason": "the box-skill end pose varies run to run; a joint range would refuse nearly every real run"
+ }
+}

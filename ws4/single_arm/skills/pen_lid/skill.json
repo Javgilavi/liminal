@@ -1,0 +1,135 @@
+{
+ "skill": "pen_lid",
+ "arm": "left",
+ "dataset": "/home/oscar-devos/.cache/huggingface/lerobot/ws4/haller_put_the_red_pen_in_its_slot_lid_held",
+ "snapshot": "/home/oscar-devos/liminal/ws4/.cache/single_arm_diag/skill_pen_lid_20261018_033644",
+ "task": "put the red pen in its slot in the cardboard box",
+ "workspace": "ws4/single_arm/skills/pen_lid/workspace.json",
+ "layouts": "ws4/single_arm/skills/pen_lid/layouts",
+ "home_ref": "ws4/single_arm/skills/pen_lid/layouts",
+ "eval_layouts": "P3 P3 P3 P3 P3",
+ "split": {
+  "source": "ws4_split.json 2026-10-18T03:22:58+02:00",
+  "heldout": {
+   "P3": [
+    19,
+    20,
+    21
+   ]
+  },
+  "drop": [
+   12,
+   18
+  ],
+  "train": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   13,
+   14,
+   15,
+   16,
+   17
+  ],
+  "provisional": false
+ },
+ "parked_other_arm": {
+  "median": [
+   0.9,
+   15.2,
+   -5.8,
+   32.6,
+   14.6,
+   0.9
+  ],
+  "min": [
+   0.7,
+   15.2,
+   -5.8,
+   32.6,
+   14.6,
+   0.9
+  ],
+  "max": [
+   1.1,
+   15.2,
+   -5.8,
+   32.6,
+   14.6,
+   0.9
+  ],
+  "max_dev_deg": 0.3,
+  "source": "left_* columns over 20 good takes"
+ },
+ "validation": {
+  "station": {
+   "steps": 16928,
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
+  },
+  "heldout_with_envelope": {
+   "steps": 1992,
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
+  },
+  "zones": [
+   "table",
+   "base",
+   "fold",
+   "torso",
+   "mast",
+   "midline",
+   "other_arm",
+   "joint_env",
+   "tcp_env"
+  ],
+  "ok": true
+ },
+ "overrides": {
+  "exclude": [],
+  "midline": 0.15,
+  "env_gap": 0.02,
+  "env_voxels_trimmed": 0,
+  "other_clearance": null,
+  "torso_margin": 0.014,
+  "slow_zone": null,
+  "reason": "red pen lid-held: the red slot sits in the box on the robot's right, demos reach TCP y -0.108 measured / -0.121 commanded (midline -0.15); torso margin 1.4 cm for pen_lid only: demos pass 1.5 cm measured / 0.3 cm into the 2 cm margin commanded, takes 0, 2, 3, 15 (orchestrator, 18 Oct); 2 cm envelope trim near the lid-holding box arm (standing rule)"
+ },
+ "runner_args": [],
+ "refs": true,
+ "built": "2026-10-18 03:37:37",
+ "other_arm_gate": {
+  "joint_lo": [
+   -4.3,
+   -38.9,
+   -25.9,
+   -30.6,
+   9.6,
+   0.0
+  ],
+  "joint_hi": [
+   26.9,
+   31.5,
+   53.4,
+   46.9,
+   93.9,
+   100.0
+  ],
+  "demo_poses": "ws4/single_arm/skills/pen_lid/demo_poses.npz",
+  "n_demo_poses": 4242,
+  "max_below": 0.01,
+  "box_end_takes": 59,
+  "reason": "the box-skill end pose varies run to run; a joint range would refuse nearly every real run"
+ }
+}

@@ -1,0 +1,187 @@
+{
+ "skill": "box",
+ "arm": "right",
+ "dataset": "/home/oscar-devos/.cache/huggingface/lerobot/ws4/haller_open_the_box",
+ "snapshot": "/home/oscar-devos/liminal/ws4/.cache/single_arm_diag/skill_box_20261018_014343",
+ "task": "open the box by pulling its handle",
+ "workspace": "ws4/single_arm/skills/box/workspace.json",
+ "layouts": "ws4/single_arm/skills/box/layouts",
+ "home_ref": "ws4/single_arm/skills/box/layouts",
+ "eval_layouts": "P2 P3 P2 P3 P2",
+ "split": {
+  "source": "ws4_split.json 2026-10-18T01:25:06+02:00",
+  "heldout": {
+   "P2": [
+    36,
+    37,
+    38
+   ],
+   "P3": [
+    72,
+    73,
+    74
+   ]
+  },
+  "drop": [
+   3,
+   7,
+   16,
+   19,
+   21,
+   28,
+   41,
+   46,
+   47,
+   70
+  ],
+  "train": [
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   17,
+   18,
+   20,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   39,
+   40,
+   42,
+   43,
+   44,
+   45,
+   48,
+   49,
+   50,
+   51,
+   52,
+   53,
+   54,
+   55,
+   56,
+   57,
+   58,
+   59,
+   60,
+   61,
+   62,
+   63,
+   64,
+   65,
+   66,
+   67,
+   68,
+   69,
+   71
+  ],
+  "provisional": false,
+  "excluded": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ]
+ },
+ "parked_other_arm": {
+  "median": [
+   5.3,
+   -83.7,
+   81.9,
+   82.8,
+   -10.3,
+   0.9
+  ],
+  "min": [
+   1.1,
+   -83.7,
+   81.8,
+   82.8,
+   -10.4,
+   0.9
+  ],
+  "max": [
+   5.4,
+   -83.5,
+   81.9,
+   82.8,
+   -10.1,
+   0.9
+  ],
+  "max_dev_deg": 4.1,
+  "source": "right_* columns over 59 good takes"
+ },
+ "validation": {
+  "station": {
+   "steps": 43366,
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
+  },
+  "heldout_with_envelope": {
+   "steps": 3700,
+   "refusals": 0,
+   "zones": {},
+   "takes": {}
+  },
+  "zones": [
+   "table",
+   "base",
+   "fold",
+   "torso",
+   "mast",
+   "midline",
+   "other_arm",
+   "joint_env",
+   "tcp_env"
+  ],
+  "ok": true,
+  "tcp_envelope_to_parked_pen_arm_m": {
+   "min_gap_sampled_4mm": 0.024,
+   "guaranteed_at_least": 0.0204,
+   "at_tcp": [
+    0.137,
+    0.097,
+    0.1
+   ],
+   "pen_arm_poses_checked": "min, max and median of its range over takes 7-74",
+   "box_arm_to_pen_arm_closest_in_demos": 0.044
+  },
+  "train_with_envelope": {
+   "steps": 39666,
+   "refusals": 0
+  }
+ },
+ "overrides": {
+  "exclude": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ],
+  "midline": 0.17,
+  "reason": "demos reach 0.131 m measured / 0.142 m commanded; pen arm parked far side (approved by the orchestrator 18 Oct)"
+ },
+ "refs": true,
+ "built": "2026-10-18 01:46:41"
+}

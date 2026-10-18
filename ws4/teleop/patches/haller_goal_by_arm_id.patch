@@ -1,0 +1,22 @@
+--- a/hmi/backend/haller_hmi/human_teleop.py	2026-10-17 15:38:38.390201739 +0200
++++ b/hmi/backend/haller_hmi/human_teleop.py	2026-10-17 15:38:38.430320421 +0200
+@@ -1832,8 +1832,17 @@
+                 # action in the dataset that the arm was never asked for.
+                 if sampling:
+                     with self._lock:
+-                        goal_deg = {"left": dict(self._committed_left),
+-                                    "right": dict(self._committed_right)}
++                        # Keyed by ARM ID, the key space `arms` uses in this
++                        # same sample: the recorder pairs each arm's state
++                        # with goal_deg[arm_id]. Keyed by headset slot, a
++                        # crossed pairing (the default "behind" stance:
++                        # left slot -> arm "right") filed every action under
++                        # the other arm. status()["goal_deg"] stays slot-keyed.
++                        goal_deg = {
++                            arm: dict(goal)
++                            for arm, goal in ((cfg.left_arm, self._committed_left),
++                                              (cfg.right_arm, self._committed_right))
++                            if arm}
+                         reasons = {
+                             "left": {j: st.reason
+                                      for j, st in self._steps_left.items()},

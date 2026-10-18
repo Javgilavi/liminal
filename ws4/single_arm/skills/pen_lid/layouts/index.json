@@ -1,0 +1,59 @@
+{
+ "dataset": "haller_put_the_red_pen_in_its_slot_lid_held",
+ "task": "put the red pen in its slot in the cardboard box",
+ "wrist_key": "observation.images.right_wrist",
+ "columns": "right",
+ "takes": [
+  {
+   "layout": "P3",
+   "episode": 19,
+   "frames": 346,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.0,
+    2.0,
+    2.4,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 20,
+   "frames": 291,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.0,
+    1.8,
+    2.2,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 21,
+   "frames": 362,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.0,
+    1.8,
+    2.0,
+    0.3,
+    0.0,
+    99.3
+   ]
+  }
+ ]
+}

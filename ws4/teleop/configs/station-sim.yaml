@@ -1,0 +1,81 @@
+# ws4/teleop/configs/station-sim.yaml
+# haller_ws bimanual MuJoCo sim (its own cube bench, not ws4/sim's station model),
+# reshaped to the FLUX recording contract so a sim take exercises the exact schema
+# a real take will have:
+#   - telemetry.hz 30: the recorder freezes fps = round(measured tick rate)
+#     (haller_ws recorder.py `_freeze_fps`), and FLUX SO-101 is 30 Hz.
+#   - three recorded cameras, all 640x480, keyed head / left_wrist / right_wrist
+#     (ws4/data/contracts.py XLE_12D). The public XLeRobot core set is 640x480 too.
+# Everything else is copied from haller_ws hmi/backend/config.bimanual-sim.yaml
+# (ws4-hackathon @ b46b827).
+sim_cubes: 3
+collision:
+  margin_m: 0.015
+  wrist_min_m: 0.015
+arms:
+  - id: left
+    model: so101_follower
+    port: "(sim)"
+    calibration_id: "(sim)"
+    source: sim
+    sim_arm_name: left
+    enabled: true
+  - id: right
+    model: so101_follower
+    port: "(sim)"
+    calibration_id: "(sim)"
+    source: sim
+    sim_arm_name: right
+    enabled: true
+ros:
+  cmd_vel_topic: /cmd_vel
+  odom_topic: /odom
+  scan_topic: /scan
+  max_linear: 1.0
+  max_angular: 2.0
+telemetry:
+  hz: 30
+cameras:
+  # Operator eye in the headset (default behind stance). Not recorded.
+  - id: overshoulder_sim
+    role: base
+    source: sim_camera
+    mjcf_camera: overshoulder
+    width: 960
+    height: 720
+    fps: 30
+    record: false
+  # Stand-in for the D455 head camera. 640x480, not the haller default 960x720:
+  # the recorded frame size freezes into the feature shape, and merging with the
+  # public core set needs 640x480 (LeRobot datasets/feature_utils.py:143-171).
+  - id: threequarter_sim
+    role: base
+    source: sim_camera
+    mjcf_camera: threequarter
+    width: 640
+    height: 480
+    fps: 30
+    record: true
+    dataset_key: head
+  - id: wrist_left_sim
+    role: wrist
+    arm_id: left
+    source: sim_camera
+    mjcf_camera: left_wristcam
+    width: 640
+    height: 480
+    fps: 30
+    record: true
+    dataset_key: left_wrist
+  - id: wrist_right_sim
+    role: wrist
+    arm_id: right
+    source: sim_camera
+    mjcf_camera: right_wristcam
+    width: 640
+    height: 480
+    fps: 30
+    record: true
+    dataset_key: right_wrist
+sim_random:
+  xy_jitter_m: 0.14

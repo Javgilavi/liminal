@@ -1,0 +1,110 @@
+{
+ "dataset": "haller_open_the_box",
+ "task": "open the box by pulling its handle",
+ "wrist_key": "observation.images.left_wrist",
+ "columns": "left",
+ "takes": [
+  {
+   "layout": "P2",
+   "episode": 36,
+   "frames": 298,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.1,
+    6.4,
+    0.8,
+    0.8,
+    0.2,
+    99.5
+   ]
+  },
+  {
+   "layout": "P2",
+   "episode": 37,
+   "frames": 299,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.1,
+    6.4,
+    0.8,
+    -0.3,
+    0.2,
+    99.5
+   ]
+  },
+  {
+   "layout": "P2",
+   "episode": 38,
+   "frames": 314,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.3,
+    6.4,
+    0.8,
+    1.0,
+    0.2,
+    99.5
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 72,
+   "frames": 279,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.1,
+    6.5,
+    0.8,
+    0.8,
+    0.0,
+    99.5
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 73,
+   "frames": 315,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.2,
+    6.6,
+    0.4,
+    0.8,
+    0.2,
+    99.5
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 74,
+   "frames": 351,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.3,
+    6.7,
+    0.6,
+    0.8,
+    0.2,
+    99.5
+   ]
+  }
+ ]
+}

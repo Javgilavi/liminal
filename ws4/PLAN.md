@@ -1,0 +1,215 @@
+# WS4 plan (orchestrator synthesis)
+
+Sat 17 Oct 12:45 CEST. Built from all six agent reports; every suite was re-run by the orchestrator.
+Submission: **Sun 18 Oct 14:00 CEST**. A snapshot of `ws4/` is on branch `ws4-handoff` of Javgilavi/liminal.
+
+## Pivot (Sat 17 Oct, 18:20 CEST): two tracks
+
+The red SO-101's elbow motor is broken, so it is retired. FLUX zero-shot has not had a fair test yet: the red arm
+was underpowered (12 V servos on 5 V) and the released package normalizes with legacy-degree quantiles (A0 drives
+joints to their limits regardless of prompt). BFL's own SO-101 examples are all task LoRAs, and the brief grades
+zero-shot vs post-training, so **collecting our own demos and fine-tuning is the main path**.
+
+| Track | Owner | Goal |
+|---|---|---|
+| **Real** | so101-zeroshot (pivoted) + Oscar | Green Haller, one arm, one skill: "put the block in the cup". Fresh LeRobot calibration (degrees), D455 head cam as scene + the task arm's wrist cam, safety guards (step, joint, keep-out, stall, torque cap). **VR teleop** (ws4-vr2, haller_ws HMI in solo mode on the task arm; mirror teleop was dropped because the head camera would see Oscar moving the other arm). One shared fresh LeRobot calibration (`haller_left`/`haller_right`) for recording, training and deployment; only one process holds the arms at a time. 50 demos + 10 held-out over 3 layouts, h264 at 30 fps. Graded zero-shot A0r (released weights, our quantiles), then a LoRA from the A0r package on the 6000 pod overnight. Sunday: post-training eval, then Claude chains the skill ("put all the blocks in the cups") with the imagined-vs-actual view. |
+| **Sim** | ws4-ttt (+ closed-loop child) | Same skill and contract in the MuJoCo Haller station: scripted demos, A0 vs A0r-sim vs LoRA-sim closed-loop success, TTT stage tracking on the rollouts. GPU: the 4500 pod only. Slide material: "pipeline validated in sim". |
+
+Dropped for this weekend: VR bimanual (VR is used single-arm only), EE50, bimanual coordination, the red arm.
+GPU split: so101-flux-serve (RTX PRO 6000, EU-CZ-1) = real track serving + LoRA; ws4-flux-inference-2 (4500,
+EU-RO-1) = sim track. The old 4500 pod 4inbmv6d4xb876 is stopped and could not restart (host full).
+
+## Status and next moves (Sat 17 Oct, 16:45 CEST; about 21 h to submission)
+
+**Where we stand.** Lots of infrastructure works and is tested (FLUX serving on two pods, dual-arm runner with
+safety, Claude orchestrator + HMI, imagined-video extraction, TTT proven at 7B scale, station sim, IK, dataset
+tools, trial logger). What is missing is the part judged hardest: **FLUX doing a task on real hardware, with
+zero-shot and post-training numbers.** Nothing graded has been logged yet, no demos are recorded, no LoRA is
+trained, and the demo task is not fixed.
+
+**Recommendation: make the red single SO-101 the primary FLUX demo.** It is wired, calibrated and has a fast
+dedicated server (0.48 s per chunk). Build the long chain on it (stack several cups, orchestrated by Claude with
+the imagined-vs-actual view). The bimanual XLeRobot becomes the stretch / research showcase (sim, VR, TTT, EE50
+analysis), unless its real bring-up catches up by about 22:00.
+
+| # | When | What | Who |
+|---|---|---|---|
+| 1 | now to 18:00 | Fix the scene camera (fixed, high, whole arm and cups in view), then the graded zero-shot runs on "stack the cups": 3 layouts, at least 5 attempts per prompt, all in `trial_log.py` | so101-zeroshot + Oscar |
+| 2 | now to 18:00 | Imagination on the single-arm server: return imagined frames per chunk and save imagined-vs-actual clips during attempts (first demo-video material) | ws4-imagine (needs a go) |
+| 3 | 18:00 to 19:30 | Record 50 demos + 10 held-out for the cup task (leader arm if available, otherwise VR with vr-teleop-kit's single SO-101 path), 30 fps, AV1 or transcoded | Oscar + a recording agent |
+| 4 | from about 19:30, overnight | Per-arm LoRA on those demos: on the teammate's 3x RTX PRO 6000 box if it is up, otherwise on the single-arm RTX PRO 6000 pod (96 GB: serving and LoRA may fit side by side, measure first) | teammate / ws4-datasets |
+| 5 | by 18:00 | Fix the demo task: adopt cup stacking (longer chain: 3 to 4 cups, maybe unstack) unless the teammate's task is ready and reachable by the single arm | team |
+| 6 | evening | Orchestrator on the real single arm: `skills.yaml` with the real prompts, Claude plans the chain, Haiku verifies each step, attempts logged | ws4-orchestrator |
+| 7 | 19:00 checkpoint | XLeRobot go/no-go: Haller calibration files (EEPROM harvest), restart the 4500 pod, per-arm zero-shot on one simple skill. No-go means sim + research only | Oscar |
+| 8 | Sun 07:00 to 11:00 | Post-training eval with the same protocol, pick the checkpoint, full-chain demo runs, demo video | team |
+| 9 | Sun 11:00 to 13:30 | Slides, README, results tables (`trial_log.py summary --markdown`), merge to the submission branch, push | team |
+
+**Open questions for Oscar:** is there a leader arm for the red SO-101? Is the teammate's training box running
+(LoRA P on public data, per HANDOFF_GPU.md)? Which task does the team commit to?
+
+## Decisions
+
+| Track | Verdict | Why (details in the linked report) |
+|---|---|---|
+| **A: FLUX SO-101 checkpoint on each XLeRobot arm + per-arm task LoRA** | **Sunday demo path** | Works with released weights and LeRobot's documented LoRA. One loaded model serves both arms with separate histories; parity with LeRobot's own loop verified on CPU. [flux_dual_arm.md](research/flux_dual_arm.md) |
+| **D: behaviour tree / Claude on top of A** | **Yes, with WS3** | Coordination (who holds, who moves, retries) has to be scripted with per-arm policies. Claude picks from a fixed list of trained prompts and never reaches the motors. |
+| **Imagination: FLUX's predicted video** | **Yes, the showcase** | Both LeRobot and flux-action compute the future video and throw it away. Our wrapper returns 41 decoded frames per chunk with bit-identical actions (CPU-verified on real LeRobot code). Nobody has shown real FLUX imagination yet. This is the strongest "Imagine, Then Act" story. [imagination.md](research/imagination.md) |
+| **C1: 12-D bimanual heads via LeRobot PEFT** | Stretch, GPU 2, only with two leader arms and 50+ bimanual demos | Base builder works on CPU. BFL says PEFT on a new embodiment is not validated, and the heads start from zero: BFL removed the 14-D joint heads from the released base (safetensors metadata, `flux/checkpoint_facts.md`). |
+| **B: EE50 (Simone's plan)** | **Not this weekend.** Kinematic gate PASSES; the model side is blocked. Post-hackathon track | IK: real robot motion round-trips exactly (25,168 frames, 100% success, p99 error 1e-7 mm), human handheld chunks are 98% position-feasible, median unexecutable rotation 0.5 deg, 1 to 3 ms per arm. Model side: BFL released no EE50 code, statistics or frame conventions; flux-action normalizes q01/q99, not per-offset z-scores; the pretrained EE50 heads do ship in the base (`action_prediction_ee50`, 50-D in and out, conditioned on state only, no past commands; `flux/checkpoint_facts.md`), but nothing released feeds them; flux-action has no LoRA. BFL's DROID result: 37.9% EE50 vs 40.1% joint heads. [ee50_ik.md](research/ee50_ik.md) |
+| **C2: flux-action full fine-tune** | No | About 10 h per 1k updates on 3 PCIe GPUs (estimate). |
+| **RoboTTT in the FLUX trunk** | No-go before Sunday | Gains come from a long-context pretraining run (16 GB200, 30K steps) plus hours of task data; no official code or weights. The hook fits FLUX cleanly (verified at tiny scale on flux-action's own DiT). [robottt_flux.md](research/robottt_flux.md) |
+| **P2: TTT progress memory downstream of frozen FLUX** | Optional, decide at 18:00 | Reads one FLUX feature per replan, outputs task progress / current subtask to the orchestrator, no motor authority. Gates: FLUX running on the GPU, 30+ multi-stage episodes with subtask labels, WS3 wants the signal. Otherwise a research slide. |
+| **TTT at full 7B scale (measured on the pod, 14:00 UTC)** | Done, slide material | Gated TTT layers after FLUX joint blocks 24 to 27 (17.9 M params): gate 0 is bit-identical to stock FLUX on a real observation; gate 1e-3 changes the chunk by 0.33%; latency +32 ms (+4.2%, 0.758 to 0.790 s at guidance 1.0); VRAM +0.08 GiB. FLUX features extracted for 21 sim episodes (1,250 re-plans, 0.82 s each); P2 stage accuracy on held-out sim episodes (3 seeds, repeated stages in brackets): frame features none 0.40 (0.39), GRU 0.72 (0.62), TTT 0.75 (0.70); **FLUX features none 0.54 (0.15), GRU 0.87 (0.74), TTT 0.90 (0.80)**. FLUX's internal features plus a TTT memory track task stage best. Details: robottt_flux.md section 11.9. |
+| **Sim** | Built, use it | XLeRobot 0.4.0 CAD, D455 on a fixed head (confirmed by Oscar), your real soft fins (`SO101_soft_fin.stl`), env in LeRobot units with a per-arm FLUX view, props, domain randomisation, scripted picks. Camera poses, joint signs and gripper range still need one check on the robot. [sim/README.md](sim/README.md) |
+
+## Data
+
+- **Own demos are required.** They cover our task, the black fin-ray fingers, the RealSense mast pose and our
+  calibration. Target 40 to 60 demos per skill for 3 to 4 skills, plus 10 held-out each (about 45 to 75 min
+  of teleop, 2 to 3 h wall-clock for two people). See [xlerobot_recording_protocol.md](research/xlerobot_recording_protocol.md)
+  and `flux/GPU_RUNBOOK.md` section 5.
+  - One leader arm: record per arm (`so_follower` + `so_leader`, keys `scene` / `wrist`).
+  - Two leader arms: record bimanual raw (`bi_so_follower`) and split with `data/convert_bimanual.py`. This
+    keeps C1 possible.
+- **Public data is cheap and fills a real gap.** FLUX SO-101 never saw a bimanual robot or an XLeRobot (BFL
+  corpus file). About 900 public XLeRobot-style episodes from four labs (head camera behind the arms, two wrist
+  cams, degrees, Apache-2.0). [datasets.md](research/datasets.md)
+  - LeRobot main trains on one dataset only (`MultiLeRobotDataset` is deactivated, `datasets/factory.py:201`),
+    so public and own data must be merged first. Merging needs identical features: same video codec and frame
+    size (only encoder tuning keys are ignored, `configs/video.py:51-56`, `datasets/feature_utils.py:143-171`).
+  - **Mergeable core set: `zonglin11/xlerobot_clean_table` + `cortx-labs/bimanual-fruit-sorting`, 9.5 GB, about
+    6.5 arm-hours.** `rk000000` (h264) and `bigse0u1` (240x320 wrists) stay separate and optional.
+  - **Our own recordings must be AV1 at 640x480** to merge with it (LeRobot's default `libsvtav1`, cameras at
+    640x480 as in the recording protocol).
+  - Tools: `data/fetch_public.sh` (download, convert per arm and 12-D, merge) and `data/merge_datasets.py`. The
+    aggregate step itself is untested until real videos are on the training box.
+- **VR teleop recording (haller_ws, branch `ws4-hackathon`, 5 local commits; parked while the USB ports serve the
+  single arm).** Log: `~/haller_ws/hmi/HACKATHON-WS4-VR.md`.
+  - **Data bug fixed in f35bf29:** in the default "behind" stance every VR take filed each arm's action under the
+    other arm (solo takes stored action == state). Do not train on any Haller VR take recorded before f35bf29.
+  - Record h264 live (live SVT-AV1 dropped frames, up to 431 ms gaps), then convert with haller_ws
+    `scripts/dataset_to_av1.py SRC DST` before merging with public data. `ws4/teleop/transcode.py` (the first
+    VR agent's draft) crashes on haller h264 input: do not use it.
+  - FLUX configs record at 30 Hz (`recording:` section, session_hz 30). Sim start:
+    `HALLER_HMI_CONFIG=config.flux-sim.yaml scripts/quest-teleop/up.sh --sim --usb`; stop with `down.sh`.
+  - Keep heavy CPU jobs off the laptop while recording or running robot loops (30 Hz timing gate).
+  - Still open: headset takes, real-robot checklist, Haller calibration files (not on this laptop), a real-rig
+    FLUX recording config.
+- **Time-split evidence for the judges:** LoRA A (own only) vs LoRA B (own + at most 30 to 50% public) with
+  identical steps. Report the held-out action error and hardware success. Keep public data only if B wins.
+
+## Evaluation (graded: zero-shot and post-training both count)
+
+The official BFL track brief grades **both** the released checkpoint zero-shot on our task **and** the
+fine-tuned model on the same task under comparable conditions, with successful attempts, total attempts and
+completed task steps recorded, plus where it failed and whether a human had to intervene.
+
+- Zero-shot = `flux-3-action-so101` as released (revision `0713a7a`, weights identical to BFL's pinned `c9e13b2`),
+  per arm, on the chosen task. Run it this afternoon even if it fails; failures are graded evidence. Keep
+  testing it while LoRAs train.
+  - Its normalization comes from one community dataset (`VoicAndrei/so100_kitchen`) in the pre-2025 SO-100
+    degree convention (shoulder lift 85 to 184, elbow 61 to 179), not today's LeRobot degrees with zero at
+    mid-range. So run two zero-shot variants: **A0** (package quantiles) and **A0r** (same weights, quantiles
+    from 5 to 10 of our teleop episodes). Both leave the weights untouched; log both and say which is which.
+- Post-training = LoRA A / B (and P): same task, same props and start layouts, same number of trials.
+- Log every attempt with `eval/trial_log.py` (one line per attempt) and paste `trial_log.py summary --markdown`
+  into the slides. Fix 3 start layouts and at least 5 attempts per condition before the first trial.
+
+## Compute (decided by Oscar)
+
+- **Training: the teammate's 3x RTX PRO 6000 box.** Only the teammate can reach it. Checklist:
+  [HANDOFF_GPU.md](HANDOFF_GPU.md); code from branch `ws4-handoff` (snapshot at about 12:45, so pull the final
+  reports when they are pushed).
+- **Serving to the robot: RunPod pod `ws4-flux-inference`, live since about 13:30** (deployed by ws4-datasets
+  with Oscar's approval): 1x RTX PRO 4500 Blackwell 32 GB in EU-RO-1, $0.72/h, on the 100 GB network volume
+  `ws4-inference` at `/workspace`. No A40 was available in EU datacenters with network volumes; EU-RO-1 also has
+  RTX PRO 6000 and A100 stock for a demo-hour upgrade on the same volume. Bootstrap runs there with `PREFETCH=1`;
+  then `measure_latency --text-encoder-on-cpu` and `cloud/runpod_serve.sh` with the 20-minute idle self-stop.
+  Details, SSH and gotchas (`source /etc/rp_environment`, env changes restart the container and change the SSH
+  port): [cloud/RUNPOD.md](cloud/RUNPOD.md). LoRA adapters come from the training box via a private HF repo.
+- **Update 16:15: the event budget (about USD 100) now covers any provider, not only AWS.** A second RunPod
+  pod (RTX PRO 6000 96 GB preferred) is being started for serving, so the single-arm zero-shot runs and later both
+  XLeRobot arms do not wait on the 4500 pod. Keep every invoice for reimbursement.
+- **AWS: EUR 133 from the event, reimbursed against an invoice** (the team sets up the account and pays first;
+  owner still being decided, RunPod stays the serving path meanwhile). Notes for whoever takes it:
+  - New AWS accounts often start with a GPU vCPU quota of 0 ("Running On-Demand G and VT instances"); request
+    the increase first, it can take hours.
+  - G7e (RTX PRO 6000 Blackwell) is in London, Frankfurt and Stockholm. Third-party listing: g7e.2xlarge about
+    $5.85/h in London vs $3.36/h in us-east-1 (UNVERIFIED, check the AWS calculator). EUR 133 is roughly 25 to
+    45 GPU-hours, so the best use is the Sunday demo-window server or one extra training run.
+  - Set an AWS Budgets alert at EUR 133 and keep the invoice for reimbursement.
+- **Risks, orchestrator note.**
+  - **Measured on the pod (RTX PRO 4500, SO-101 package, BF16, Qwen on CPU, prompts pre-encoded, 10 runs):**
+
+    | Setting | Server per chunk (median) | Laptop round trip (est.) | Arm moving (sync loop, round trip) |
+    |---|---|---|---|
+    | default guidance 3 | 1.46 s | 1.78 s (measured) | 38% |
+    | guidance 1.0 | 0.76 s | about 1.07 s | about 50% |
+    | guidance 3 + `compile_model` | 1.22 s | about 1.53 s | about 41% |
+    | **guidance 1.0 + compile** | **0.63 s** | about 0.94 s | **about 53%** |
+
+    The round trip adds about 0.31 s (SSH tunnel to EU-RO-1, 312 KB JPEG request). Only the default row was
+    measured end to end; the others add the same 0.31 s. p90 equals the median once all prompts are warmed.
+  - VRAM: 15.3 GiB resident and 15.8 GiB peak per chunk after Qwen moves to the CPU (the 23.6 GiB figure is the
+    load-time peak). With imagination decoding: 17.6 GiB peak. Decoding the 41 imagined frames costs 0.23 s
+    (sync) or about 0.2 s median (async on the same GPU). Best-of-2 with decode costs 3.27 s, so it is too slow
+    for every chunk and only fits at decision points.
+  - Server start to READY is about 9 min (6.4 min load, about 15 s per pre-encoded prompt, plus about 2 min with
+    compile). The pod stops itself after 20 idle GPU minutes, so restart it about 10 min before robot time. The
+    SSH port changes on every restart.
+  - **Open question: does guidance 1.0 hurt action quality?** The package default is guidance 3 on both streams.
+    Run the zero-shot attempts at both settings and log them as separate variants before standardising on 1.0.
+  - An RTX PRO 6000 pod for the Sunday demo window would roughly halve the server time again (estimate) and fits
+    two model instances for truly parallel arms. Two instances do not fit safely on this 32 GB card.
+  - **Measured: both arms on one shared model (ws4-orchestrator, default guidance).** The arms take turns and
+    never move together: 30% and 28% motion each, 1.76 s round trip per chunk, and the synchronous loop stalls up
+    to 3.84 s. So on this pod the demo should keep one arm acting while the other holds, which is the per-arm
+    plan anyway. Real simultaneous bimanual motion needs two model instances (an RTX PRO 6000 pod, or two pods).
+
+### Training box GPUs (3x RTX PRO 6000, 96 GB)
+
+| GPU | Afternoon (no own demos yet) | Night | Sunday |
+|---|---|---|---|
+| 0 | Smoke test, latency/VRAM, imagination `vaecheck` / `bench` / `replay` on a public XLeRobot episode (first imagined-vs-actual clip) | Offline evaluation of each checkpoint on held-out episodes | Eval / imagination clips for the video |
+| 1 | **LoRA P: public XLeRobot core set only** (orchestrator suggestion: an early adapter that may fix the two-arms-in-view viewpoint, and a third point for the time-split table) | LoRA B (own + public) | Eval / spare |
+| 2 | Public dataset download + per-arm conversion + merge | LoRA A (own only), or C1 if bimanual demos exist | Eval / spare |
+
+Latency to expect (estimate): 0.6 to 1.0 s per SO-101 chunk against 1.07 s of executed motion, so motion will
+pause between chunks. Levers: action and video guidance 1.0 (about 2x), `compile_model=true`, the other arm on
+another GPU.
+
+## Timeline (CEST)
+
+| When | Who | What |
+|---|---|---|
+| Now to 14:00 | Oscar | HF gates: done (so101, base, droid all accessible with the token). Teammate starts [HANDOFF_GPU.md](HANDOFF_GPU.md). RunPod pod for serving. Calibrate both arms (LeRobot degrees, gripper range with the fin-ray fingers). Fix the demo task with the team. |
+| 14:00 to 16:00 | training box | `flux/GPU_RUNBOOK.md` sections 1 and 2, `imagine/GPU_RUNBOOK.md` sections 1 to 5, public data fetch + merge, start LoRA P. RunPod pod: latency measurement first. |
+| 14:00 to 19:00 | Oscar + 1 | Record own demos, skill by skill, with held-out episodes. |
+| 16:00 to 18:00 | Oscar | Zero-shot A0 / A1 on the robot through the RunPod policy server, one arm at a time (runbook sections 3 and 4). Test LoRA P when it lands. |
+| ~19:00 | training box | Start LoRA A and LoRA B overnight (identical steps). C1 on GPU 2 only if bimanual demos exist. |
+| Sun 07:00 to 10:00 | team | Offline A vs B vs P, hardware trials, pick a checkpoint. Wire into the WS3 tree + imagination panel in the UI. |
+| 10:00 to 12:30 | team | At least 5 trials per demo, demo video (imagined vs actual clips), slides. |
+| 12:30 to 14:00 | team | Freeze, README, submit. |
+
+## Open questions for Oscar
+
+Answered: D455 on a fixed head (sim agent), HF gates accepted on account Oskrt, training on the teammate's box,
+serving on RunPod.
+
+1. How many leader arms can drive the XLeRobot? (One means per-arm only; two keeps C1 alive.)
+2. Which demo task? Proposal: clear, open, pack, close ([recording protocol](research/xlerobot_recording_protocol.md)).
+3. Wrist camera model, table height, and the on-robot checks the sim agent listed (one frame per camera at
+   LeRobot zero, jog each joint once).
+
+## Agent outputs (all CPU-tested, nothing run on a GPU yet, nothing committed)
+
+| Path | Owner | Tests (re-run by the orchestrator) |
+|---|---|---|
+| `flux/` + [flux_dual_arm.md](research/flux_dual_arm.md) | ws4-flux-dual | 24 passed in the LeRobot-main env (`~/ws4/lerobot/.venv`) |
+| `imagine/` + [imagination.md](research/imagination.md) | ws4-imagine | 157 passed, plus 5 of 5 against real LeRobot `flux3` code in the LeRobot-main env |
+| `data/` + [datasets.md](research/datasets.md) | ws4-datasets | 34 passed (agent's count) |
+| `kinematics/` + [ee50_ik.md](research/ee50_ik.md) | ws4-ik | 31 passed |
+| `ttt/` + [robottt_flux.md](research/robottt_flux.md) | ws4-ttt | 30 passed |
+| `sim/` + [sim/README.md](sim/README.md) | ws4-sim | 26 passed (headless EGL) |
+| `eval/trial_log.py` (one JSONL line per attempt, `summary --markdown` for the slides) | orchestrator | 5 passed, ruff clean |
+| `cloud/bootstrap.sh`, `cloud/push_ws4.sh` (orchestrator); `cloud/runpod_serve.sh`, `cloud/idle_stop.sh`, `cloud/RUNPOD.md`, `HANDOFF_GPU.md` (ws4-datasets) | orchestrator / ws4-datasets | bootstrap ran end to end on the laptop in env-only mode (both envs list sm_120; NATTEN 0.21.6 wheels match torch 2.10 and 2.11); not yet run on a GPU box |

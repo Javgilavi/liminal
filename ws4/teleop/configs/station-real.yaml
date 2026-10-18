@@ -1,0 +1,120 @@
+# ws4/teleop/configs/station-real.yaml
+# Both real arms + head D455 + both gripper cams, driven from THIS laptop, recording the FLUX contract.
+# Derived from haller_ws hmi/backend/config.desktop-real.yaml (ws4-hackathon @ b46b827, Oscar's 2026-09-11 rig
+# state). Read that file for the reasoning behind every motion/teleop value copied here unchanged.
+#
+# SIDE NAMES ARE HALLER'S: `left` / `right` are the OPERATOR's sides, standing in front of the bench facing the
+# robot (config.desktop-real.yaml "WHOSE LEFT?"; confirmed by Oscar 2026-10-17). So haller `left` is the ROBOT's
+# right arm. Keep these ids: hmi/frontend/lib/stance.ts pairs hands to arms by id. ws4/teleop/to_flux.py swaps
+# to robot-frame sides (ws4/sim, public XLeRobot data, the head camera image) when it builds FLUX datasets.
+#
+# What differs from config.desktop-real.yaml, and why:
+#   - all three cameras recorded at 640x480: head = D455 colour, left_wrist / right_wrist = gripper cams.
+#     Oscar chose 1280x720 for the wrists (16:9 sees the full sensor, 4:3 is a centre crop at 75% of the
+#     horizontal FOV). 640x480 is chosen here because the public XLeRobot core set is 640x480 and LeRobot merges
+#     only identical frame sizes (datasets/feature_utils.py:143-171), and FLUX resizes every view to a square
+#     anyway. Revert to 1280x720 only if the FOV loss hurts grasps, then run to_flux.py --resize.
+#   - dataset_key head (not top): ws4/data/contracts.py XLE_12D, ws4/flux GymEnvRobot keys.
+#   - record: true on the wrists (Oscar had them false during wiring day).
+#   - the recorded fps comes from the session rate, set by ws4/teleop/backend.py --session-hz, not from
+#     telemetry.hz (recorder.py `_freeze_fps` measures the session's tick bus).
+#   - collision.mounts transcribed from ws4/sim/station_geometry.yaml (see below), guard still OFF.
+motion:
+  max_speed_deg_s: 90.0
+  large_move_deg: 30.0
+  ramp_hz: 50.0
+  lpf_tau_s: 0.0
+collision:
+  # OFF, as in Oscar's config. The haller guard sweeps capsules along haller_hmi/so101_kinematics.py, which is the
+  # old SO-ARM100 MJCF chain: at the same LeRobot degrees its fingertip sits 11 to 36 cm from the so101_new_calib
+  # TCP the real arm reaches (ws4/research/vr_teleop.md, section Geometry), and shoulder_pan turns the other way.
+  # Its clearance numbers are therefore biased whatever the mounts say. Mounts below are the station's, expressed
+  # in haller's mount frame (x = operator's right = robot's left = station +y, -y = reach direction = station
+  # +x, z up from the table top), each placing the haller chain root so its shoulder_pan pivot lands on the
+  # station's pivot: station base_pos + (0.0388, 0, 0.0624) minus haller's (0, -0.0452, 0.0165).
+  # Values are from XLeRobot 0.4.0 CAD (station_geometry.yaml verified: false), not tape-measured.
+  enabled: false
+  margin_m: 0.025
+  self_margin_m: 0.008
+  table_z_m: 0.0
+  mounts:
+    left:  {pos: [-0.1366, 0.0280, 0.1309], yaw_deg: 0.0}   # robot's RIGHT arm
+    right: {pos: [ 0.1366, 0.0280, 0.1309], yaw_deg: 0.0}   # robot's LEFT arm
+teleop:
+  scale_rotation: 1.0
+  precision_factor: 0.5
+  max_dq_deg_pos: 3.44    # 0.06 rad
+  max_dq_deg_rot: 13.75   # 0.24 rad
+  floor_enabled: false
+arms:
+  - id: left               # robot's RIGHT arm, board 5B79018460
+    model: so101_follower
+    port: /dev/haller_arm_left
+    calibration_id: haller_left
+    enabled: true
+  - id: right              # robot's LEFT arm, board 5B14030445
+    model: so101_follower
+    port: /dev/haller_arm_right
+    calibration_id: haller_right
+    enabled: true
+ros:
+  cmd_vel_topic: /cmd_vel
+  odom_topic: /odom
+  scan_topic: /scan
+  max_linear: 1.0
+  max_angular: 2.0
+telemetry:
+  hz: 20
+cameras:
+  - id: base_front
+    role: base
+    source: opencv
+    facing: operator
+    index_or_path: /dev/haller_cam_mast
+    width: 640
+    height: 480
+    fps: 30
+    record: true
+    dataset_key: head
+  - id: wrist_left          # on haller `left` = robot's RIGHT gripper
+    role: wrist
+    arm_id: left
+    source: opencv
+    index_or_path: /dev/haller_cam_wrist_left
+    width: 640
+    height: 480
+    fps: 30
+    rotation: 180
+    color_gains: [1.000, 1.100, 1.229]   # R, G, B (Oscar, solved 2026-09-11 at 1280x720)
+    record: true
+    dataset_key: left_wrist
+    controls:
+      auto_exposure: 1
+      exposure_time_absolute: 300
+      gain: 100
+      gamma: 100
+      saturation: 128
+      power_line_frequency: 1
+      white_balance_automatic: 0
+      white_balance_temperature: 2800
+  - id: wrist_right         # on haller `right` = robot's LEFT gripper
+    role: wrist
+    arm_id: right
+    source: opencv
+    index_or_path: /dev/haller_cam_wrist_right
+    width: 640
+    height: 480
+    fps: 30
+    rotation: 180
+    color_gains: [1.000, 1.073, 1.230]   # R, G, B
+    record: true
+    dataset_key: right_wrist
+    controls:
+      auto_exposure: 1
+      exposure_time_absolute: 300
+      gain: 100
+      gamma: 100
+      saturation: 128
+      power_line_frequency: 1
+      white_balance_automatic: 0
+      white_balance_temperature: 2800

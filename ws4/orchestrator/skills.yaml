@@ -1,0 +1,259 @@
+# Skill vocabulary of the FINAL demo on the green Haller (XLeRobot torso), Oscar's plan of 2026-10-18 night:
+#   1. robot RIGHT arm: open the closed white box by its coloured handle
+#   2. robot LEFT arm: green pen into the green slot
+#   3. robot LEFT arm: yellow cutter into the yellow slot
+#   4. robot LEFT arm: red pen into its slot
+# Arms: robot left = /dev/haller_arm_right (calibration haller_right), robot right = /dev/haller_arm_left (haller_left);
+# both are connected by one process (orchestrator/haller.py), each arm's keep-out sees the other arm's live pose.
+#
+# The FLUX prompts are the exact strings of the recorded datasets (ws4-vr2 confirms them; the box one may change):
+# FLUX conditions on the exact caption, so never edit them here without the dataset and the served package: a skill
+# with a kit (`keepout: skills/<kit>/workspace.json`) must use the kit's verbatim task (skill.json, checked at load). One
+# LoRA per skill is served on 8790 under a fixed name (`package:` below; ws4-datasets maps each name to a checkpoint in
+# /workspace/serve/demo_packages.txt on the volume); `--skill-package open_box=<pkg>` overrides one for a test. The
+# planner only picks skills from this file and never writes a prompt.
+#
+# Fields: see skills_sim_pack_box.yaml. Extra: `start_pose: home` ramps the arm to its home pose first (release, then
+# move, through the ramp guard); `finish: home` lets the POLICY bring the arm back home after the check passed (the
+# demos end at home; a scripted ramp from inside the box could hit it), then checks again; without it the step ends on
+# the check and the arm holds where it is; `finish: hold` (open_box) freezes the arm there for the rest of the run: no
+# step may drive it again and its torque stays on at close (the lid closes if it lets go); `park_after` (unused here)
+# would ramp home instead. `keepout` names the skill's kit in ws4/single_arm (build_skill.py): its workspace.json (the
+# station zones with the skill's recorded overrides plus its demonstrated envelope), and next to it skill.json, whose
+# `runner_args` (cutter: slow zone) and `other_arm_gate` (pen-arm skills: gate.py start gate with the live box-arm pose)
+# the orchestrator applies as run_single_arm / eval_skill.sh do; without `keepout` the policy runs under the arm's
+# station zones only. `verify_scene` / `verify_hint`: the success check's prompt (verify_eval.py tunes them).
+version: 3
+
+station:
+  name: haller
+  arms_available: [left, right]
+  # LeRobot degrees (arm joints at their calibration middle) and gripper 100 = open: where the VR takes start (the
+  # teleop's stick-click home).
+  home_pose: [0, 0, 0, 0, 0, 100]
+  # Measured in the datasets (ws4-vr2 / parent, 2026-10-18): the box takes start with the box arm at home and the pen
+  # arm tucked; the pen takes (re-recorded so) start with the pen arm at home while the box arm holds the lid open.
+  # Ramps between home and tucked (1 deg/tick, ramp limits, station keep-out with the other arm's capsules) touch no
+  # keep-out zone and stay inside both arms' calibrated ramp limits (checked offline, research/orchestrator.md).
+  poses:
+    left:  # robot LEFT arm = the pen arm (haller "right")
+      home: [0, 0, 0, 0, 0, 100]
+      # where it waits during the box skill (box takes 7 to 74; median of the 65 kept takes [5.3, -83.7, 81.9, 82.8,
+      # -10.3, 0.9]); the ramps to and from home touch no keep-out zone with the box arm at any of its 65 recorded
+      # holding poses
+      tucked: [3, -83.6, 81.9, 82.8, -10.2, 0.9]
+    right:  # robot RIGHT arm = the box arm (haller "left")
+      home: [0, 0.8, 2.0, 0.4, 0, 99.7]
+      tucked: [3.1, -102.7, 96.7, 78.4, 13.0, 1.5]
+  # the arms work inside the box: a ramp from where a policy left an arm waits for the operator (executor)
+  confirm_unknown_ramps: true
+  demo_goal: >-
+    open the box, put the green pen in the green slot, put the yellow cutter in the yellow slot, put the red pen in its
+    slot
+  notes: >-
+    The final demo: first the robot's RIGHT arm opens the closed box by pulling the coloured handle on its lid
+    (open_box), then the robot's LEFT arm puts the green pen in the green slot, the yellow cutter in the yellow slot and
+    the red pen in its slot, in that order. The box must be open before any left-arm step, and after open_box the right
+    arm keeps holding the lid open (the lid closes if it lets go): never give the right arm another step after
+    open_box. The executor moves the arms into each skill's start pose, the green pen and yellow cutter steps bring the
+    left arm back home by themselves, and the red pen step ends with the left arm holding at the slot: never add home
+    steps yourself, and end the plan with the red pen step. When the operator says they reset the pen by hand between
+    repetitions, put one operator_reset step between consecutive put_pen_in_slot steps (none after the last one).
+  # Default success-check prompt for this station. DRAFT, VERIFY: tune on the new takes with verify_eval.py.
+  verify_scene: >-
+    You check the state of a tabletop scene in an image from a robot's head camera, which looks down at the table at
+    an angle from behind the robot. On the table: a black mat and a white cardboard box whose lid has a coloured
+    handle. Inside the box are holders: a green slot for a green pen, a yellow slot for a yellow cutter, and a small
+    white slot for a red pen. Objects may lie on the mat, be held by a gripper or stand in their slots. Green robot
+    arms may be in view and may touch, hold or hide objects; a person may be in the background. Because the camera
+    looks down at an angle, an object standing upright and an object lying flat pointing toward the camera can look
+    alike: decide by WHERE the object is, not by how vertical it looks. Answer done=true only if the condition holds in
+    this image; if the object is hidden or its position is ambiguous, answer done=false with low confidence. Give one
+    sentence saying where the object in question is.
+
+defaults:
+  # 120 s per attempt, as in the red-pen benchmark behind the first real inserts (inserts after 48 to 94 s at action
+  # horizon 16, single_arm/benchmarks/red_pen_2026-10-18.md); 45 s would have cut 2 of the 3
+  timeout_s: 120
+  verify_every_chunks: 2
+  verifier_model: claude-haiku-5-5
+  confidence: 0.7
+  max_attempts: 2
+  package: null
+
+skills:
+  open_box:
+    kind: flux
+    prompt: "open the box by pulling its handle"  # the kit's task (skills/box/skill.json)
+    arms: [right]
+    description: "Robot right arm: open the closed white box by pulling the coloured handle on its lid."
+    success_check: "The lid of the box is open."
+    # Written for the scene of the first haller_open_the_box takes (2026-10-18); tuned with verify_eval.py
+    # (--dataset haller_open_the_box --skill open_box), see research/orchestrator.md. VERIFY on the full dataset.
+    verify_scene: >-
+      You check the state of a tabletop scene in an image from a robot's head camera, which looks down at the table at
+      an angle from behind the robot. On the table: a black mat on the left with pens and a yellow cutter lying on it,
+      and on the right a white cardboard box. When the box is closed, its flat white lid covers it and a strip of tape
+      at the lid's front edge serves as a handle. When the box is open, the lid is swung up and stands behind or beside
+      the box, and the white inside of the box with its small white holders is visible. Green robot arms may be in
+      view and may hold the lid or hide part of the box; a person may be in the background. Answer done=true only if
+      the condition holds in this image; if the box is hidden or its state is ambiguous, answer done=false with low
+      confidence. Give one sentence saying whether the lid is closed, partly open or open.
+    verify_hint: >-
+      Done: the lid stands open (up, or leaning back), so the inside of the box and its white holders are clearly
+      visible from above; the lid itself may be out of the picture behind the box, and the gripper may still touch it.
+      Not done: the lid lies closed on the box (a flat white top with the tape handle), or is lifted only partly so the
+      inside is still mostly covered.
+    start_pose: home
+    other_arm_pose: tucked  # the pen arm, as in the box demos
+    # no park_after: the box arm must keep holding the lid open (the lid closes if it lets go, Oscar 2026-10-18); when
+    # the check passes the policy stops and the runner holds the arm's last command, and from then on nothing drives it
+    finish: hold
+    package: skill_open_box
+    # Fallback, the FLUX box LoRA went 0/4 on the arm (18 Oct 08:20): `--skill-backend open_box=replay` (or
+    # `backend: replay` here) replays recorded take 59's box-arm actions instead of FLUX (ws4/single_arm/replay.py):
+    # time-warped to 1 deg/tick, through the same guard, this kit's keep-out with its envelope and the freezes; the lid
+    # check runs once the take has been replayed to its end; the HMI, events and trial notes say "scripted replay of
+    # recorded demo 72", never FLUX; its trial rows have condition scripted. Take 72: P3 held out, its first head frame
+    # is skills/box/layouts/P3_ep072_head.jpg (place the box on it), all pen-skill gates pass at its end; 73 second
+    # (single_arm/replay.py DEFAULT_EPISODE). `--replay-episode open_box=N` picks another take.
+    backend: flux
+    replay: {episode: 72, root: ~/.cache/huggingface/lerobot/ws4/haller_open_the_box, columns: left}
+    # box takes 7-74, right-arm midline +0.17 m (box only), approved overrides recorded in skills/box/skill.json
+    keepout: skills/box/workspace.json
+    keywords: ["open the box", "open the lid", "open it", "pull its handle", "pull the handle"]
+
+  put_green_pen_in_slot:
+    kind: flux
+    prompt: "put the green pen in the green slot"  # the kit's task (skills/green/skill.json)
+    arms: [left]
+    description: "Robot left arm: pick up the green pen and put it upright into the green slot in the box."
+    success_check: "The green pen is standing in the green slot in the box."
+    # Written for the scene of the first haller_put_the_green_pen_in_the_green_slot takes (2026-10-18, the box arm
+    # holding the lid); measured with verify_eval.py, research/orchestrator.md. VERIFY on the full dataset.
+    verify_scene: >-
+      You check the state of a tabletop scene in an image from a robot's head camera, which looks down at the table at
+      an angle from behind the robot. On the table: a black mat on the left with a yellow cutter, a red pen and a
+      green pen lying on it, and on the right an open white cardboard box whose lid stands up behind it, held by a
+      green robot arm. Inside the box are white holders; the green slot is the holder marked with a green strip,
+      where the green pen (a grey body with a green cap) stands upright when it is in place. Green robot arms may be
+      in view and may touch, hold or hide the pen; a person may be in the background. Because the camera looks down
+      at an angle, a pen standing upright and a pen lying flat pointing toward the camera both look like a stripe:
+      decide by WHERE the green pen is, not by how vertical it looks. Answer done=true only if the condition holds in
+      this image; if the pen is hidden or its position is ambiguous, answer done=false with low confidence. Give one
+      sentence saying where the green pen is.
+    # Yes / no. A location answer (verify_states) was tried and dropped: forced to name where the pen is, Haiku read the
+    # empty slot's green strip as "standing in the green slot" on most start frames (research/orchestrator.md).
+    verify_hint: >-
+      Done: the green pen stands upright inside the box in the green slot and is no longer on the mat; a pen in its
+      slot covers the slot's green strip, so the strip may no longer be visible, and the gripper may still touch the
+      pen. Whether it is fully seated cannot be seen from this camera and is not required. Not done: the green pen
+      still lies on the mat, is held in the air above the box, or lies anywhere else; the green strip of an empty slot
+      alone does not count.
+    start_pose: home
+    precheck: open_box  # the lid must still be open, else e-stop and hold
+    finish: home  # the demos end at home: the policy brings the arm out of the box, then the check again
+    package: skill_green_pen
+    # pen-arm midline -0.23 m, takes 3/15/23/41/47 out of the envelope, 2 cm trim near the box arm; box-arm start gate
+    keepout: skills/green/workspace.json
+    keywords: ["green pen", "green slot", "green marker"]
+
+  put_yellow_cutter_in_slot:
+    kind: flux
+    prompt: "put the yellow cutter in the yellow slot"  # the dataset's task string (recorded 2026-10-18)
+    arms: [left]
+    description: "Robot left arm: pick up the yellow cutter from the mat and lay it in the lower white slot of the box."
+    # The "yellow slot" is NOT yellow: it is the lower white rectangle in the box, left unpainted on purpose so the
+    # scene matches the box and green-pen datasets (Oscar, 2026-10-18). The check names it as it looks.
+    success_check: "The yellow cutter lies in the lower white slot of the box."
+    # Written from Oscar's description before the first cutter frames were looked at; VERIFY with verify_eval.py.
+    verify_scene: >-
+      You check the state of a tabletop scene in an image from a robot's head camera, which looks down at the table at
+      an angle from behind the robot. On the table: a black mat on the left with a yellow cutter and a red pen lying
+      on it, and on the right an open white cardboard box whose lid stands up behind it, held by a green robot arm.
+      Inside the box are white holders: a green pen already stands in its green-painted slot, and the lower white
+      rectangle (nearest the camera) is the slot for the yellow cutter, which lies flat in it when it is in place.
+      Green robot arms may be in view and may touch, hold or hide the cutter; a person may be in the background.
+      Decide by WHERE the yellow cutter is. Answer done=true only if the condition holds in this image; if the
+      cutter is hidden or its position is ambiguous, answer done=false with low confidence. Give one sentence saying
+      where the yellow cutter is.
+    verify_hint: >-
+      Done: the yellow cutter (a long yellow body) lies inside the box in the lower white slot and is no longer on the
+      mat; the gripper may still touch it. Not done: the yellow cutter still lies on the mat, is held in the gripper
+      above the mat or the box, or lies anywhere else in the box. The green pen standing in its slot is not the
+      cutter and says nothing about it.
+    start_pose: home
+    precheck: open_box  # the lid must still be open, else e-stop and hold
+    finish: home  # the demos end at home: the policy brings the arm out of the box, then the check again
+    package: skill_yellow_cutter
+    # Last-resort fallback (the augmented FLUX cutter grasped 4/5 but inserted 0/5, 18 Oct):
+    # `--skill-backend put_yellow_cutter_in_slot=replay` replays recorded take 67 instead of FLUX, as open_box's replay,
+    # warped at the slow step within the slow zone of the box arm's live pose; place the cutter as in
+    # ws4/single_arm/skills/cutter/layouts/P3_ep067_head.jpg (the take's first head frame). Take 67: most room to the
+    # box arm of the three takes with a reference frame, starts and ends at home (single_arm/replay.py DEFAULT_TAKES).
+    replay: {episode: 67, root: ~/.cache/huggingface/lerobot/ws4/haller_put_the_yellow_cutter_in_the_yellow_slot,
+             columns: right}
+    # pen-arm midline -0.21 m, 1 cm box-arm clearance with a 4 cm slow zone (0.5 deg/tick, load freeze at 50 % for
+    # 0.2 s: skill.json runner_args), box-arm start gate
+    keepout: skills/cutter/workspace.json
+    keywords: ["yellow cutter", "yellow slot", "cutter", "knife"]
+
+  put_pen_in_slot:
+    kind: flux
+    prompt: "put the red pen in its slot in the cardboard box"
+    arms: [left]
+    description: "Robot left arm: pick up the red pen from the mat and put it upright into its slot in the box."
+    success_check: "The red pen is standing in its slot in the cardboard box."
+    # Tuned on 282 recorded head frames of the pen-only scene (research/orchestrator.md "Success checks on real frames":
+    # 97.1 %, no false pass). In the chain the box is filled by then, as in that scene. Re-check on the chain's takes.
+    verify_scene: >-
+      You check the state of a tabletop scene in an image from a robot's head camera, which looks down at the table at
+      an angle from behind the robot. On the table: a black mat on the left and an open white cardboard box on the
+      right (its lid stands open behind it). In the box: a yellow utility knife lying flat at the front, a green marker
+      standing upright in a holder, and, immediately LEFT of the green marker, the red pen's slot: a small white
+      rectangular holder. The red pen has a red cap, a red end and a black body. Green robot arms may be in view and
+      may touch, hold or hide the pen; a person may be in the background. Because the camera looks down at an angle, a
+      pen standing in a holder and a pen lying on the mat pointing toward the camera both look like a vertical stripe
+      in the image: decide by WHERE the pen is (in the white holder inside the box, or on the black mat or the table
+      outside the box), not by how vertical it looks. Answer done=true only if the condition holds in this image; if
+      the pen cannot be found or its position is ambiguous, answer done=false with low confidence. Give one sentence
+      saying where the red pen is.
+    verify_hint: >-
+      Done: the red pen's lower end is in the white holder immediately left of the green marker, inside the box, so it
+      stands next to the green marker as the marker does; the gripper may still touch the pen. Not done: the pen is on
+      the mat or the table, anywhere else in the box (including right of the green marker), or held in the air above
+      the box; or the white holder is empty.
+    start_pose: home
+    precheck: open_box  # the lid must still be open, else e-stop and hold
+    # the last skill: it ends on the check and the arm holds at the slot (its takes end there; a scripted ramp out of
+    # the box could hit it, parent 2026-10-18)
+    package: skill_red_pen
+    # the lid-held red-pen takes (box at its final position): pen-arm midline -0.15 m, torso margin 1.4 cm, box-arm
+    # start gate (skills/pen_lid; skills/pen is the old scene, box arm tucked)
+    keepout: skills/pen_lid/workspace.json
+    keywords: ["put the pen in", "put the red pen in", "pen in the box", "pen in its slot", "put it back", "put it in",
+               "insert"]
+
+  # The operator acts, the arm waits at home; the operator presses Done in the HMI (not counted as an intervention).
+  operator_reset:
+    kind: operator
+    arms: [left]
+    description: "The left arm waits at the home pose while the operator puts the red pen back on the mat by hand."
+    instruction: "Take the red pen out of its slot and lay it on the mat."
+    start_pose: home
+    timeout_s: 600
+    max_attempts: 1
+    keywords: ["i reset", "reset it", "reset the pen", "resets", "by hand"]
+
+  # Scripted primitives: never FLUX.
+  hold:
+    kind: primitive
+    arms: [left, right]
+    description: "Keep this arm still at its last command until the steps in hold_until finish."
+    timeout_s: 300
+
+  home:
+    kind: primitive
+    arms: [left, right]
+    description: "Move the arm slowly to the home pose (also where every FLUX step starts)."
+    timeout_s: 30

@@ -1,0 +1,8 @@
+# ws4/orchestrator runtime. The SDK version is pinned: the Claude calls were written and checked against it
+# (ws4/research/orchestrator.md, "Claude API: docs and SDK"). numpy, pyyaml, Pillow and mujoco are the versions
+# installed on the laptop where the tests pass; the lerobot env (flux/run_xlerobot.py) is only for the real robot.
+anthropic==1.15.0
+numpy>=2.2
+pyyaml>=6
+Pillow>=10
+mujoco>=3.8
