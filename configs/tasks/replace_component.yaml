@@ -7,6 +7,26 @@ goal: replacement_in_slot
 # YAML anchors keep the recovery-aware main-arm sequence identical in both access
 # branches. parse_task compiles each reference into independent behavior-tree nodes.
 subtrees:
+  right_recovery: &right_recovery
+    sequence:
+      - skill: {arm: right, name: home}
+      - inspect:
+          predicates: [main_arm_home]
+          cameras: [top]
+          definitions:
+            main_arm_home: The right arm is at its configured home pose and clear of the box.
+          timeout_s: 10
+      - check: main_arm_home
+  left_recovery: &left_recovery
+    sequence:
+      - skill: {arm: left, name: home}
+      - inspect:
+          predicates: [helper_arm_home]
+          cameras: [top]
+          definitions:
+            helper_arm_home: The left arm is at its configured home pose and clear of the box.
+          timeout_s: 10
+      - check: helper_arm_home
   main_work: &main_work
     fallback:
       - check: replacement_in_slot
@@ -15,7 +35,7 @@ subtrees:
               - check: faulty_component_in_red_cup
               - retry:
                   attempts: 2
-                  recovery: {skill: {arm: right, name: home}}
+                  recovery: *right_recovery
                   do:
                     skill:
                       arm: right
@@ -23,11 +43,11 @@ subtrees:
                       target: faulty_component
                       prompt: Remove the faulty component from the box and place it fully inside the red cup
                       success: faulty_component_in_red_cup
-                      timeout_s: 30
+                      timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
                       zones: [box]
           - retry:
               attempts: 2
-              recovery: {skill: {arm: right, name: home}}
+              recovery: *right_recovery
               do:
                 skill:
                   arm: right
@@ -35,7 +55,7 @@ subtrees:
                   target: green_replacement
                   prompt: Pick the green replacement from its cup and seat it fully in the empty box slot
                   success: replacement_in_slot
-                  timeout_s: 30
+                  timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
                   zones: [box]
 
 tree:
@@ -51,7 +71,7 @@ tree:
         - check: lid_open
         - retry:
             attempts: 2
-            recovery: {skill: {arm: left, name: home}}
+            recovery: *left_recovery
             do:
               skill:
                 arm: left
@@ -59,7 +79,7 @@ tree:
                 target: lid
                 prompt: Grasp the box lid edge and raise it until the component area is fully exposed
                 success: lid_open
-                timeout_s: 30
+                timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
                 zones: [box]
     - inspect:
         predicates: [access_clear, access_blocked, faulty_component_in_red_cup, replacement_in_slot]
@@ -86,15 +106,17 @@ tree:
                   main_arm_home: The right main arm is at its safe home pose and clear of the box.
                 timeout_s: 10
 
+            - check: main_arm_home
+
         # Obstructed route: clear and hold the cable while the right arm works.
         - sequence:
             - check: access_blocked
             - retry:
                 attempts: 2
                 recovery:
-                  parallel:
-                    - {skill: {arm: left, name: home}}
-                    - {skill: {arm: right, name: home}}
+                  sequence:
+                    - *right_recovery
+                    - *left_recovery
                 do:
                   sequence:
                     - skill:
@@ -103,7 +125,7 @@ tree:
                         target: cable
                         prompt: Grasp the cable and move it clear of the box opening and the right arm's work corridor
                         success: cable_secured_clear
-                        timeout_s: 30
+                        timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
                         zones: [box]
                     - while:
                         arm: left
@@ -117,9 +139,10 @@ tree:
                 definitions:
                   main_arm_home: The right main arm is at its safe home pose and clear of the box.
                 timeout_s: 10
+            - check: main_arm_home
             - retry:
                 attempts: 2
-                recovery: {skill: {arm: left, name: home}}
+                recovery: *left_recovery
                 do:
                   skill:
                     arm: left
@@ -127,7 +150,7 @@ tree:
                     target: cable
                     prompt: Return the cable to its resting route outside the work corridor and release it
                     success: cable_restored
-                    timeout_s: 30
+                    timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
                     zones: [box]
             - inspect:
                 predicates: [cable_secured_clear, cable_restored]

@@ -29,4 +29,5 @@ predicates:
   - faulty_component_in_red_cup
   - replacement_in_slot
   - cable_restored
+  - helper_arm_home
   - main_arm_home

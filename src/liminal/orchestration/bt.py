@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence as Seq
 from contextlib import AsyncExitStack
@@ -66,20 +67,28 @@ class SkillNode(Node):
             for arm in members:
                 await stack.enter_async_context(ctx.safety.claim(arm, owner=self.name))
             await stack.enter_async_context(ctx.safety.zones(s.zones))
+            version = ctx.world.observation_version(s.success) if s.success else 0
+            started_at = time.monotonic()
             try:
                 result = await asyncio.wait_for(ctx.skills.execute(s, ctx), timeout=s.timeout_s)
+                ctx.world.log("skill_result", node=self.name, status=result.status.value, message=result.message)
+                if not result.status.ok:
+                    return result.status
+                if s.success:
+                    fresh = {"after_version": version, "after_time": started_at,
+                             "max_age_s": ctx.inspection.timeout_s} if ctx.inspector is not None else {}
+                    if not await ctx.world.wait_for(s.success, timeout=s.verify_timeout_s, **fresh):
+                        ctx.world.log("verify_failed", node=self.name, condition=s.success)
+                        return Status.FAILURE
+                return Status.SUCCESS
             except asyncio.TimeoutError:
-                for arm in members:
-                    ctx.arms[arm].stop()
                 ctx.world.log("skill_timeout", node=self.name)
                 return Status.TIMEOUT
-        ctx.world.log("skill_result", node=self.name, status=result.status.value, message=result.message)
-        if not result.status.ok:
-            return result.status
-        if s.success and not await ctx.world.wait_for(s.success, timeout=s.verify_timeout_s):
-            ctx.world.log("verify_failed", node=self.name, condition=s.success)
-            return Status.FAILURE
-        return Status.SUCCESS
+            finally:
+                # Freeze before releasing ownership, including cancellation and verification failures.
+                for arm in members:
+                    ctx.arms[arm].stop()
+
 
 
 class Check(Node):
@@ -232,21 +241,36 @@ class While(Node):
                 await stack.enter_async_context(ctx.safety.claim(arm, owner=self.name))
                 ctx.arms[arm].hold()
                 ctx.world.set(f"{arm}_holding", True, source=self.name)
-            if not await ctx.world.wait_for(self.maintain, timeout=self.establish_timeout_s):
+            freshness = {"max_age_s": ctx.inspection.timeout_s} if ctx.inspector is not None else {}
+            if not await ctx.world.wait_for(self.maintain, timeout=self.establish_timeout_s, **freshness):
                 ctx.world.log("while_not_established", node=self.name, condition=self.maintain)
                 return Status.FAILURE
 
             with ctx.watch_invariant(self.maintain):
-                body = asyncio.create_task(self.body.run(ctx))
-                monitor = asyncio.create_task(ctx.world.wait_until_violated(self.maintain))
-                try:
-                    done, _ = await asyncio.wait({body, monitor}, return_when=asyncio.FIRST_COMPLETED)
-                finally:
-                    for t in (body, monitor):
-                        t.cancel()
-                    await asyncio.gather(body, monitor, return_exceptions=True)
+                async def refresh_invariant():
+                    while True:
+                        await asyncio.sleep(ctx.inspection.timeout_s / 3)
+                        request = ctx.inspection.request((self.maintain,), context="Verify the held support invariant.")
+                        await ctx.inspector.inspect_until_known(
+                            request, timeout_s=ctx.inspection.timeout_s,
+                            retry_delay_s=ctx.inspection.retry_delay_s,
+                        )
 
-            if monitor in done and not ctx.world.holds(self.maintain):
+                refresh = asyncio.create_task(refresh_invariant()) if ctx.inspector is not None else None
+                body = asyncio.create_task(self.body.run(ctx))
+                monitor = asyncio.create_task(ctx.world.wait_until_violated(self.maintain, **freshness))
+                try:
+                    watched = {body, monitor, *([refresh] if refresh else [])}
+                    done, _ = await asyncio.wait(watched, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    for t in watched:
+                        t.cancel()
+                    await asyncio.gather(*watched, return_exceptions=True)
+                if refresh is not None and refresh in done:
+                    ctx.world.log("invariant_refresh_failed", node=self.name)
+                    return Status.FAILURE
+
+            if monitor in done:
                 ctx.world.log("while_violated", node=self.name, condition=self.maintain)
                 return Status.FAILURE
             status = body.result()
@@ -273,7 +297,10 @@ class Retry(Node):
                 return status
             ctx.world.log("retry", node=self.name, attempt=i + 1, status=status.value)
             if self.recovery is not None and i + 1 < self.attempts:
-                await self.recovery.run(ctx)
+                recovered = await self.recovery.run(ctx)
+                if not recovered.ok:
+                    ctx.world.log("recovery_failed", node=self.name, status=recovered.value)
+                    return recovered
         return status
 
 

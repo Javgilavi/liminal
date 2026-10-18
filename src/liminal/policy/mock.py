@@ -44,6 +44,6 @@ class MockBackend:
                     return SkillResult(Status.FAILURE, skill, "injected failure")
         await asyncio.sleep(self.duration_s)
         if skill.success:
-            ctx.world.set(skill.success.lstrip("!"), not skill.success.startswith("!"), source="mock")
+            ctx.world.observe(skill.success.lstrip("!"), not skill.success.startswith("!"), source="mock")
         ctx.world.update(self.effects.get(skill.name, {}), source="mock")
         return SkillResult(Status.SUCCESS, skill)

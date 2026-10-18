@@ -74,16 +74,19 @@ class WorldState:
         condition: str,
         *,
         after_version: int | None = None,
+        after_time: float | None = None,
         max_age_s: float | None = None,
     ) -> bool:
         if self.evaluate(condition) is not True:
             return False
-        if after_version is None and max_age_s is None:
+        if after_version is None and after_time is None and max_age_s is None:
             return True
         record = self.observation(condition)
         if record is None:
             return False
         if after_version is not None and record.version <= after_version:
+            return False
+        if after_time is not None and record.captured_at < after_time:
             return False
         if max_age_s is not None:
             if max_age_s < 0:
@@ -142,6 +145,10 @@ class WorldState:
         if confidence is not None and not 0.0 <= confidence <= 1.0:
             raise ValueError("observation confidence must be between zero and one")
 
+        previous_record = self._observations.get(key)
+        if previous_record is not None and timestamp < previous_record.captured_at:
+            self.log("observation_discarded", key=key, captured_at=timestamp, source=source)
+            return previous_record
         old = self._facts.get(key, _MISSING)
         self._next_observation_version += 1
         record = ObservationRecord(
@@ -199,12 +206,13 @@ class WorldState:
         timeout: float | None = None,
         *,
         after_version: int | None = None,
+        after_time: float | None = None,
         max_age_s: float | None = None,
     ) -> bool:
         """Wait until `condition` holds. Returns False on timeout."""
         loop = asyncio.get_running_loop()
         deadline = None if timeout is None else loop.time() + timeout
-        while not self.holds(condition, after_version=after_version, max_age_s=max_age_s):
+        while not self.holds(condition, after_version=after_version, after_time=after_time, max_age_s=max_age_s):
             event = self._changed
             remaining = None if deadline is None else deadline - loop.time()
             if remaining is not None and remaining <= 0:
@@ -212,13 +220,19 @@ class WorldState:
             try:
                 await asyncio.wait_for(event.wait(), remaining)
             except asyncio.TimeoutError:
-                return self.holds(condition, after_version=after_version, max_age_s=max_age_s)
+                return self.holds(condition, after_version=after_version, after_time=after_time, max_age_s=max_age_s)
         return True
 
-    async def wait_until_violated(self, condition: str) -> None:
+    async def wait_until_violated(self, condition: str, *, max_age_s: float | None = None) -> None:
         """Return as soon as `condition` stops holding (used by WHILE monitors)."""
-        while self.holds(condition):
-            await self._changed.wait()
+        while self.holds(condition, max_age_s=max_age_s):
+            event = self._changed
+            record = self.observation(condition)
+            remaining = None if max_age_s is None else max(0, record.captured_at + max_age_s - time.monotonic())
+            try:
+                await asyncio.wait_for(event.wait(), remaining)
+            except asyncio.TimeoutError:
+                return
 
 
 def _condition_parts(condition: str) -> tuple[str, bool]:

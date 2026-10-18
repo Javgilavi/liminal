@@ -85,7 +85,7 @@ def test_dropped_cable_cancels_main_work_and_retries_obstructed_route(make_ctx):
     )
     report, ctx, backend = _run(
         make_ctx,
-        [_lid(), _scene(clear=False), _home(), _restored()],
+        [_lid(), _scene(clear=False), _home(), _response(helper_arm_home=True), _home(), _restored()],
         backend,
     )
 
@@ -100,7 +100,7 @@ def test_failed_placement_is_retried(make_ctx):
         duration_s=0.001,
         faults=[Fault("green_cup_to_slot", on_attempt=1, fail=True)],
     )
-    report, _, backend = _run(make_ctx, [_lid(), _scene(clear=True), _home()], backend)
+    report, _, backend = _run(make_ctx, [_lid(), _scene(clear=True), _home(), _home()], backend)
 
     assert report.goal_verified
     assert backend.calls.count("right:green_cup_to_slot(green_replacement)") == 2
@@ -147,3 +147,16 @@ def test_ambiguous_access_fails_before_any_manipulation(make_ctx):
     assert report.status is Status.TIMEOUT
     assert not report.goal_verified
     assert backend.calls == []
+
+
+def test_known_false_home_prevents_cable_restoration(make_ctx):
+    report, _, backend = _run(make_ctx, [_lid(), _scene(clear=False), _response(main_arm_home=False)])
+    assert report.status is Status.FAILURE
+    assert not any("restore_cable" in call for call in backend.calls)
+
+
+def test_failed_home_verification_prevents_placement_retry(make_ctx):
+    backend = MockBackend(duration_s=0, faults=[Fault("green_cup_to_slot", fail=True)])
+    report, _, backend = _run(make_ctx, [_lid(), _scene(clear=True), _response(main_arm_home=False)], backend)
+    assert report.status is Status.FAILURE
+    assert backend.calls.count("right:green_cup_to_slot(green_replacement)") == 1

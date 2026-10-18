@@ -1,0 +1,104 @@
+# Deployment template. VERIFY actual trained bundles, hashes, calibration and grip retention.
+# Zero hashes deliberately prevent motion until staged checkpoint identities are supplied.
+midtraining_base: flux-midtraining@REPLACE_WITH_IMMUTABLE_REVISION
+embodiment: so101
+joint_order: &joints [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper]
+state_units: degrees_percent
+action_semantics: absolute_position
+action_dim: 6
+camera_roles: [scene, wrist]
+camera_map:
+  left: {scene: top, wrist: left_wrist}
+  right: {scene: top, wrist: right_wrist}
+obs_history: 8
+chunk_size: 42
+execute_steps: 12
+control_hz: 30
+max_observation_age_s: 1
+max_invariant_age_s: 5
+load_timeout_s: 180
+inference_timeout_s: 30
+device: cuda
+instances: shared
+checkpoints:
+  open_lid:
+    path: /liminal/models/skills/open_lid
+    sha256: &unstaged '0000000000000000000000000000000000000000000000000000000000000000'
+    base: flux-midtraining@REPLACE_WITH_IMMUTABLE_REVISION
+    embodiment: so101
+    joint_order: *joints
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: [scene, wrist]
+    targets: [left]
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: released
+  clear_cable_to_hold:
+    path: /liminal/models/skills/clear_cable_to_hold
+    sha256: *unstaged
+    base: flux-midtraining@REPLACE_WITH_IMMUTABLE_REVISION
+    embodiment: so101
+    joint_order: *joints
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: [scene, wrist]
+    targets: [left]
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: released
+  remove_to_red_cup:
+    path: /liminal/models/skills/remove_to_red_cup
+    sha256: *unstaged
+    base: flux-midtraining@REPLACE_WITH_IMMUTABLE_REVISION
+    embodiment: so101
+    joint_order: *joints
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: [scene, wrist]
+    targets: [right]
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: released
+  green_cup_to_slot:
+    path: /liminal/models/skills/green_cup_to_slot
+    sha256: *unstaged
+    base: flux-midtraining@REPLACE_WITH_IMMUTABLE_REVISION
+    embodiment: so101
+    joint_order: *joints
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: [scene, wrist]
+    targets: [right]
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: released
+  restore_cable:
+    path: /liminal/models/skills/restore_cable
+    sha256: *unstaged
+    base: flux-midtraining@REPLACE_WITH_IMMUTABLE_REVISION
+    embodiment: so101
+    joint_order: *joints
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: [scene, wrist]
+    targets: [left]
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: released
+skill_checkpoints:
+  open_lid: open_lid
+  clear_cable_to_hold: clear_cable_to_hold
+  remove_to_red_cup: remove_to_red_cup
+  green_cup_to_slot: green_cup_to_slot
+  restore_cable: restore_cable
