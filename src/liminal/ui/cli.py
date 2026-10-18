@@ -295,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="execute a task file")
     r.add_argument("task")
     r.add_argument("--robot", default="configs/robot/mock_dual.yaml")
-    r.add_argument("--backend", default="mock", choices=["mock", "scripted", "flux"])
+    r.add_argument("--backend", default="mock", choices=["mock", "scripted", "flux", "ws4"])
     r.add_argument("--policy", default=None, help="policy config, e.g. configs/policy/flux3_so101.yaml")
     r.add_argument("--perception", default=None, help="persistent VLM + predicate config")
     r.add_argument("--log-dir", default="runs")
@@ -316,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("serve", help="HTTP trigger + state API for the operator UI")
     s.add_argument("--robot", default="configs/robot/mock_dual.yaml")
-    s.add_argument("--backend", default="mock", choices=["mock", "scripted", "flux"])
+    s.add_argument("--backend", default="mock", choices=["mock", "scripted", "flux", "ws4"])
     s.add_argument("--policy", default=None)
     s.add_argument("--perception", default=None)
     s.add_argument("--task-dir", default="configs/tasks")

@@ -1,0 +1,10 @@
+| Block | Attempts | Success | Steps done | Reach / grasp / insert | Failure point | Interventions (as scored) | How attempts ended | Moved > 5 deg in 3 s; median gripper close | Median time to success | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| FLUX RAW 10k, lid-held scene (P3), horizon 32 | 5 | **0/5** | 0/15 (0, 0, 0, 0, 0) | 0 / 0 / 0 | reach 5 | 0 | keep-out stop 3, timeout 2 | 0/5, gripper shut 15.2 s | - | lid held up by the box arm; pen84 LoRA never saw it |
+| ACT pen84 100k, pen84 table | 5 | **0/5** | 8/15 (0, 2, 2, 2, 2) | 4 / 4 / 0 | insert 4, reach 1 | 0 | timeout 5 | 5/5, gripper shut 0.9 s | - | ACT session, box-arm tolerance 15 |
+| FLUX EMA 10k, pen84 table, horizon 32 | 5 | **0/5** | 4/15 (1, 1, 1, 0, 1) | 4 / 0 / 0 | grasp 4, reach 1 | 0 | stall freeze 4, timeout 1 | 4/5, gripper shut 3.3 s | - | stall 8 deg on every joint |
+| FLUX RAW 10k, pen84 table, horizon 32 | 5 | **0/5** | 3/15 (1, 0, 0, 2, 0) | 2 / 1 / 0 | reach 3, grasp 1, insert 1 | 0 | keep-out stop 3, timeout 1, stall freeze 1 | 5/5, gripper shut 1.5 s | - | stall 8 deg on every joint |
+| FLUX RAW 5k, pen84 table, horizon 32 | 5 | **0/5** | 8/15 (2, 2, 1, 2, 1) | 5 / 3 / 0 | insert 3, grasp 2 | 0 | stall freeze 4, keep-out stop 1 | 5/5, gripper shut 1.5 s | - | stall 8 deg on every joint |
+| FLUX RAW 5k, horizon 32, lift stall 25 | 1 | **0/1** | 0/3 (0) | 0 / 0 / 0 | reach 1 | 0 | load freeze 1 | 1/1, gripper shut 1.5 s | - | one attempt (load freeze), then horizon 16 |
+| FLUX RAW 5k, horizon 16, lift stall 25 | 5 | **3/5** | 9/15 (3, 3, 3, 0, 0) | 3 / 3 / 3 | reach 2 | 0 | operator stop 5 | 5/5, gripper shut 2.1 s | 91 s | A B C in one session, D A resumed (START_AT=4); the successes ended with the stop key after the insert, D and A were stopped by Oscar at 26 s and 43 s without a reach |
+| FLUX RAW 5k, horizon 8, lift stall 25 | 2 | **0/2** | 0/6 (0, 0) | 0 / 0 / 0 | reach 2 | 0 | operator stop 2 | 2/2, gripper shut 2.7 s | - | layouts A B (operator stopped both, session ended) |

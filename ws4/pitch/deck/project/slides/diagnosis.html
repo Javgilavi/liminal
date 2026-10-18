@@ -1,0 +1,17 @@
+<section id="diagnosis" data-transition="fade" style="background:#fbf8f4;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<p style="font-size:24px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5b3fe0">The diagnosis</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1;letter-spacing:-1px;color:#1c1830">Fixed offline, without training</h2>
+<p style="font-size:28px;line-height:1.4;color:#625d78">Released weights unchanged. 200 frames of our own pen demos (151 moving): FLUX’s first 32 predicted commands vs the recorded ones. Chance direction agreement is about 50 %.</p>
+<table style="font-size:26px;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif">
+<tr><th style="width:12%">Variant</th><th style="width:40%">Normalization</th><th style="width:16%;text-align:right">Lift MAE</th><th style="width:16%;text-align:right">Lift direction</th><th style="width:16%;text-align:right">Worst joint</th></tr>
+<tr><td>hold</td><td>repeat the current command</td><td style="text-align:right">4.4 deg</td><td style="text-align:right">-</td><td style="text-align:right">-</td></tr>
+<tr><td>A</td><td>released package statistics</td><td style="text-align:right">19.9 deg</td><td style="text-align:right">57 %</td><td style="text-align:right">34 %</td></tr>
+<tr style="background:#ece7ff"><td>B, chosen</td><td>our quantiles (A0r)</td><td style="text-align:right">3.2 deg</td><td style="text-align:right">79 %</td><td style="text-align:right">60 %</td></tr>
+<tr><td>C</td><td>issue #2 adapter + package stats</td><td style="text-align:right">16.8 deg</td><td style="text-align:right">43 %</td><td style="text-align:right">41 %</td></tr>
+<tr style="background:#ece7ff"><td>D</td><td>sign flips + our quantiles</td><td style="text-align:right">3.2 deg</td><td style="text-align:right">83 %</td><td style="text-align:right">62 %</td></tr>
+<tr><td>E</td><td>manual offset mapping + package stats</td><td style="text-align:right">16.7 deg</td><td style="text-align:right">43 %</td><td style="text-align:right">33 %</td></tr>
+</table>
+<p style="font-size:32px;line-height:1.35;color:#1c1830"><b>Our own quantiles fix the direction on every joint.</b> Magnitudes stay off (46 to 102 % displacement error), so we fine-tune from B: it needs no transform at train or deploy time.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#625d78">Source: ws4/single_arm/README.md, offline data-format diagnostic (offline_diag.py, seed 0; seed 1 agrees) · full table: README_submission.md</p>
+<aside>D1 DIAGNOSIS, part 2 (35 to 70 s in the 3-minute pitch). "We tested five normalizations offline on our own demos, before touching the arm. With our own quantiles, the lift error drops from 19.9 to 3.2 degrees and FLUX predicts the demonstrated direction 80 % of the time. Zero-shot, no training. The adapter proposed in the public flux-action issue does not transfer." Full direction agreement per joint (pan, lift, elbow, wrist flex, roll, gripper): A 42 57 53 58 34 78; B 80 79 68 60 73 72; C 41 43 70 64 77 82; D 80 83 70 62 81 80; E 41 43 69 64 33 82. Seed 1 (168 moving frames): B 86 83 70 62 83 74, D 84 81 70 60 88 70; neither consistently ahead. Issue: github.com/black-forest-labs/flux-action/issues/2. Variant E is Oscar’s mapping lift = 90 - lift, elbow = elbow + 90.</aside>
+</section>

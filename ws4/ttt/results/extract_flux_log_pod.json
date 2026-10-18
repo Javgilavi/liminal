@@ -1,0 +1,167 @@
+{
+ "checkpoint": "black-forest-labs/flux-3-action-so101",
+ "overrides": {
+  "compile_model": false,
+  "guidance_scale": 1.0,
+  "guidance_scale_action": 1.0
+ },
+ "layers": [
+  16,
+  27
+ ],
+ "groups": [
+  "observed",
+  "imagined"
+ ],
+ "episodes": [
+  {
+   "episode": "lid_cycles_2-100000",
+   "replans": 48,
+   "seconds": 52.9,
+   "median_latency_s": 0.775,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_2-100008",
+   "replans": 48,
+   "seconds": 37.9,
+   "median_latency_s": 0.779,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_2-100011",
+   "replans": 48,
+   "seconds": 38.0,
+   "median_latency_s": 0.782,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_2-100030",
+   "replans": 48,
+   "seconds": 38.1,
+   "median_latency_s": 0.783,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_2-100032",
+   "replans": 48,
+   "seconds": 38.0,
+   "median_latency_s": 0.782,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_3-100006",
+   "replans": 72,
+   "seconds": 56.6,
+   "median_latency_s": 0.778,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_3-100010",
+   "replans": 72,
+   "seconds": 57.1,
+   "median_latency_s": 0.782,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_3-100013",
+   "replans": 72,
+   "seconds": 57.0,
+   "median_latency_s": 0.784,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_3-100025",
+   "replans": 72,
+   "seconds": 56.8,
+   "median_latency_s": 0.78,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_4-100001",
+   "replans": 96,
+   "seconds": 75.8,
+   "median_latency_s": 0.779,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_4-100023",
+   "replans": 96,
+   "seconds": 75.7,
+   "median_latency_s": 0.78,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "lid_cycles_4-100024",
+   "replans": 96,
+   "seconds": 75.6,
+   "median_latency_s": 0.779,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack-200000",
+   "replans": 33,
+   "seconds": 54.6,
+   "median_latency_s": 0.772,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack-200001",
+   "replans": 34,
+   "seconds": 26.9,
+   "median_latency_s": 0.778,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack-200002",
+   "replans": 33,
+   "seconds": 26.0,
+   "median_latency_s": 0.777,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack-200003",
+   "replans": 22,
+   "seconds": 17.3,
+   "median_latency_s": 0.778,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack-200006",
+   "replans": 33,
+   "seconds": 26.0,
+   "median_latency_s": 0.778,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack_lidded-100004",
+   "replans": 70,
+   "seconds": 55.1,
+   "median_latency_s": 0.777,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack_lidded-100005",
+   "replans": 69,
+   "seconds": 54.3,
+   "median_latency_s": 0.778,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack_lidded-100007",
+   "replans": 70,
+   "seconds": 55.1,
+   "median_latency_s": 0.777,
+   "max_memory_gib": 15.83
+  },
+  {
+   "episode": "pack_lidded-100015",
+   "replans": 70,
+   "seconds": 55.7,
+   "median_latency_s": 0.786,
+   "max_memory_gib": 15.83
+  }
+ ],
+ "load_s": 392.2952253818512,
+ "total_s": 1459.6
+}

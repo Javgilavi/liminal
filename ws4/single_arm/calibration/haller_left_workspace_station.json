@@ -1,0 +1,56 @@
+{
+  "table_z": 0.0,
+  "table_margin": -0.005,
+  "wrist_table_margin": 0.05,
+  "base_radius": 0.06,
+  "shoulder_z": 0.117,
+  "base_z_margin": 0.05,
+  "fold_cos": -1.01,
+  "fold_radius": 0.25,
+  "min_approach_xy": 0.3,
+  "base_pos": [
+    -0.0216,
+    -0.1366,
+    0.085
+  ],
+  "tcp_in_gripper": [
+    -0.0019,
+    0.0,
+    -0.0908
+  ],
+  "torso_min": [
+    -0.0609,
+    -0.1931,
+    0.0
+  ],
+  "torso_max": [
+    0.0609,
+    0.1931,
+    0.0826
+  ],
+  "torso_margin": 0.02,
+  "mast_xy": [
+    0.0,
+    0.0
+  ],
+  "mast_radius": 0.05,
+  "mast_margin": 0.04,
+  "mast_top_z": 0.374,
+  "midline_y": -0.11,
+  "side": -1,
+  "other_base_pos": [
+    -0.0216,
+    0.1366,
+    0.085
+  ],
+  "other_q": null,
+  "other_clearance": 0.04,
+  "env_joint_lo": null,
+  "env_joint_hi": null,
+  "env_voxel": 0.025,
+  "env_origin": null,
+  "env_source": "",
+  "calibrated": false,
+  "source": "station_geometry (/home/oscar-devos/liminal/ws4/sim/station_geometry.yaml), side right",
+  "env_cells": null
+}

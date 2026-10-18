@@ -1,0 +1,184 @@
+# station_geometry.yaml: single source of truth for Oscar's XLeRobot station geometry (WS4 sim).
+#
+# Consumers: ws4/sim/build_model.py (generates the MJCF from this file), ws4/kinematics (IK and MuJoCo collision
+# checks; it groups bodies by the left_/right_ prefixes plus torso, head_pitch, table, so keep MJCF names stable),
+# anyone who needs camera extrinsics or arm base poses. Keep the key names stable; append to
+# `changelog` when a value or key changes.
+#
+# Every leaf value is {value, verified, source}. `verified: true` means read from CAD/code/datasheet
+# that matches Oscar's hardware AND confirmed on the real robot. `verified: false` means it comes from
+# the upstream CAD default or an estimate and still needs a measurement on Oscar's station.
+#
+# Conventions
+# - Units: metres, radians, quaternions are [w, x, y, z].
+# - world frame == torso frame: origin on the table top surface, directly below the centre of the
+#   XLeRobot 0.4.0 arm-base box. +x points forward (from the robot into the workspace), +y to the
+#   robot's left, +z up. "left arm" is the arm on the robot's left (+y).
+# - Arm base frame: the SO-101 `base` body frame of TheRobotStudio so101_new_calib model
+#   (SO-ARM100@a758567c Simulation/SO101/so101_new_calib.xml). In that frame the shoulder_pan axis is
+#   vertical at (0.0388353, 0, 0.0624) and at q = 0 the arm reaches along +x.
+# - Joint zero: the so101_new_calib "new calibration" zero (middle of each joint range), which is
+#   also LeRobot's DEGREES zero (see `lerobot_units`).
+# - Camera poses are given twice: `mujoco` (camera looks along -z, +y is image up, +x image right)
+#   and `opencv` (looks along +z, +y image down, +x image right).
+
+schema_version: 1
+changelog:
+  - "2026-10-17 v1: first publication by ws4-sim. Arm mounts from XLeRobot 0.4.0 arm-base CAD, head
+    from the RGBD gimbal CAD with fixed mock servos, fin-ray TCP provisional."
+  - "2026-10-17 v1.2: gripper rebuilt from Oscar's actual soft gripper (SO101_soft_fin.stl, 67 mm fins) instead of
+    the 123 mm soft_gripper_finger.step fin. gripper.* keys replaced, TCP moved to [-0.0019, 0, -0.0908].
+    Wrist camera re-placed from Oscar's close-up (plate on the gripper face, not the SO-ARM100 hex-nut arm)."
+  - "2026-10-17 v1.1: head pose now given as tilt_pivot + optical_centre_rel_pivot + pitch_down_deg (55, the
+    angle Oscar will set on hardware); world pose under derived.head_camera_world. Wrist camera moved to the
+    lens front. Arm yaw and the front side (HALLER label side faces the workspace) confirmed by Oscar."
+
+sources:
+  xlerobot_repo: "https://github.com/Vector-Wangel/XLeRobot @ b017b5e6354bd9f61f4247a920c72622ca0aade0 (Apache-2.0)"
+  armbase_cad: "XLeRobot hardware/step/XLeRobot_040/XLeRobot040_armbase.step (assembly: 2 arm bases, centre shell, neck)"
+  gimbal_cad: "XLeRobot hardware/step/RGBD_Gimbal/Assembly_RGBD_Gimbal.step (octagon-hole neck_old + pan/tilt head)"
+  finger_cad: "XLeRobot hardware/step/soft_gripper_finger.step (TPU 95A fin-ray finger, 40 x 25.8 x 123.4 mm)"
+  so101_model: "https://github.com/TheRobotStudio/SO-ARM100 @ a758567c3978dfeefe282ede0500085a48fe8f78 Simulation/SO101 (Apache-2.0)"
+
+table:
+  top_z: {value: 0.0, verified: true, source: "definition of the world frame"}
+  center_xy: {value: [0.25, 0.0], verified: false, source: "guess: robot at the back edge of a 0.8 m deep table"}
+  size_xy: {value: [0.80, 1.60], verified: false, source: "guess: 1.6 x 0.8 m hackathon table, ask Oscar"}
+  height_above_floor: {value: 0.75, verified: false, source: "guess, only used for rendering the floor"}
+
+torso:
+  # Bounding boxes in world frame, from the converted CAD meshes (ws4/assets/xlerobot_040).
+  armbase_box_min: {value: [-0.0609, -0.1931, 0.0], verified: false, source: "armbase CAD solids 10+12, bbox"}
+  armbase_box_max: {value: [0.0609, 0.1931, 0.0826], verified: false, source: "armbase CAD solids 10+12, bbox"}
+  centre_shell_top_z: {value: 0.1350, verified: false, source: "armbase CAD solid 14 top"}
+  mast_top_z: {value: 0.3740, verified: false, source: "gimbal CAD neck_old top, placed on centre shell"}
+  colour_rgb: {value: [0.13, 0.45, 0.40], verified: false, source: "sampled from photo (dim light), Bambu Lab green PLA"}
+  front_side: {value: "+x = side with the HALLER label and the neck's triangle cut-out", verified: true, source: "Oscar, 2026-10-17"}
+
+arms:
+  joint_names: [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper]
+  # MJCF joint / actuator names are "<side>_<joint>", e.g. left_shoulder_pan.
+  joint_range_rad:
+    value:
+      shoulder_pan: [-1.91986, 1.91986]
+      shoulder_lift: [-1.74533, 1.74533]
+      elbow_flex: [-1.69, 1.69]
+      wrist_flex: [-1.65806, 1.65806]
+      wrist_roll: [-2.74385, 2.84121]
+      gripper: [-0.30, 1.74533]
+    verified: false
+    source: "so101_new_calib.xml joint ranges (SO-ARM100@a758567c), not measured on Oscar's arms. Gripper lower limit
+      extended from -0.1745 so the soft fins can close (they touch at gripper.closed_rad)"
+  left:
+    base_pos: {value: [-0.0216, 0.1366, 0.0850], verified: false,
+               source: "turntable centre of armbase CAD solid 11, SO-101 base footprint centred on it"}
+    base_quat: {value: [1.0, 0.0, 0.0, 0.0], verified: true,
+                source: "Oscar 2026-10-17: at the calibration middle pose both arms reach straight toward the workspace"}
+  right:
+    base_pos: {value: [-0.0216, -0.1366, 0.0850], verified: false,
+               source: "turntable centre of armbase CAD solid 13, SO-101 base footprint centred on it"}
+    base_quat: {value: [1.0, 0.0, 0.0, 0.0], verified: true,
+                source: "Oscar 2026-10-17: at the calibration middle pose both arms reach straight toward the workspace"}
+  shoulder_pan_axis_in_base: {value: [0.0388353, 0.0, 0.0624], verified: true,
+                              source: "so101_new_calib.xml body shoulder pos"}
+
+gripper:
+  # XLeRobot soft gripper: hardware/SO101_soft_fin.stl = modified fixed jaw (gripper body), modified moving jaw
+  # and one TPU 95A fin per jaw. Frame = SO-101 `gripper` body (child of wrist_roll): +z is the wrist_roll axis,
+  # the fins point along -z, the moving jaw opens toward +x. Jaw numbers are at q_gripper = 0.
+  design: {value: "XLeRobot SO101_soft_fin.stl (green PLA jaws + black TPU fins)", verified: true,
+           source: "Oscar's gripper close-up (ws4/sim/reference/gripper_closeup_oscar.jpg), 2026-10-17"}
+  jaw_registration_residual_mm: {value: {fixed: 0.364, moving: 0.285}, verified: true,
+                                 source: "ICP of the printed jaws onto the stock SO-101 jaw meshes (tools/prepare_assets.py)"}
+  fin_length: {value: 0.0672, verified: true, source: "SO101_soft_fin.stl fin part"}
+  fin_width: {value: [0.024, 0.012], verified: true, source: "SO101_soft_fin.stl, base and tip"}
+  fin_depth: {value: 0.0217, verified: true, source: "SO101_soft_fin.stl, base, straight edge to curved flank"}
+  fixed_jaw_inner_x: {value: -0.0136, verified: true, source: "registered soft_fixed_jaw end, inner face"}
+  fixed_jaw_end_z: {value: -0.0476, verified: true, source: "registered soft_fixed_jaw end"}
+  moving_jaw_inner_x: {value: 0.0099, verified: true, source: "registered soft_moving_jaw end at q = 0, inner face"}
+  moving_jaw_end_z: {value: -0.0500, verified: true, source: "registered soft_moving_jaw end at q = 0"}
+  fin_insertion: {value: 0.009, verified: false, source: "estimate: fin base clamped ~9 mm into the jaw end (photo)"}
+  closed_rad: {value: -0.2686, verified: false,
+               source: "computed: gripper angle where the two fin hulls first touch (at the tip hooks, z = -0.091). LeRobot gripper 0"}
+  open_rad: {value: 1.74533, verified: false, source: "so101_new_calib gripper upper limit"}
+
+tcp:
+  # Tool centre point: midway between the two fin contact edges at q = 0 (fins parallel), 15 mm above the tips.
+  parent_body: gripper
+  pos_in_gripper: {value: [-0.0019, 0.0, -0.0908], verified: false,
+                   source: "x = mean(fixed_jaw_inner_x, moving_jaw_inner_x), z = fixed_jaw_end_z + fin_insertion - fin_length + 0.015"}
+  quat_in_gripper: {value: [1.0, 0.0, 0.0, 0.0], verified: false,
+                    source: "site axes = gripper body axes: +z along wrist_roll (pointing back toward the wrist), +x toward the moving finger"}
+  stock_so101_gripperframe_in_gripper: {value: [-0.0079, -0.00022, -0.09813], verified: true,
+                                        source: "so101_new_calib.xml site gripperframe, for comparison"}
+
+cameras:
+  head:
+    model: {value: "Intel RealSense D455", verified: true, source: "Oscar, 2026-10-17"}
+    mount: {value: "fixed (3D-printed mock servos in place of the pan/tilt gimbal)", verified: true, source: "Oscar, 2026-10-17"}
+    # World pose = tilt_pivot + R_y(pitch_down) @ optical_centre_rel_pivot; optical axis is +x at zero pitch.
+    # The resulting pos/quat are listed under `derived` at the bottom (geometry.head_camera_pose computes them).
+    tilt_pivot: {value: [-0.0134, 0.0, 0.4528], verified: false,
+                 source: "gimbal CAD tilt servo horn centre, gimbal placed on the 0.4.0 centre shell"}
+    optical_centre_rel_pivot: {value: [0.0365, 0.0006, 0.0325], verified: false,
+                               source: "front face centre of the pitch-holder sleeve at zero tilt (D455 lateral RGB offset ignored)"}
+    pitch_down_deg: {value: 55.0, verified: false,
+                     source: "chosen by ws4-sim, Oscar sets the fixed mount to match (2026-10-17): image centre lands at x~0.35 m, near edge just past the torso front, far edge ~1.1 m. Confirm with an inclinometer on the camera top face"}
+    width: {value: 640, verified: true, source: "XLeRobot recording docs use 640x480 @ 30 fps"}
+    height: {value: 480, verified: true, source: "XLeRobot recording docs use 640x480 @ 30 fps"}
+    fovy_deg: {value: 64.0, verified: false,
+               source: "D455 RGB 90 x 65 deg (16:10, Intel D400 datasheet); 640x480 is a 4:3 crop, so vertical ~64 deg. Read real intrinsics with rs-enumerate-devices -c"}
+    depth_aligned_to_color: {value: true, verified: false, source: "sim renders depth from the colour camera pose"}
+  left_wrist:
+    model: {value: "GXIVISION OV2710 2MP module, 100 deg lens", verified: true, source: "Oscar, 2026-10-17"}
+    parent_body: {value: left_gripper, verified: true, source: "Oscar's gripper close-up"}
+    mount: {value: "board on a printed plate on the gripper's +y face, lens pointing down the fins", verified: true,
+            source: "ws4/sim/reference/gripper_closeup_oscar.jpg"}
+    pos_in_gripper: {value: [0.0, 0.045, 0.015], verified: false,
+                     source: "estimated from the close-up: lens ~58 mm above the fin clamps, ~45 mm off the roll axis"}
+    optical_axis_in_gripper: {value: [0.0, -0.1736, -0.9848], verified: false,
+                              source: "estimated: along the fins, tilted ~10 deg toward them"}
+    width: {value: 640, verified: true, source: "XLeRobot docs: wrist cams 640x480"}
+    height: {value: 480, verified: true, source: "XLeRobot docs: wrist cams 640x480"}
+    fovy_deg: {value: 71.0, verified: false,
+               source: "100 deg assumed diagonal, 4:3 -> 87 x 71 deg. Lens distortion not modelled. Calibrate with a checkerboard"}
+  right_wrist:
+    model: {value: "GXIVISION OV2710 2MP module, 100 deg lens", verified: true, source: "Oscar, 2026-10-17"}
+    parent_body: {value: right_gripper, verified: true, source: "same mount as left"}
+    pos_in_gripper: {value: [0.0, 0.045, 0.015], verified: false, source: "same as left_wrist"}
+    optical_axis_in_gripper: {value: [0.0, -0.1736, -0.9848], verified: false, source: "same as left_wrist"}
+    width: {value: 640, verified: true, source: "XLeRobot docs"}
+    height: {value: 480, verified: true, source: "XLeRobot docs"}
+    fovy_deg: {value: 71.0, verified: false, source: "same as left_wrist"}
+
+lerobot_units:
+  # How LeRobot calibrated values map to MJCF joint radians: q_rad = sign * deg2rad(value_deg) + offset_rad.
+  # DEGREES mode (LeRobot >= 0.4.4 default, and the FLUX SO-101 checkpoint): value 0 = middle of the
+  # range recorded during calibration (lerobot 0.5.1 motors/motors_bus.py `_normalize`, DEGREES branch).
+  # so101_new_calib's zero is also the middle of the range, and LeRobot's own kinematics feeds degrees into
+  # that URDF with np.deg2rad and no offset (lerobot 0.5.1 model/kinematics.py:67).
+  # RANGE_M100_100 (XLeRobot plugin default, older datasets): needs the recorded raw range per joint; see ws4/sim/units.py.
+  # Gripper RANGE_0_100: 0 = closed_rad, 100 = open_rad (linear).
+  sign: {value: {shoulder_pan: 1, shoulder_lift: 1, elbow_flex: 1, wrist_flex: 1, wrist_roll: 1}, verified: false,
+         source: "LeRobot kinematics convention; check by jogging one joint on hardware"}
+  offset_rad: {value: {shoulder_pan: 0.0, shoulder_lift: 0.0, elbow_flex: 0.0, wrist_flex: 0.0, wrist_roll: 0.0},
+               verified: false, source: "zero if the recorded range is symmetric about the mechanical middle"}
+
+# --- derived: generated by ws4/sim/build_model.py from the values above, do not edit ---
+derived:
+  head_camera_world:
+    pos: [0.034158, 0.0006, 0.441542]
+    quat_mujoco: [0.67438, 0.212631, -0.212631, -0.67438]
+    quat_opencv: [0.212631, -0.67438, 0.67438, -0.212631]
+    intrinsics: {fx: 384.08, fy: 384.08, cx: 319.5, cy: 239.5}
+  left_wrist_camera_in_gripper:
+    pos: [0, 0.045, 0.015]
+    quat_mujoco: [0.996197, -0.0871328, 0, 0]
+    quat_opencv: [0.0871328, 0.996197, 0, 0]
+    intrinsics: {fx: 336.47, fy: 336.47, cx: 319.5, cy: 239.5}
+  right_wrist_camera_in_gripper:
+    pos: [0, 0.045, 0.015]
+    quat_mujoco: [0.996197, -0.0871328, 0, 0]
+    quat_opencv: [0.0871328, 0.996197, 0, 0]
+    intrinsics: {fx: 336.47, fy: 336.47, cx: 319.5, cy: 239.5}
+  note: "MJCF names: cameras head/left_wrist/right_wrist, sites left_ee/right_ee, bodies <side>_base and <side>_gripper, joints and actuators <side>_<joint>."

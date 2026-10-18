@@ -1,0 +1,95 @@
+{
+ "stages": [
+  "reach",
+  "carry",
+  "in_cup"
+ ],
+ "n_train": 58,
+ "n_test": 14,
+ "n_rollouts_train": 12,
+ "n_rollouts_test": 8,
+ "rollouts_test": [
+  "so101/seed9000013",
+  "so101/seed9000014",
+  "so101/seed9000021",
+  "so101/seed9000024",
+  "so101/seed9000030",
+  "so101/seed9000034",
+  "so101/seed9000036",
+  "so101/seed9000040"
+ ],
+ "models": {
+  "none": {
+   "demos": {
+    "n": 122,
+    "stage_acc": 0.7295081967213115,
+    "stage_acc_repeat": NaN,
+    "occurrence_acc": 1.0,
+    "skill_acc": 0.7295081967213115,
+    "progress_mae": 0.24013574070845117,
+    "stage_progress_mae": 0.14087651641952176,
+    "done_auroc": 0.8736445073078737,
+    "done_f1": 0.5581395348837209
+   },
+   "rollouts": {
+    "n": 176,
+    "stage_acc": 0.9943181818181818,
+    "stage_acc_repeat": NaN,
+    "occurrence_acc": 1.0,
+    "skill_acc": 0.9943181818181818,
+    "progress_mae": 0.006683206847590168,
+    "stage_progress_mae": 0.014367802360952324,
+    "done_auroc": NaN,
+    "done_f1": 0.0
+   }
+  },
+  "gru": {
+   "demos": {
+    "n": 122,
+    "stage_acc": 0.7950819672131147,
+    "stage_acc_repeat": NaN,
+    "occurrence_acc": 1.0,
+    "skill_acc": 0.7950819672131147,
+    "progress_mae": 0.2205266895618061,
+    "stage_progress_mae": 0.09087245966195857,
+    "done_auroc": 0.9085337105139085,
+    "done_f1": 0.6285714285714286
+   },
+   "rollouts": {
+    "n": 176,
+    "stage_acc": 0.9829545454545454,
+    "stage_acc_repeat": NaN,
+    "occurrence_acc": 1.0,
+    "skill_acc": 0.9829545454545454,
+    "progress_mae": 0.011315597813915123,
+    "stage_progress_mae": 0.01690133889629082,
+    "done_auroc": NaN,
+    "done_f1": 0.0
+   }
+  },
+  "ttt": {
+   "demos": {
+    "n": 122,
+    "stage_acc": 0.8032786885245902,
+    "stage_acc_repeat": NaN,
+    "occurrence_acc": 1.0,
+    "skill_acc": 0.8032786885245902,
+    "progress_mae": 0.19016080977290484,
+    "stage_progress_mae": 0.09740563483900049,
+    "done_auroc": 0.892975011786893,
+    "done_f1": 0.7111111111111111
+   },
+   "rollouts": {
+    "n": 176,
+    "stage_acc": 0.9886363636363636,
+    "stage_acc_repeat": NaN,
+    "occurrence_acc": 1.0,
+    "skill_acc": 0.9886363636363636,
+    "progress_mae": 0.010672349227895735,
+    "stage_progress_mae": 0.014971593138232658,
+    "done_auroc": NaN,
+    "done_f1": 0.0
+   }
+  }
+ }
+}

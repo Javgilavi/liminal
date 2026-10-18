@@ -264,3 +264,24 @@ def test_normal_stop_preserves_loaded_gripper_goal(rig):
     assert set(command) == set(SO101_JOINTS) - {"gripper"}
     assert arm.read_command()[-1] == 3
     assert arm.torque_enabled
+
+
+def test_freeze_estop_keeps_torque_and_the_gripper_goal(rig):
+    arm, robot, _ = rig
+    arm.estop_mode = "freeze"  # robot config `estop: freeze`, e.g. an arm holding a box lid open
+    arm.connect()
+    arm.set_torque(True)
+    arm._target = [0, 0, 0, 0, 0, 3]
+    robot.bus.sync_write.reset_mock()
+    robot.bus.write.reset_mock()
+    SafetySupervisor({"left": arm}).estop()
+    assert arm.torque_enabled and robot.bus.write.call_count == 0  # no Torque_Enable write
+    assert "gripper" not in robot.bus.sync_write.call_args.args[1] and arm.read_command()[-1] == 3
+    arm.fault = "overheated"  # a faulty arm still releases
+    arm.emergency_stop()
+    assert not arm.torque_enabled
+
+
+def test_estop_mode_is_validated():
+    with pytest.raises(ValueError, match="estop"):
+        SO101Arm("left", "/not-used", estop="sag")

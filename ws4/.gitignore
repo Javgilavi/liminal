@@ -1,0 +1,10 @@
+.cache/
+*.mp4
+outputs/
+*.pyc
+__pycache__/
+single_arm/runs/
+ttt/models/*.pt
+
+# live chain recordings (raw frames, hundreds of MB): videos go to the team Drive
+recordings/

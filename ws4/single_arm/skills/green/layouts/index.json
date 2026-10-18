@@ -1,0 +1,59 @@
+{
+ "dataset": "haller_put_the_green_pen_in_the_green_slot",
+ "task": "put the green pen in the green slot",
+ "wrist_key": "observation.images.right_wrist",
+ "columns": "right",
+ "takes": [
+  {
+   "layout": "P3",
+   "episode": 63,
+   "frames": 420,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.4,
+    5.0,
+    4.0,
+    0.8,
+    0.3,
+    96.2
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 64,
+   "frames": 350,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.4,
+    4.9,
+    1.1,
+    0.9,
+    0.1,
+    96.2
+   ]
+  },
+  {
+   "layout": "P3",
+   "episode": 65,
+   "frames": 377,
+   "cameras": [
+    "head",
+    "wrist"
+   ],
+   "start_joints_task_arm": [
+    0.4,
+    4.7,
+    1.1,
+    0.8,
+    0.1,
+    96.2
+   ]
+  }
+ ]
+}

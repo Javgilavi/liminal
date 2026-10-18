@@ -17,7 +17,7 @@ TASKS = sorted(Path("configs/tasks").glob("*.yaml"))
 @pytest.mark.parametrize("path", TASKS, ids=lambda p: p.stem)
 def test_shipped_tasks_succeed_on_mock(path, make_ctx):
     ctx = make_ctx()
-    if path.stem == "assemble_components":
+    if path.stem.startswith("assemble_components"):  # any placement order, e.g. the Haller one
         from liminal.orchestration.component_assembly import DEFINITIONS
         known = {"predicates": {key: {"value": True, "evidence": "fixture"} for key in DEFINITIONS}}
         ctx.inspector = SceneInspector(FixtureVisionModel([known] * 8), ctx.cameras, ctx.world, confirmations=1)

@@ -986,6 +986,7 @@ hardware = [
 hybrid = [
     { name = "anthropic" },
     { name = "numpy" },
+    { name = "pillow" },
 ]
 live = [
     { name = "opencv-python-headless" },
@@ -1047,6 +1048,7 @@ requires-dist = [
     { name = "opencv-python-headless", marker = "extra == 'live'", specifier = ">=4.9,<5" },
     { name = "opencv-python-headless", marker = "extra == 'perception'", specifier = ">=4.9,<5" },
     { name = "peft", marker = "extra == 'flux'" },
+    { name = "pillow", marker = "extra == 'hybrid'", specifier = ">=10" },
     { name = "pillow", marker = "extra == 'research'", specifier = ">=10" },
     { name = "pillow", marker = "extra == 'vlm-qwen'" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },

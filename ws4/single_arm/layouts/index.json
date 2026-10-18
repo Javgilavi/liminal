@@ -1,0 +1,163 @@
+{
+ "dataset": "ws4/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box",
+ "task": "put the red pen in its slot in the cardboard box",
+ "split_updated": "2026-10-17T21:43:05+02:00",
+ "takes": [
+  {
+   "layout": "A",
+   "episode": 20,
+   "frames": 487,
+   "start_joints_task_arm": [
+    0.0,
+    2.5,
+    1.8,
+    0.2,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "A",
+   "episode": 21,
+   "frames": 427,
+   "start_joints_task_arm": [
+    0.0,
+    0.5,
+    1.7,
+    0.2,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "A",
+   "episode": 22,
+   "frames": 388,
+   "start_joints_task_arm": [
+    0.0,
+    2.4,
+    1.8,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "B",
+   "episode": 36,
+   "frames": 426,
+   "start_joints_task_arm": [
+    0.2,
+    1.1,
+    1.8,
+    0.2,
+    -0.1,
+    99.3
+   ]
+  },
+  {
+   "layout": "B",
+   "episode": 37,
+   "frames": 459,
+   "start_joints_task_arm": [
+    0.0,
+    2.0,
+    0.6,
+    0.2,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "B",
+   "episode": 38,
+   "frames": 448,
+   "start_joints_task_arm": [
+    0.0,
+    1.9,
+    0.6,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "C",
+   "episode": 86,
+   "frames": 271,
+   "start_joints_task_arm": [
+    0.0,
+    2.2,
+    0.4,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "C",
+   "episode": 87,
+   "frames": 284,
+   "start_joints_task_arm": [
+    0.0,
+    2.2,
+    0.4,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "C",
+   "episode": 88,
+   "frames": 336,
+   "start_joints_task_arm": [
+    0.0,
+    2.4,
+    0.8,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "D",
+   "episode": 101,
+   "frames": 304,
+   "start_joints_task_arm": [
+    0.0,
+    2.7,
+    2.2,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "D",
+   "episode": 102,
+   "frames": 256,
+   "start_joints_task_arm": [
+    0.0,
+    2.2,
+    0.4,
+    0.4,
+    0.0,
+    99.3
+   ]
+  },
+  {
+   "layout": "D",
+   "episode": 103,
+   "frames": 244,
+   "start_joints_task_arm": [
+    0.0,
+    2.5,
+    2.5,
+    0.5,
+    0.0,
+    99.3
+   ]
+  }
+ ]
+}

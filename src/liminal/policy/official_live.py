@@ -14,6 +14,7 @@ import json
 import math
 import shlex
 import signal
+import sys
 import time
 from collections import deque
 from pathlib import Path
@@ -22,9 +23,11 @@ import yaml
 
 from liminal.core.types import SO101_JOINTS
 from liminal.hardware.official_so101 import OfficialSO101
-from liminal.policy.live import vector, worker_reply
+from liminal.policy.live import clamp_gripper_boundary, vector, worker_reply
 from liminal.safety.stall import StallMonitor
 from liminal.safety.supervisor import JointLimits, SafetySupervisor
+
+POD_WORKER = Path(__file__).resolve().parents[3] / "scripts" / "flux_pod_worker.py"
 
 
 def check_chunk(actions, lower, upper, count):
@@ -123,11 +126,19 @@ async def run(cfg, output, execute):
         supervisor = SafetySupervisor({arm.name: arm}, {
             arm.name: JointLimits(lower, upper, max(hi - lo for lo, hi in zip(lower, upper, strict=True)))})
         sampler = asyncio.create_task(sample())
-        command = "source /liminal/offline_env.sh; exec " + shlex.join([cfg["python"], "-u", cfg["worker"]])
-        process = await asyncio.create_subprocess_exec(
-            "gcloud", "compute", "ssh", cfg["vm"], "--zone=" + cfg["zone"], "--project=" + cfg["project"],
-            "--tunnel-through-iap", "--ssh-flag=-oBatchMode=yes", "--ssh-flag=-T", "--command=" + command,
-            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=log, limit=4 * 1024 * 1024)
+        if cfg.get("transport") == "ws4_pod":
+            # the same worker protocol, answered by a served LoRA package on the ws4 policy server
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, "-u", str(POD_WORKER), "--server", cfg["server"], "--package", cfg["package"],
+                "--n-action-steps", str(cfg.get("n_action_steps", 16)),
+                "--token-cmd-env", cfg.get("token_cmd_env", "WS4_TOKEN_CMD"),
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=log, limit=4 * 1024 * 1024)
+        else:
+            command = "source /liminal/offline_env.sh; exec " + shlex.join([cfg["python"], "-u", cfg["worker"]])
+            process = await asyncio.create_subprocess_exec(
+                "gcloud", "compute", "ssh", cfg["vm"], "--zone=" + cfg["zone"], "--project=" + cfg["project"],
+                "--tunnel-through-iap", "--ssh-flag=-oBatchMode=yes", "--ssh-flag=-T", "--command=" + command,
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=log, limit=4 * 1024 * 1024)
         print("Loading official LeRobot FLUX on VM; torque OFF. Logs:", output, flush=True)
         ready = await worker_reply(process, 180)
         if ready.get("type") != "ready" or not ready.get("integration", "").startswith("lerobot.Flux3Policy"):
@@ -155,6 +166,11 @@ async def run(cfg, output, execute):
                 (output / f"plan-{index:04d}.json").write_text(json.dumps(result) + "\n")
                 if result.get("type") != "actions" or len(result.get("actions", [])) != 42:
                     raise RuntimeError("worker returned no actions")
+                if cfg.get("gripper_clamping") is True:
+                    # as liminal.policy.live: finite gripper predictions to 0-100 %, LeRobot's gripper driver range
+                    result["actions"][:count], adjustments = clamp_gripper_boundary(result["actions"], count, None)
+                    if adjustments:
+                        event("gripper_clamp", plan=index, adjustments=adjustments)
                 print(f"Plan {index}: {result['inference_seconds']:.3f}s, {count}/42 actions", flush=True)
                 segment = None
                 if hybrid is not None:

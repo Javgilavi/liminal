@@ -1,0 +1,8 @@
+{
+  "objects": 8,
+  "steps": 600,
+  "chance_upper_bound_without_memory": 0.125,
+  "per_replan_no_memory": 0.12338119745254517,
+  "gru_memory": 0.9437589645385742,
+  "ttt_memory": 0.9974588751792908
+}

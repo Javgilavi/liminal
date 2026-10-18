@@ -1,0 +1,220 @@
+{
+ "date": "2026-10-17",
+ "pod": "ws4-sim-4500 (fnxekskwlu0095), RTX PRO 4500 32 GB, guidance_scale=1.0, guidance_scale_action=1.0, compile_model=true, text encoder on CPU",
+ "plan": "open_lid:left -> close_lid:left (orchestrator/skills.yaml prompts)",
+ "scene": "orchestrator PackBoxSim, 240x320, randomized, seeds 0..5",
+ "attempt_budget_chunks": 43,
+ "monitor": "ws4/ttt/models/progress_frame_gru_s0.pt",
+ "conditions": {
+  "A0": {
+   "package": "so101",
+   "episodes": 6,
+   "per_skill": {
+    "open_lid": {
+     "success": 0,
+     "steps": 6,
+     "tcp_min_to_target_cm": [
+      16.0,
+      15.9,
+      16.0,
+      16.1,
+      15.9,
+      16.1
+     ],
+     "object_moved_max_cm": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "guard_intervened_frac": [
+      0.976,
+      0.947,
+      0.974,
+      0.951,
+      0.969,
+      0.973
+     ],
+     "gripper_closed_near_target": 0
+    },
+    "close_lid": {
+     "success": 0,
+     "steps": 6,
+     "tcp_min_to_target_cm": [
+      12.0,
+      16.1,
+      12.6,
+      15.7,
+      12.3,
+      16.3
+     ],
+     "object_moved_max_cm": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "guard_intervened_frac": [
+      0.98,
+      0.966,
+      0.977,
+      0.967,
+      0.958,
+      0.977
+     ],
+     "gripper_closed_near_target": 0
+    }
+   },
+   "monitor_stage_acc": {
+    "all": {
+     "acc": 0.982,
+     "replans": 663
+    },
+    "flux": {
+     "acc": 0.992,
+     "replans": 516
+    },
+    "flux/close_lid": {
+     "acc": 0.984,
+     "replans": 258
+    },
+    "flux/open_lid": {
+     "acc": 1.0,
+     "replans": 258
+    },
+    "scripted": {
+     "acc": 0.946,
+     "replans": 147
+    },
+    "scripted/close_lid": {
+     "acc": 0.905,
+     "replans": 74
+    },
+    "scripted/open_lid": {
+     "acc": 0.986,
+     "replans": 73
+    }
+   },
+   "round_trip_s": {
+    "median": 0.843,
+    "p90": 1.359,
+    "n": 516
+   }
+  },
+  "A0r_sim": {
+   "package": "so101sim",
+   "episodes": 6,
+   "per_skill": {
+    "open_lid": {
+     "success": 0,
+     "steps": 6,
+     "tcp_min_to_target_cm": [
+      12.2,
+      10.6,
+      10.4,
+      13.9,
+      6.9,
+      10.6
+     ],
+     "object_moved_max_cm": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      6.0,
+      0.0
+     ],
+     "guard_intervened_frac": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "gripper_closed_near_target": 0
+    },
+    "close_lid": {
+     "success": 0,
+     "steps": 6,
+     "tcp_min_to_target_cm": [
+      23.7,
+      13.6,
+      17.3,
+      18.4,
+      17.3,
+      18.7
+     ],
+     "object_moved_max_cm": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "guard_intervened_frac": [
+      0.031,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "gripper_closed_near_target": 0
+    }
+   },
+   "monitor_stage_acc": {
+    "all": {
+     "acc": 0.699,
+     "replans": 648
+    },
+    "flux": {
+     "acc": 0.645,
+     "replans": 516
+    },
+    "flux/close_lid": {
+     "acc": 0.291,
+     "replans": 258
+    },
+    "flux/open_lid": {
+     "acc": 1.0,
+     "replans": 258
+    },
+    "scripted": {
+     "acc": 0.909,
+     "replans": 132
+    },
+    "scripted/close_lid": {
+     "acc": 0.894,
+     "replans": 66
+    },
+    "scripted/open_lid": {
+     "acc": 0.924,
+     "replans": 66
+    }
+   },
+   "round_trip_s": {
+    "median": 0.839,
+    "p90": 0.88,
+    "n": 516
+   }
+  }
+ },
+ "dry_runs_stand_in": {
+  "run_to_end": {
+   "stage_acc": 0.993,
+   "replans": 144,
+   "episodes": 6
+  },
+  "end_on_passed_check": {
+   "stage_acc": 0.538,
+   "replans": 78,
+   "episodes": 6
+  }
+ }
+}
