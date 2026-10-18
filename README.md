@@ -20,7 +20,7 @@ true*, and *whether the goal really happened*.
 Claude's step checks, head and wrist cameras, FLUX's imagined vs actual frames). Step labels: box = scripted replay,
 not FLUX; green pen and cutter = FLUX 3 Action LoRAs; the green-pen policy also slotted the red pen on its way home.
 
-![Full 4-skill chain on the real Haller, 12:05 run, 5.71x uniform speed-up](media/full_chain_60s_speedup.webp)
+[![Full 4-skill chain on the real Haller, 12:05 run, 5.71x uniform speed-up](media/full_chain_60s_speedup.webp)](https://drive.google.com/file/d/1tK71kTtUIeYPc1cwt6Jqc6ZbzJMnnCIB/view)
 
 - **Full 4-skill chain on the real Haller**, planned by Claude with a camera check after every step:
   **2 of 3 runs finished 4/4** with no human touch during the run (208.6 s and 302.2 s).
