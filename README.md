@@ -22,7 +22,7 @@ true*, and *whether the goal really happened*.
        │ Safety supervisor                  │  arm ownership, zones, limits, e-stop
        └───────┬─────────────────┬──────────┘
         ┌──────▼──────┐   ┌──────▼──────┐
-        │ left arm    │   │ right arm   │   skills → FLUX (single-flight, shared model)
+        │ left arm    │   │ right arm   │   skills → FLUX (independent model per arm)
         │ hold / FLUX │   │ hold / FLUX │          → scripted fallback / mock
         └─────────────┘   └─────────────┘          → primitives (hold, release, home)
          SO-101 (LeRobot) · MuJoCo · mock
@@ -45,14 +45,21 @@ are recorded, with task success still unverified.
 - [Reproduce the MuJoCo experiment](docs/simulation-validation.md)
 - [Documentation index](docs/README.md)
 
-## Two ways to drive two arms with FLUX
+## Current policy architecture
 
-| Option | What | Skills target | Policy config |
-|--------|------|---------------|---------------|
-| **A, per-arm** (default) | one embodied FLUX policy per arm (A1: shared model; A2: one instance per arm) | `left`, `right` | `configs/policy/flux3_so101.yaml` |
-| **B, bimanual** | one new model fine-tuned on both arms together (12-D actions) | `both` | `configs/policy/flux3_dual_bimanual.yaml` |
+The initial plan was to fine-tune a unified bimanual XLeRobot embodiment (12-D actions). That plan
+was superseded by task LoRA fine-tuning of the existing 6-D SO-101 policy, with two independent FLUX
+instances, one per arm, coordinated by the real skill-runtime harness (behavior tree, checkpoint
+registry, perception and safety).
 
-Same executor, safety and task grammar for both. Comparison and decision: [PLAN.md](PLAN.md).
+The dual-arm profiles select `instances: per_arm`: separate model state and locks allow
+concurrent inference when the task permits. LoRA adapters are merged into validated
+skill bundles for the checkpoint registry. Holding uses a local controller; two
+policies do not imply both arms always move. See [the runtime guide](docs/showcase-runtime.md).
+
+The old 12-D configs and group tests remain compatibility scaffolds, with no validated
+bimanual checkpoint. XLeRobot remains the physical rig. `instances: shared` is an
+explicit memory-saving fallback, not the selected dual-arm configuration.
 
 ## Workstreams
 
@@ -61,7 +68,7 @@ Same executor, safety and task grammar for both. Comparison and decision: [PLAN.
 | WS1 | Single-arm FLUX baseline + 50–100 demos + task LoRA | `policy/`, `data/`, `scripts/record_demos.sh` | [01](docs/research/01_single_arm_baseline.md) |
 | WS2 | Bimanual: move obstacles away to reach a target | `bimanual/` | [02](docs/research/02_bimanual_obstacle.md) |
 | WS3 | Long-horizon decomposition + orchestration (BT / FSM / LLM / Gemini ER / VLM) | `orchestration/`, `perception/` | [03](docs/research/03_long_horizon_orchestration.md) |
-| WS4 | Simulation + bimanual XLeRobot embodiment adaptation | `sim/`, `configs/embodiment/` | [04](docs/research/04_xlerobot_sim.md) |
+| WS4 | Simulation + per-arm LoRA evaluation (original embodiment plan superseded) | `sim/`, `configs/embodiment/` | [04](docs/research/04_xlerobot_sim.md) |
 | WS5 | Hardware setup, safety, operator UI / triggering | `hardware/`, `safety/`, `ui/` | [05](docs/research/05_hardware_ui.md) |
 
 ## Quick start (no hardware needed)
@@ -211,9 +218,10 @@ docs/             guides, validation reports, architecture and research briefs
   scripted backends) runs and is tested.
 - **Single-arm inference is implemented** through the dedicated official LeRobot
   runner. The HF Space normalization profile is experimental on the physical rig.
-  The orchestration class `FluxPolicyBackend.load/predict` remains a stub; it is
-  separate from the validated inference runner. Planning configs retain `VERIFY`
-  markers and are not the commissioned inference profiles.
+  The real skill runtime loads validated bundles through `LeRobotEngine` and routes
+  skills to independent per-arm backends. The showcase registry still has unstaged
+  opening/green-pen/boxcutter entries; a full learned dual-arm hardware run is unverified.
+  Planning configs retain `VERIFY` markers and are not commissioned inference profiles.
 - The simulation adapter improves grasp-related measures on a small test set;
   completed placement, real-task success and bimanual transfer remain unverified.
 - LeRobot imports and CLI flags change between releases. They are isolated in

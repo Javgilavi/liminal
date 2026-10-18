@@ -1,4 +1,4 @@
-# This is a live, six-dimensional SO-101 bridge, independent of the skill stub.
+# This is a live, six-dimensional SO-101 bridge, separate from the behavior-tree skill runtime.
 arm: right
 expected_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
 prompt: Stack the cups on top of each other.

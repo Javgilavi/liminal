@@ -80,8 +80,9 @@ arm supported. Do not copy another arm's calibration to clear an error.
 
 Existing task execution remains available with `--backend scripted` or `flux`.
 Record and validate waypoints and a home pose before real autonomous tasks. The
-FLUX skill loader remains a stub; the separate [live inference bridge](live-inference.md)
-uses the running Haller UI and remote checkpoint. CLI task execution on real arms additionally
+FLUX skill runtime now loads validated bundles with independent per-arm instances
+(see [the runtime guide](showcase-runtime.md)); it needs local GPU access. The separate
+[live inference bridge](live-inference.md) uses the Haller UI and remote checkpoint. CLI task execution on real arms additionally
 requires the explicit `liminal run ... --engage` flag; connect alone never arms them.
 
 ## Small API

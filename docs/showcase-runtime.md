@@ -1,5 +1,15 @@
 # Box assembly runtime
 
+The initial plan was to fine-tune a unified bimanual XLeRobot embodiment (12-D actions). That plan
+was superseded by task LoRA fine-tuning of the existing 6-D SO-101 policy, with two independent FLUX
+instances, one per arm, coordinated by the real skill-runtime harness (behavior tree, checkpoint
+registry, perception and safety).
+
+This guide describes the configured runtime, not a completed dual-arm hardware
+validation. GPU memory and concurrent inference latency must be measured on the host.
+Both instances default to `cuda`; set `devices: {left: "cuda:0", right: "cuda:1"}`
+in the policy profile when using two GPUs.
+
 The current task is `configs/tasks/assemble_components.yaml`: the right helper arm
 opens and holds the box, and the left main arm places the green pen, red pen and
 yellow boxcutter into their respective slots. Cable manipulation is excluded.
@@ -63,9 +73,12 @@ hashes. They must be replaced with independently validated trained bundles and
 matching contracts. The full learned task cannot run with these placeholders.
 Their expected contracts are proposals marked VERIFY, not claims about existing weights.
 
-Each prediction has 42 actions; execute **16** before observing again. All skills
-share one serialized model session. Checkpoint changes occur between skills and
-reset model/processor state and observation history. Every command passes through
+Each prediction has 42 actions; execute **16** before observing again. The profile
+selects `instances: per_arm`: left and right have independent FLUX model sessions,
+so inference can overlap when the tree permits it. Within each arm, checkpoint
+changes occur between skills and reset model/processor state and observation history.
+LoRA adapters are merged into the skill bundles; no new bimanual action head is trained.
+Each model serializes its own execution, not the other arm's execution. Every command passes through
 the safety supervisor; arm ownership and the lid invariant remain enforced by
 Liminal's behavior tree.
 
@@ -73,8 +86,10 @@ Liminal's behavior tree.
 flowchart LR
     Task[Generated assembly task] --> BT[Liminal behavior tree]
     BT --> Registry[Skill to checkpoint registry]
-    Registry --> Model[Shared FLUX model: load and reset between skills]
-    Model --> Safety[Safety supervisor]
+    Registry --> L[Left FLUX instance: task LoRA bundle]
+    Registry --> R[Right FLUX instance: task LoRA bundle]
+    L --> Safety[Safety supervisor]
+    R --> Safety
     Safety --> Left[Left main arm]
     Safety --> Right[Right helper arm]
     Cameras[Top and wrist cameras] --> Inspector[Independent scene inspection]

@@ -22,7 +22,9 @@ zero completed placements across the five test scenes for each model.
 
 The scene setup approximates BFL's published camera roles. It is not a measured
 copy of BFL's extrinsics or this real bench. Simulation and real trials use
-separate profiles: the real-robot checkpoint remains at 30 Hz and has no task LoRA.
+separate profiles: the original real-robot baseline in this experiment used 30 Hz without a task LoRA.
+The later [real skill runtime](showcase-runtime.md) uses task-LoRA bundles; do not
+apply this historical baseline description to the current policy architecture.
 
 ## 1. Environment and assets
 

@@ -101,5 +101,5 @@ skill_checkpoints:
   open_box: open_box
   put_green_pen_in_slot: put_green_pen_in_slot
   put_yellow_boxcutter_in_slot: put_yellow_boxcutter_in_slot
-instances: shared
+instances: per_arm
 max_invariant_age_s: 5

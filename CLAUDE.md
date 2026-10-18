@@ -7,7 +7,9 @@ hackathon. Read this before your first commit.
 
 A dual-arm orchestration layer on top of a learned VLA (FLUX 3 Action). **FLUX is the
 manipulation backend, not the coordinator.** It executes bounded, text-prompted skills
-on one arm (option A) or on both arms as one bimanual skill (option B, see PLAN.md). The behavior tree decides what runs, when, on which arm, and what must stay
+on one arm, using task LoRA bundles and two independent per-arm FLUX instances.
+The initial unified XLeRobot embodiment fine-tune was superseded (see PLAN.md).
+The behavior-tree harness decides what runs, when, on which arm, and what must stay
 true while it runs. Perception decides whether it worked.
 
 ## Commands
@@ -44,7 +46,7 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
    on an arm group (`both`) claims every member. An `ArmConflict` is a planning bug.
    Fix the tree, don't catch and ignore it.
 6. **Per-target policy state.** FLUX observation history is kept per skill target (an
-   arm in option A, the `both` group in option B). Never mix queues. Inference is
+   arm in the current runtime, or the `both` group in legacy compatibility tests). Never mix queues. Inference is
    single-flight per model instance behind one lock.
 7. **Interfaces are contracts.** `core/types.py`, `core/interfaces.py` and the task-file
    grammar in `orchestration/task_spec.py` are shared by all workstreams. Change them
@@ -54,17 +56,19 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
    get a `VERIFY` comment (see `configs/policy/flux3_so101.yaml`). Remove the marker
    once confirmed on real hardware or code.
 
-## Two FLUX embodiment options (see PLAN.md)
+## Current FLUX architecture (see PLAN.md)
 
-- **Option A, per-arm** (default): skills target `left` / `right`; policy
-  `configs/policy/flux3_so101.yaml` (`action_dim: 6`). A1 = one shared model, A2 =
-  `instances: per_arm`.
-- **Option B, bimanual**: skills target the `both` group; policy
-  `configs/policy/flux3_dual_bimanual.yaml` (`action_dim: 12`, `[left | right]`).
+Task LoRA fine-tuning retains the existing 6-D SO-101 embodiment. Dual-arm policy
+profiles select `instances: per_arm`: two independent FLUX instances coordinated
+by the real skill-runtime harness. Skills target `left` / `right`; each instance
+serializes its own checkpoint changes and inference. Shared inference is an
+explicit fallback, not the selected dual-arm profile.
 
-Keep both working: don't hard-code 6-D actions or single-arm skill targets outside
-`hardware/`. `FluxPolicyBackend` refuses a skill whose arm/group joint count doesn't match
-`action_dim`.
+The initial unified 12-D XLeRobot fine-tune (former Option B) is superseded.
+Its configs and `both` group mock tests remain compatibility scaffolds only.
+Keep generic action dimensions and group support working: do not hard-code 6-D
+outside hardware. No validated 12-D checkpoint is supplied. XLeRobot hardware
+continues to use the per-arm architecture.
 
 ## Ownership (see TASK.md)
 

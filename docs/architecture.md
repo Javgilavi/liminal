@@ -22,9 +22,9 @@ flowchart TB
     BT -->|claim arms and zones| S[SafetySupervisor]
     BT --> R[SkillRouter]
     R -->|hold, release, home, gripper| PRIM[PrimitiveBackend]
-    R -->|bounded manipulation| F[FluxPolicyBackend]
+    R -->|bounded manipulation| F[Per-arm FluxPolicyBackend: independent left / right instances]
     REG[Skill-to-checkpoint registry] -->|validated bundle and identity| F
-    F --> E[LeRobotEngine: saved processors and FLUX weights]
+    F --> E[Per-arm LeRobotEngine: saved processors and LoRA-adapted weights]
     E -->|predicted action chunk| F
     F -->|each position command| S
     PRIM -->|position commands| S
@@ -43,7 +43,7 @@ flowchart TB
 The arrows distinguish policy outputs from motor writes: predicted actions return
 to the bounded executor, and every policy position command passes through the
 supervisor. Primitive hold/release operations use the driver's local hold contract.
-See [the showcase runtime](showcase-runtime.md) for the deployed configuration and
+See [the showcase runtime](showcase-runtime.md) for the configured runtime and
 validation limits.
 
 | Module | Owns | Key file |
@@ -76,8 +76,9 @@ validation limits.
 
 FLUX is a learned manipulation backend for bounded skills. It's not the coordinator.
 
-- A shared execution lock serializes skill execution, checkpoint loading, resets
-  and inference. A second arm can retain its local hold while the first executes.
+- The selected dual-arm profiles use two independent FLUX instances. Each has its
+  own execution and inference locks, checkpoint state and history; inference can
+  overlap across arms when the tree allows it. Local holding needs no VLA calls.
 - Each skill selects a complete checkpoint bundle through configuration. Pinned
   hashes, processor provenance, shared-base identity and driver coordinate contracts
   are checked before motion. LoRA weights are merged during export.
@@ -86,11 +87,12 @@ FLUX is a learned manipulation backend for bounded skills. It's not the coordina
 - The saved preprocessor, `Flux3Policy.predict_action_chunk` and saved postprocessor
   produce absolute position chunks. Every executed action uses
   `SafetySupervisor.send()`; perception determines whether the skill succeeded.
-- Option A uses a 6-D per-arm policy, shared or one instance per arm. Option B uses
-  a compatible 12-D policy for `both`, with joint order qualified by member arm.
-  Bimanual execution is covered by mocks; a real bimanual bundle is not validated.
+- Task LoRA retains the existing 6-D action head. The initial unified XLeRobot
+  12-D embodiment fine-tune was superseded. Group execution remains covered by
+  compatibility mocks; a real 12-D bundle is not validated. Shared-model execution
+  remains an explicit serialized fallback, not the selected dual-arm profile.
 - The showcase profile uses eight observations, 42 predicted actions, and up to
-  12 executed actions per window at 30 Hz. Hardware timing, model quality and
+  16 executed actions per window at 30 Hz. Hardware timing, model quality and
   loaded-gripper reliability remain deployment validation items.
 
 ## Safety model

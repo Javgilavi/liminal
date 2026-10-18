@@ -1,5 +1,5 @@
 # Skill catalog handed to LLM/VLM planners. Keep in sync with what actually works.
-arms: [left, right, both]   # both = arm group, only for option B bimanual skills
+arms: [left, right, both]   # both = arm group, legacy bimanual compatibility only; no trained bundle supplied
 skills:
   hold: "primitive - freeze the arm in its current pose (local controller, no VLA)"
   release: "primitive - open gripper and stop holding"
@@ -15,7 +15,7 @@ skills:
   lift_aside: "VLA - lift an obstacle (lid, flap) up and out of the way, then hold"
   push_aside: "VLA - push an object sideways out of a corridor, no grasp"
   pick_aside: "VLA - pick an obstacle and drop it in the free zone"
-  open_lid_and_insert: "bimanual VLA (option B only, arm: both) - left opens and holds the lid, right inserts"
+  open_lid_and_insert: "historical untrained bimanual VLA scaffold (arm: both) - left opens and holds the lid, right inserts"
 predicates:
   - green_pen_in_slot
   - yellow_boxcutter_in_slot

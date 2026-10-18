@@ -319,3 +319,45 @@ def test_cancellation_freezes_arm_and_stops_action_stream():
 def test_flux_config_rejects_unsafe_execution_values(kwargs):
     with pytest.raises(ValueError):
         FluxConfig(**kwargs)
+
+
+@pytest.mark.parametrize("profile", ["flux3_so101.yaml", "showcase_registry.yaml"])
+def test_dual_arm_profiles_route_independent_instances(profile):
+    ctx = build_context("configs/robot/mock_dual.yaml", backend="flux",
+                        policy=f"configs/policy/{profile}")
+    left = ctx.skills.backend_for(Skill("left", "pick_place"))
+    right = ctx.skills.backend_for(Skill("right", "pick_place"))
+    assert left is not right
+    assert left._execution_lock is not right._execution_lock
+    assert left._infer_lock is not right._infer_lock
+    assert left.cfg.action_dim == right.cfg.action_dim == 6
+
+
+def test_per_arm_predictions_can_overlap(monkeypatch):
+    import threading
+
+    barrier = threading.Barrier(2, timeout=5)
+
+    class ConcurrentFlux(FakeFlux):
+        def predict(self, history, instruction, target):
+            # A shared inference/execution lock would prevent the second arm arriving.
+            barrier.wait()
+            return super().predict(history, instruction, target)
+
+    monkeypatch.setattr("liminal.app.build_policy", lambda *args: ConcurrentFlux(_cfg()))
+    ctx = build_context("configs/robot/mock_dual.yaml", backend="flux",
+                        policy={"instances": "per_arm"})
+
+    async def run():
+        return await asyncio.gather(*(
+            ctx.skills.backend_for(Skill(arm, "pick_place")).execute(
+                Skill(arm, "pick_place", prompt=arm), ctx)
+            for arm in ("left", "right")
+        ))
+
+    results = asyncio.run(run())
+    assert all(result.status is Status.SUCCESS for result in results)
+    for arm in ("left", "right"):
+        backend = ctx.skills.arm_policies[arm]
+        assert backend.seen[0] == arm
+        assert ctx.arms[arm].history

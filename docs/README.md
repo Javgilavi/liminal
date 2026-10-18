@@ -1,5 +1,11 @@
 # Documentation
 
+Current architecture: task LoRA on the existing SO-101 embodiment, two independent
+per-arm FLUX policies, and the real behavior-tree harness. Start with
+[the runtime guide](showcase-runtime.md) and [architecture](architecture.md).
+The original unified XLeRobot bimanual fine-tune is superseded; research briefs
+and experiment reports preserve historical proposals and measurements.
+
 Start with the [first single-arm validation](validation/single-arm-v1.md) for the
 recorded results and their limits.
 

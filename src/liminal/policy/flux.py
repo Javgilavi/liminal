@@ -1,12 +1,10 @@
-"""FLUX 3 Action skill backend (owned by WS1). Supports both embodiment options in
-PLAN.md with the same class; the config decides:
+"""FLUX 3 Action skill backend (owned by WS1). The current runtime uses
+one independent instance per arm (`instances: per_arm`), with task LoRA bundles
+and the existing 6-D action head. The harness coordinates the arms.
 
-* Option A, per-arm (`action_dim: 6`): skills target one arm. A1 = one shared model
-  with per-arm sessions (optionally a per-arm LoRA in `arm_adapters`); A2 = one
-  backend instance per arm (`instances: per_arm` in the policy config, see app.py).
-* Option B, bimanual (`action_dim: 12`): skills target an arm group such as `both`.
-  One fine-tuned model sees both arms and predicts one concatenated action vector,
-  split back per arm in group order.
+Shared-model execution remains an explicit serialized fallback. The original
+unified 12-D XLeRobot fine-tune is superseded; arm-group execution is retained
+for compatibility tests, not evidence of a validated bimanual checkpoint.
 
 Either way:
 

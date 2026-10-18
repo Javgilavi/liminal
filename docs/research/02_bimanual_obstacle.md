@@ -1,5 +1,9 @@
 # WS2: Bimanual obstacle removal to reach a target
 
+Here “bimanual” means task-level cooperation between two arms. The current
+implementation coordinates independent per-arm FLUX policies adapted with task
+LoRAs; the original unified embodiment fine-tune is superseded (see [PLAN.md](../../PLAN.md)).
+
 ## Problem
 
 The target is blocked (occluded, in the corridor, under a lid). The robot has to find

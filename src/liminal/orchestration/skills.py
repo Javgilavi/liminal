@@ -71,7 +71,7 @@ class PrimitiveBackend:
 
 
 class SkillRouter:
-    """`arm_policies` gives an arm its own policy backend (option A2 in PLAN.md: one
+    """`arm_policies` gives an arm its own policy backend (current architecture: one
     FLUX instance per arm). Arms not listed use the shared `policy`."""
 
     def __init__(self, policy: SkillBackend, primitives: SkillBackend | None = None,

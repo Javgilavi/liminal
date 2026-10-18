@@ -1,5 +1,10 @@
 # Gear and collar assembly skills
 
+Scope: single-arm training and isolated-skill evaluation only. This experiment
+is not the dual-arm runtime harness. The current architecture runs independent
+per-arm FLUX policies under the [real orchestrator](../../docs/showcase-runtime.md);
+the former simulation assembly sequence driver has been removed.
+
 This follow-on experiment teaches four prompt-conditioned skills on one SO-101:
 pick a blue gear, seat it on a shaft, pick a brass spacer collar, and seat the
 collar over the gear. One shared task LoRA learns the four prompts. A small

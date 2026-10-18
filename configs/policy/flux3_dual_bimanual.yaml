@@ -1,7 +1,9 @@
+# HISTORICAL / SUPERSEDED: original unified embodiment fine-tune, not the current LoRA runtime.
+# Retained for compatibility and mock tests; no validated 12-D checkpoint is supplied.
 # Option B in PLAN.md: ONE model fine-tuned on both arms together (12-D actions).
 # Skills target the `both` arm group (see arm_groups in configs/robot/so101_dual.yaml).
-# Produced by WS4's bimanual fine-tune; nothing here works until that checkpoint exists.
-checkpoint: outputs/bimanual/flux3_dual_v1   # TODO(WS4): path/repo of the bimanual fine-tune
+# Proposed output of the original WS4 plan; this checkpoint was not produced.
+checkpoint: outputs/bimanual/flux3_dual_v1   # historical placeholder, not a deployment path
 device: cuda
 dtype: bfloat16
 action_dim: 12           # [left 6 | right 6], same order as arm_groups.both

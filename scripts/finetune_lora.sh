@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Historical placeholder, not the current training entrypoint. See
+# docs/simulation-validation.md and docs/pen-checkpoint.md for implemented workflows.
 # WS1: task-specific LoRA on top of the FLUX 3 Action SO-101 checkpoint.
 #
 # TODO(WS1): replace the command below with the official BFL LoRA recipe

@@ -99,7 +99,7 @@ def build_context(robot: str | Path | dict[str, Any], backend: str = "mock",
     limits = {k: JointLimits(**v) for k, v in robot_cfg.get("limits", {}).items()}
     p = robot_cfg.get("primitives", {})
     policy_cfg = dict(policy_cfg or {})
-    # Option A2 (PLAN.md): one independent policy instance per arm, optionally on its own GPU.
+    # Selected dual-arm architecture: independent instances, optionally on separate GPUs.
     instances = policy_cfg.pop("instances", "shared")
     devices = policy_cfg.pop("devices", {})
     arm_policies: dict[str, SkillBackend] = {}

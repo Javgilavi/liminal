@@ -1,6 +1,11 @@
 # Real SO101 inference
 
-The current workflow runs LeRobot's official `Flux3Policy` and saved
+Scope: this guide covers the standalone single-arm inference runner. The dual-arm
+LoRA architecture uses the [real skill-runtime harness](showcase-runtime.md), with
+two independent policy instances and local GPU access. This SSH runner does not
+provide that harness with a remote inference transport.
+
+This standalone workflow runs LeRobot's official `Flux3Policy` and saved
 pre/postprocessors on a GPU VM. Liminal sends explicit camera/joint histories over
 SSH; Haller owns the local motors, camera streams and UI stop control.
 
