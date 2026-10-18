@@ -18,12 +18,12 @@
     <meta property="og:image" content="assets/real-vs-sim.jpg" />
     <title>Liminal — Two arms, explicit dependencies</title>
     <link rel="icon" href="assets/favicon.svg" />
-    <link rel="stylesheet" href="style.css?v=20261018-paper2" />
-    <link rel="stylesheet" href="project.css?v=20261018-paper2" />
+    <link rel="stylesheet" href="style.css?v=20261018-resilient" />
+    <link rel="stylesheet" href="project.css?v=20261018-resilient" />
     <script type="importmap">
       { "imports": { "three": "./assets/vendor/three.module.js" } }
     </script>
-    <script type="module" src="project.js?v=20261018-tabs"></script>
+    <script type="module" src="project.js?v=20261018-resilient"></script>
   </head>
   <body>
     <a class="skip" href="#overview">Skip to project</a>
@@ -97,13 +97,22 @@
             id="hero-view"
             aria-label="Interactive Haller CAD scene"
           >
-            <div class="viewer-loading">Loading the CAD scene…</div>
+            <img
+              class="scene-poster"
+              src="assets/twin-scene.png"
+              alt="Estimated Haller MuJoCo scene"
+            />
+            <div class="scene-prompt">
+              <p class="scene-status" role="status">Recorded MuJoCo preview</p>
+              <button class="scene-load" disabled>Explore in 3D</button>
+            </div>
           </div>
           <div class="viewer-top">
-            <span class="tag"><i></i> Interactive MuJoCo scene</span
+            <span class="tag"><i></i> MuJoCo scene preview</span
             ><button
               class="icon-button"
               id="reset-hero"
+              disabled
               aria-label="Reset scene camera"
             >
               ↺
@@ -111,7 +120,7 @@
           </div>
           <div class="viewer-bottom">
             <span><strong>Haller in MuJoCo</strong></span
-            ><span class="orbit-hint">Drag to orbit · Scroll to zoom</span>
+            ><span class="orbit-hint">Load 3D to rotate the scene</span>
           </div>
         </div>
       </section>
@@ -180,6 +189,15 @@
         </div>
         <div class="physical-feature">
           <div>
+            <label class="mobile-media-picker"
+              >Recording<select id="physical-select">
+                <option value="0">Layout C · 48 seconds</option>
+                <option value="1">Layout A · 94 seconds</option>
+                <option value="2">Layout B · 91 seconds</option>
+                <option value="3">Morning A · 69 seconds</option>
+                <option value="4">Morning C · 36 seconds</option>
+              </select></label
+            >
             <div
               class="physical-tabs"
               role="tablist"
@@ -427,26 +445,46 @@
             <div class="panel-label">
               <span>The same recorded poses</span>
               <div class="view-presets">
-                <button class="preset active" data-camera="perspective">
+                <button
+                  class="preset active"
+                  data-camera="perspective"
+                  disabled
+                >
                   Perspective</button
-                ><button class="preset" data-camera="top">Top</button
-                ><button class="preset" data-camera="front">Front</button>
+                ><button class="preset" data-camera="top" disabled>Top</button
+                ><button class="preset" data-camera="front" disabled>
+                  Front
+                </button>
               </div>
             </div>
             <div
               class="viewer"
               id="replay-view"
               aria-label="Rotatable recorded simulation"
-            ></div>
+            >
+              <img
+                class="scene-poster"
+                src="assets/demo-poster.jpg"
+                alt="Recorded scripted simulation preview"
+              />
+              <div class="scene-prompt">
+                <p class="scene-status" role="status">
+                  Recorded MuJoCo preview
+                </p>
+                <button class="scene-load" disabled>Explore in 3D</button>
+              </div>
+            </div>
             <div class="replay-controls">
               <button
                 class="play-button"
                 id="play-replay"
+                disabled
                 aria-label="Play simulation replay"
               >
                 ▶</button
               ><input
                 id="replay-time"
+                disabled
                 type="range"
                 min="0"
                 max="14"
@@ -511,6 +549,14 @@
         </p>
         <div class="gallery-heading">
           <h3>Prediction and perception.</h3>
+          <label class="mobile-media-picker"
+            >Diagnostic<select id="gallery-select">
+              <option value="0">Real-camera prediction</option>
+              <option value="1">FLUX in simulation</option>
+              <option value="2">Scene analysis</option>
+              <option value="3">Simulated prediction</option>
+            </select></label
+          >
           <div
             class="gallery-buttons"
             role="tablist"
@@ -585,7 +631,7 @@
             </div>
             <label
               >Measure
-              <select id="result-metric">
+              <select id="result-metric" disabled>
                 <option value="bilateral">Bilateral contact</option>
                 <option value="lift">Lift over 3.5 cm</option>
                 <option value="placement">Completed placement</option>
@@ -593,7 +639,9 @@
               </select></label
             >
           </div>
-          <div class="result-bars" id="result-bars"></div>
+          <div class="result-bars" id="result-bars">
+            <p class="inline-status">Loading recorded results…</p>
+          </div>
           <div class="result-context">
             <span><strong>64 + 16</strong> train / validation episodes</span
             ><span><strong>32,220</strong> frames at 20 Hz</span

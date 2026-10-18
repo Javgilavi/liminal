@@ -10,12 +10,12 @@
     />
     <title>Liminal — Live lab</title>
     <link rel="icon" href="assets/favicon.svg" />
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="live.css" />
+    <link rel="stylesheet" href="style.css?v=20261018-resilient" />
+    <link rel="stylesheet" href="live.css?v=20261018-resilient" />
     <script type="importmap">
       { "imports": { "three": "./assets/vendor/three.module.js" } }
     </script>
-    <script type="module" src="live.js"></script>
+    <script type="module" src="live.js?v=20261018-resilient"></script>
   </head>
   <body class="lab-page">
     <header class="lab-top">
@@ -50,14 +50,24 @@
           <div class="view-title">
             <span id="twin-title">Recorded poses / estimated MuJoCo scene</span>
             <div>
-              <button class="preset active" data-camera="perspective">
+              <button class="preset active" data-camera="perspective" disabled>
                 Orbit</button
-              ><button class="preset" data-camera="top">Top</button
-              ><button class="preset" data-camera="front">Front</button>
+              ><button class="preset" data-camera="top" disabled>Top</button
+              ><button class="preset" data-camera="front" disabled>
+                Front
+              </button>
             </div>
           </div>
           <div id="lab-view" class="viewer">
-            <div class="viewer-loading">Loading the interactive scene…</div>
+            <img
+              class="scene-poster"
+              src="assets/twin-scene.png"
+              alt="Recorded estimated MuJoCo tabletop preview"
+            />
+            <div class="scene-prompt">
+              <p class="scene-status" role="status">Recorded MuJoCo preview</p>
+              <button class="scene-load" disabled>Explore in 3D</button>
+            </div>
           </div>
           <div class="twin-overlay">
             <span>Drag to orbit · Scroll to zoom</span
@@ -120,11 +130,12 @@
         </aside>
       </div>
       <div class="scrubber" id="replay-controls">
-        <button id="replay-play" aria-label="Play recorded simulation">
+        <button id="replay-play" disabled aria-label="Play recorded simulation">
           ▶</button
         ><input
           type="range"
           id="replay-scrub"
+          disabled
           min="0"
           max="14"
           step="0.0333"

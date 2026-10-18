@@ -12,7 +12,13 @@ export class TwinView {
     this.scene.background = new T.Color(dark ? "#1c3022" : "#edf1e7");
     this.camera = new T.PerspectiveCamera(34, 1, 0.01, 30);
     this.camera.up.set(0, 0, 1);
-    this.renderer = new T.WebGLRenderer({ antialias: true });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("webgl2", {
+      antialias: true,
+      alpha: false,
+    });
+    if (!context) throw new Error("3D context unavailable");
+    this.renderer = new T.WebGLRenderer({ canvas, context, antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
     this.renderer.outputColorSpace = T.SRGBColorSpace;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -117,13 +123,26 @@ export class TwinView {
       this.renderer.setSize(width, height, false);
       this.dirty = true;
     };
-    new ResizeObserver(resize).observe(element);
+    this.resizeObserver = new ResizeObserver(resize);
+    this.resizeObserver.observe(element);
     resize();
     this.visible = true;
-    new IntersectionObserver(([entry]) => {
+    this.intersectionObserver = new IntersectionObserver(([entry]) => {
       this.visible = entry.isIntersecting;
-    }).observe(element);
+    });
+    this.intersectionObserver.observe(element);
     views.push(this);
+  }
+  dispose() {
+    this.resizeObserver.disconnect();
+    this.intersectionObserver.disconnect();
+    this.controls.dispose();
+    this.scene.traverse((object) => {
+      if (object.isMesh) object.material.dispose();
+    });
+    this.renderer.dispose();
+    const index = views.indexOf(this);
+    if (index >= 0) views.splice(index, 1);
   }
   reset(preset = "perspective") {
     this.controls.target.set(0, -0.15, 0.13);
@@ -165,15 +184,20 @@ let scenePromise;
 export function loadScene() {
   return (scenePromise ??= fetch(
     new URL("./assets/scene.json.gz", import.meta.url),
-  ).then(async (r) => {
-    if (!r.ok) throw new Error("Scene unavailable");
-    const bytes = new Uint8Array(await r.arrayBuffer());
-    if (bytes[0] === 31 && bytes[1] === 139) {
-      const stream = new Blob([bytes])
-        .stream()
-        .pipeThrough(new DecompressionStream("gzip"));
-      return new Response(stream).json();
-    }
-    return JSON.parse(new TextDecoder().decode(bytes));
-  }));
+  )
+    .then(async (r) => {
+      if (!r.ok) throw new Error("Scene unavailable");
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      if (bytes[0] === 31 && bytes[1] === 139) {
+        const stream = new Blob([bytes])
+          .stream()
+          .pipeThrough(new DecompressionStream("gzip"));
+        return new Response(stream).json();
+      }
+      return JSON.parse(new TextDecoder().decode(bytes));
+    })
+    .catch((error) => {
+      scenePromise = null;
+      throw error;
+    }));
 }

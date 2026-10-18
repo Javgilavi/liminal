@@ -1,4 +1,3 @@
-import { TwinView, loadScene, drawViews } from "./viewer.js";
 const $ = (s) => document.querySelector(s),
   $$ = (s) => [...document.querySelectorAll(s)];
 let view,
@@ -19,23 +18,37 @@ const camera = $("#recorded-camera");
 const paired = new URLSearchParams(location.hash.slice(1));
 if (location.hash)
   history.replaceState(null, "", location.pathname + location.search);
-loadScene()
-  .then((data) => {
-    scene = data;
-    view = new TwinView($("#lab-view"), data, true);
-    if (replay) showReplay();
+fetch("./assets/replay.json")
+  .then((response) => {
+    if (!response.ok) throw new Error("Replay unavailable");
+    return response.json();
+  })
+  .then((recording) => {
+    replay = recording;
+    $("#replay-scrub").max = recording.duration;
+    $("#replay-play").disabled = false;
+    $("#replay-scrub").disabled = false;
+    showReplay();
   })
   .catch(() => {
-    $("#lab-view").textContent =
-      "Interactive scene unavailable. Recorded video is still available.";
+    $("#replay-clock").textContent = "Replay unavailable";
+    camera.controls = true;
   });
-fetch("./assets/replay.json")
-  .then((r) => r.json())
-  .then((data) => {
-    replay = data;
-    $("#replay-scrub").max = data.duration;
-    showReplay();
-  });
+function labelTwin() {
+  const unavailable = $("#lab-view").dataset.sceneState === "unavailable";
+  $("#twin-title").textContent = view
+    ? mode === "live"
+      ? "Measured joints / MuJoCo forward kinematics"
+      : "Recorded poses / estimated MuJoCo scene"
+    : unavailable
+      ? "Scene preview / 3D unavailable"
+      : "Scene preview / loading 3D";
+  $("#twin-scope").textContent = view
+    ? mode === "live"
+      ? "Joint mirror only · live objects and contact are untracked"
+      : "Scripted teacher replay · objects are recorded poses"
+    : "Static preview · camera video remains available";
+}
 function showReplay() {
   if (!replay || mode !== "replay") return;
   const t = +$("#replay-scrub").value;
@@ -54,6 +67,7 @@ function stopReplay() {
   $("#replay-play").setAttribute("aria-label", "Play recorded simulation");
 }
 $("#replay-play").onclick = () => {
+  if (!replay) return;
   if (playing) {
     stopReplay();
     return;
@@ -92,7 +106,6 @@ function animate(now) {
     $("#camera-notice").hidden = false;
     $("#camera-notice").textContent = "Telemetry is stale. The twin is frozen.";
   }
-  drawViews();
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
@@ -248,10 +261,7 @@ async function connect(local, secret) {
     $("#replay-controls").hidden = true;
     $("#pair").hidden = true;
     $("#disconnect").hidden = false;
-    $("#twin-title").textContent =
-      "Measured joints / MuJoCo forward kinematics";
-    $("#twin-scope").textContent =
-      "Joint mirror only · live objects and contact are untracked";
+    labelTwin();
     $("#camera-caption").textContent = "Local Haller stream / measured";
     $("#joint-state").textContent =
       "Joint positions are native measured degrees; gripper is percent. The visual scene has estimated registration. Telemetry rate is not FLUX inference frequency.";
@@ -319,11 +329,9 @@ $("#disconnect").onclick = () => {
   $("#trial-state").textContent = "Idle";
   $("#run-trial").disabled = true;
   $("#stop-trial").disabled = true;
-  $("#twin-title").textContent = "Recorded poses / estimated MuJoCo scene";
+  labelTwin();
   $("#camera-title").textContent = "Recorded scene camera";
   $("#camera-caption").textContent = "Scripted expert / simulation";
-  $("#twin-scope").textContent =
-    "Scripted teacher replay / objects are recorded poses";
   $("#joint-values").textContent = "";
   $("#instruction-mode").textContent = "Connect a local bridge to run FLUX";
   $("#joint-state").textContent =
@@ -402,3 +410,35 @@ $("#stop-trial").onclick = async () => {
 };
 if (paired.has("bridge") && paired.has("token"))
   connect(paired.get("bridge"), paired.get("token"));
+
+import("./scene-preview.js?v=20261018-resilient")
+  .then(({ createScenePreview }) => {
+    createScenePreview($("#lab-view"), {
+      auto: true,
+      dark: true,
+      controls: $$(".preset"),
+      unavailable:
+        "3D is unavailable here. Camera video and local pairing still work.",
+      onReady(instance, data) {
+        view = instance;
+        scene = data;
+        labelTwin();
+        if (mode === "live" && latest?.connected) view.setPoses(latest.poses);
+        else showReplay();
+      },
+      onError() {
+        view = null;
+        labelTwin();
+      },
+    });
+  })
+  .catch(() => {
+    $("#lab-view").dataset.sceneState = "unavailable";
+    labelTwin();
+    $("#lab-view .scene-status").textContent =
+      "The 3D preview is unavailable. Video and pairing still work.";
+    const button = $("#lab-view .scene-load");
+    button.disabled = false;
+    button.textContent = "Reload page";
+    button.onclick = () => location.reload();
+  });

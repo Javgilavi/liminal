@@ -1162,3 +1162,54 @@ footer > div {
     scroll-behavior: auto;
   }
 }
+/* A useful preview remains when optional 3D is loading or unavailable. */
+.scene-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.scene-prompt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(300px, calc(100% - 32px));
+  padding: 17px;
+  border: 1px solid #c7d0bc;
+  border-radius: 6px;
+  background: #faf7eff0;
+  text-align: center;
+  box-shadow: 0 8px 25px #24372c12;
+}
+.scene-status {
+  margin: 0 0 12px;
+  color: #53634a;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.scene-load {
+  min-height: 42px;
+  padding: 10px 17px;
+  border: 0;
+  border-radius: 4px;
+  background: #315d43;
+  color: #fffdf5;
+  font-size: 12px;
+  font-weight: 500;
+}
+.lab-page .scene-poster {
+  opacity: 0.6;
+}
+.lab-page .scene-prompt {
+  background: #17291ff0;
+  border-color: #536d45;
+}
+.lab-page .scene-status {
+  color: #bad0a7;
+}
+.lab-page .scene-load {
+  color: #28441f;
+  background: #d0e9af;
+}
