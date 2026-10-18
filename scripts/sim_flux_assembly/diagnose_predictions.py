@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from harness import PROMPTS
+from scene import PROMPTS
 
 
 def main(args):

@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 class SO101Arm:
     num_joints = len(SO101_JOINTS)
+    policy_contract = {"embodiment": "so101", "state_units": "degrees_percent", "joint_order": SO101_JOINTS}
 
     def __init__(self, name: str, port: str, robot_id: str | None = None,
                  hold_rate_hz: float = 30.0, max_relative_target: float | None = None,
@@ -142,7 +143,7 @@ class SO101Arm:
                 raise RuntimeError(f"{self.name}: invalid position feedback")
             return values
 
-    def _park(self) -> None:
+    def _park(self, *, preserve_gripper: bool = False) -> None:
         bus = self._robot.bus
         samples = [bus.sync_read("Present_Position", normalize=False) for _ in range(3)]
         present = {}
@@ -151,6 +152,9 @@ class SO101Arm:
             if ticks[0] < 0 or ticks[-1] > 4095 or ticks[-1] - ticks[0] > 12:
                 raise RuntimeError(f"{joint}: unstable encoder readings; refusing torque enable")
             present[joint] = ticks[1]
+        if preserve_gripper:
+            # Keep the existing closing goal under load; the encoder position is not a grasp command.
+            del present["gripper"]
         bus.sync_write("Goal_Position", present, normalize=False)
 
     def set_torque(self, enabled: bool) -> None:
@@ -213,6 +217,11 @@ class SO101Arm:
             self._robot.send_action(dict(zip((f"{j}.pos" for j in SO101_JOINTS), target, strict=True)))
             self._target, self._last_action = target, now
 
+    def read_command(self) -> JointPositions:
+        """Last command actually committed after the driver's own speed limits."""
+        with self._lock:
+            return list(self._target) if self._target is not None else self.read_state()
+
     def hold(self, positions: JointPositions | None = None) -> None:
         # Servos already hold a parked position without a host-side write loop.
         if positions is not None:
@@ -227,8 +236,11 @@ class SO101Arm:
         """Freeze an engaged arm, as required by the Arm protocol."""
         with self._lock:
             if self.torque_enabled:
-                self._park()
+                gripper = self._target[-1] if self._target is not None else None
+                self._park(preserve_gripper=True)
                 self._target = self.read_state()
+                if gripper is not None:
+                    self._target[-1] = gripper
                 self._last_action = time.monotonic()
 
     def emergency_stop(self) -> None:

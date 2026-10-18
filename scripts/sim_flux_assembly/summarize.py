@@ -9,8 +9,8 @@ from pathlib import Path
 
 def main(root: Path):
     import torch
-    from harness import SKILLS
     from safetensors.torch import load_file
+    from scene import SKILLS
 
     stats = json.loads((root / "hf-sim-normalization.json").read_text())
     dataset = json.loads((root / "dataset-validation.json").read_text())
@@ -93,7 +93,7 @@ def main(root: Path):
     text += f"{dataset['atomic_episodes']} atomic episodes, {dataset['frames']:,} frames. "
     text += "Four prompts share one fresh rank-32 LoRA trained for 3,000 microbatches / 750 optimizer updates. "
     text += "Native joint angles, HF simulator statistics and 20 Hz are consistent throughout.\n\n"
-    text += "The harness runs pick gear → seat gear → pick collar → seat collar. "
+    text += "These historical results used the now-removed simulation sequence driver. "
     text += "Each step and its prerequisites are checked through contact, pose and settling predicates. "
     text += "Inference has no scripted fallback. Later steps stop when an earlier step fails.\n\n"
     text += "| Model | Pick gear | Seat gear | Pick collar | Seat collar | Full assembly |\n"

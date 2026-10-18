@@ -227,6 +227,17 @@ def test_disconnected_emergency_release_is_harmless():
         arm.set_torque(True)
 
 
+def test_camera_only_lifecycle_connects_and_disconnects_camera():
+    from liminal.hardware.runtime import connected_cameras
+
+    camera = MagicMock(name="top")
+    camera.name = "top"
+    with connected_cameras({"top": camera}):
+        camera.connect.assert_called_once()
+
+    camera.disconnect.assert_called_once()
+
+
 @pytest.mark.parametrize("operation", ["read_state", "send_action"])
 def test_transport_failure_stops_both_arms(operation):
     from liminal.hardware.mock_arm import MockArm
@@ -238,3 +249,18 @@ def test_transport_failure_stops_both_arms(operation):
         safety.send("left", [1] * 6)
     assert safety.estopped
     assert right.stopped
+
+
+def test_normal_stop_preserves_loaded_gripper_goal(rig):
+    arm, robot, _ = rig
+    arm.connect()
+    arm.set_torque(True)
+    arm._target = [0, 0, 0, 0, 0, 3]
+    robot.get_observation.return_value["gripper.pos"] = 17.0
+    robot.bus.sync_write.reset_mock()
+    arm.stop()
+    command = robot.bus.sync_write.call_args.args[1]
+    assert "gripper" not in command
+    assert set(command) == set(SO101_JOINTS) - {"gripper"}
+    assert arm.read_command()[-1] == 3
+    assert arm.torque_enabled

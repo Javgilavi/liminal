@@ -8,6 +8,25 @@ from liminal.safety import JointLimits
 
 
 @contextmanager
+def connected_cameras(cameras):
+    """Connect only cameras; perception preflight must never touch arm buses."""
+
+    resources = []
+    try:
+        for camera in cameras.values():
+            if hasattr(camera, "connect"):
+                resources.append(camera)
+                camera.connect()
+        yield cameras
+    finally:
+        for camera in reversed(resources):
+            try:
+                camera.disconnect()
+            except Exception:
+                logging.getLogger(__name__).exception("shutdown failed for %s", camera.name)
+
+
+@contextmanager
 def connected(ctx):
     resources = []
     try:

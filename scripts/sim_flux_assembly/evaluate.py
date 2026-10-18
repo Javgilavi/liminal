@@ -1,4 +1,4 @@
-"""Run learned atomic skills with predicate-gated sequencing and no teacher fallback."""
+"""Evaluate isolated learned skills from recorded starts; no assembly orchestration."""
 
 from __future__ import annotations
 
@@ -7,13 +7,11 @@ import asyncio
 import json
 import sys
 import time
-from dataclasses import asdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from harness import SKILLS, assembly_task  # noqa: E402
-from scene import FPS, PROMPTS, SUCCESS, AssemblyScene  # noqa: E402
+from scene import FPS, PROMPTS, SKILLS, SUCCESS, AssemblyScene  # noqa: E402
 
 
 class LearnedBackend:
@@ -159,16 +157,15 @@ async def rollout(args, policy, pre, post, seed, source=None, atomic=None):
     from liminal.core.types import Skill, Status
     from liminal.orchestration.bt import SkillNode
     from liminal.orchestration.context import ExecutionContext
-    from liminal.orchestration.executor import run_task
     from liminal.orchestration.skills import SkillRouter
     from liminal.perception.world_state import WorldState
 
-    folder = args.output / (f"seed-{seed}" if atomic is None else f"atomic-{atomic}-seed-{seed}")
+    if atomic not in PROMPTS:
+        raise ValueError("only isolated skill diagnostics are supported")
+    folder = args.output / f"atomic-{atomic}-seed-{seed}"
     folder.mkdir(parents=True, exist_ok=False)
     scene = AssemblyScene(args.root, seed, render=True)
-    warm_history = []
-    if atomic:
-        warm_history = prepare_atomic(scene, atomic, source, policy.config.n_obs_steps if args.teacher_history else 0)
+    warm_history = prepare_atomic(scene, atomic, source, policy.config.n_obs_steps if args.teacher_history else 0)
     try:
         with imageio.get_writer(
             folder / "rollout.mp4", fps=FPS, codec="libx264", ffmpeg_params=["-threads", "2"]
@@ -177,14 +174,11 @@ async def rollout(args, policy, pre, post, seed, source=None, atomic=None):
             world = WorldState(log_path=folder / "events.jsonl")
             world.update(scene.facts, source="initial_detector")
             ctx = ExecutionContext({"sim": scene.arm}, world, scene.safety, SkillRouter(backend))
-            if atomic:
-                status = await SkillNode(
-                    Skill("sim", atomic, PROMPTS[atomic], success=SUCCESS[atomic], timeout_s=180, verify_timeout_s=0.01)
-                ).run(ctx)
-                verified = status is Status.SUCCESS and scene.facts[SUCCESS[atomic]]
-                task_report = {"status": status.value, "goal_verified": bool(verified)}
-            else:
-                task_report = asdict(await run_task(assembly_task(attempts=args.attempts), ctx))
+            status = await SkillNode(
+                Skill("sim", atomic, PROMPTS[atomic], success=SUCCESS[atomic], timeout_s=180, verify_timeout_s=0.01)
+            ).run(ctx)
+            verified = status is Status.SUCCESS and scene.facts[SUCCESS[atomic]]
+            task_report = {"status": status.value, "goal_verified": bool(verified)}
             report = {
                 "seed": seed,
                 "checkpoint": args.checkpoint,
@@ -223,10 +217,6 @@ async def main(args):
     torch.set_num_threads(8)
     torch.cuda.set_per_process_memory_fraction(0.40)
     torch.manual_seed(42)
-    if args.teacher_history and not args.atomic:
-        raise ValueError("Teacher-history replay is allowed only in isolated diagnostics")
-    if args.skills and not args.atomic:
-        raise ValueError("Skill selection is allowed only in isolated diagnostics")
     args.output.mkdir(parents=True, exist_ok=False)
     config = PreTrainedConfig.from_pretrained(args.checkpoint)
     config.pretrained_path = Path(args.checkpoint)
@@ -241,28 +231,24 @@ async def main(args):
     assert policy.config.n_action_steps == args.execution_steps
     pre, post = make_pre_post_processors(policy.config, pretrained_path=args.checkpoint)
     reports = []
-    if args.atomic:
-        splits = ["train", "validation"] if args.atomic_split == "both" else [args.atomic_split]
-        sources = []
-        for split in splits:
-            accepted = [
-                p.parent
-                for p in sorted((args.root / "raw" / split).glob("episode-*/report.json"))
-                if json.loads(p.read_text())["success"]
-            ]
-            sources.extend(accepted[: args.episodes])
-        for source in sources:
-            seed = json.loads((source / "report.json").read_text())["metadata"]["seed"]
-            for name, _, _ in SKILLS:
-                if args.skills and name not in args.skills:
-                    continue
-                reports.append(await rollout(args, policy, pre, post, seed, source, name))
-                (args.output / "summary.json").write_text(json.dumps(reports, indent=2) + "\n")
-    else:
-        for seed in range(args.start_seed, args.start_seed + args.episodes):
-            reports.append(await rollout(args, policy, pre, post, seed))
+    splits = ["train", "validation"] if args.atomic_split == "both" else [args.atomic_split]
+    sources = []
+    for split in splits:
+        accepted = [
+            p.parent
+            for p in sorted((args.root / "raw" / split).glob("episode-*/report.json"))
+            if json.loads(p.read_text())["success"]
+        ]
+        sources.extend(accepted[: args.episodes])
+    for source in sources:
+        seed = json.loads((source / "report.json").read_text())["metadata"]["seed"]
+        for name, _, _ in SKILLS:
+            if args.skills and name not in args.skills:
+                continue
+            reports.append(await rollout(args, policy, pre, post, seed, source, name))
             (args.output / "summary.json").write_text(json.dumps(reports, indent=2) + "\n")
-    print(json.dumps({"episodes": len(reports), "assembly_success": sum(row["assembly_success"] for row in reports)}))
+    print(json.dumps({"episodes": len(reports),
+                      "skill_success": sum(row["task_report"]["goal_verified"] for row in reports)}))
 
 
 if __name__ == "__main__":
@@ -271,12 +257,10 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--episodes", type=int, default=5)
-    parser.add_argument("--start-seed", type=int, default=20000)
     parser.add_argument("--ticks-per-skill", type=int, default=450)
     parser.add_argument("--execution-steps", type=int, default=32)
     parser.add_argument("--guidance", type=float, default=3.0)
-    parser.add_argument("--attempts", type=int, default=1)
-    parser.add_argument("--atomic", action="store_true")
+    parser.add_argument("--atomic", action="store_true", help="compatibility flag; all evaluation is isolated skills")
     parser.add_argument("--teacher-history", action="store_true")
     parser.add_argument("--atomic-split", choices=["train", "validation", "both"], default="validation")
     parser.add_argument("--skills", nargs="+", choices=list(PROMPTS))

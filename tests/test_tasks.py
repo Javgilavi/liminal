@@ -8,6 +8,7 @@ import yaml
 
 from liminal.core.types import Status
 from liminal.orchestration import TaskSpecError, load_task, parse_task, run_task
+from liminal.perception import FixtureVisionModel, SceneInspector
 from liminal.policy.mock import Fault, MockBackend
 
 TASKS = sorted(Path("configs/tasks").glob("*.yaml"))
@@ -16,6 +17,10 @@ TASKS = sorted(Path("configs/tasks").glob("*.yaml"))
 @pytest.mark.parametrize("path", TASKS, ids=lambda p: p.stem)
 def test_shipped_tasks_succeed_on_mock(path, make_ctx):
     ctx = make_ctx()
+    if path.stem == "assemble_components":
+        from liminal.orchestration.component_assembly import DEFINITIONS
+        known = {"predicates": {key: {"value": True, "evidence": "fixture"} for key in DEFINITIONS}}
+        ctx.inspector = SceneInspector(FixtureVisionModel([known] * 8), ctx.cameras, ctx.world, confirmations=1)
     report = asyncio.run(run_task(load_task(path, arms=ctx.arm_names), ctx))
     assert report.goal_verified, report
 
@@ -43,6 +48,10 @@ def test_goal_not_reached_is_reported_as_failure(make_ctx):
     ({"tree": {"skill": {"arm": "left"}}}, "'name' is required"),
     ({"tree": {"while": {"arm": "left", "do": {"check": "x"}}}}, "needs arm, maintain"),
     ({"tree": {"sequence": []}}, "non-empty list"),
+    (
+        {"tree": {"inspect": {"predicates": ["lid_open"], "definitions": {"cable_clear": "clear"}}}},
+        "definitions must refer to requested predicates",
+    ),
 ])
 def test_task_spec_errors_are_actionable(bad, msg):
     with pytest.raises(TaskSpecError, match=msg):

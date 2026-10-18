@@ -6,6 +6,10 @@ skills:
   home: "primitive - move to the safe rest pose"
   open_gripper: "primitive"
   close_gripper: "primitive"
+  open_box: "VLA - RIGHT helper opens the box; tree maintains lid-open hold during LEFT-arm placement"
+  put_green_pen_in_slot: "VLA - LEFT main arm places the green pen into its designated slot"
+  put_yellow_boxcutter_in_slot: "VLA - LEFT main arm places the yellow boxcutter into its designated slot"
+  put_red_pen_in_slot: "VLA - LEFT main arm, Oskrt red-pen task adapter; pick and place using its exact trained prompt"
   pick_place: "VLA - pick an object and place it somewhere; describe both in the prompt"
   open_lid: "VLA - grasp a hinged lid and lift it open"
   lift_aside: "VLA - lift an obstacle (lid, flap) up and out of the way, then hold"
@@ -13,9 +17,15 @@ skills:
   pick_aside: "VLA - pick an obstacle and drop it in the free zone"
   open_lid_and_insert: "bimanual VLA (option B only, arm: both) - left opens and holds the lid, right inserts"
 predicates:
+  - green_pen_in_slot
+  - yellow_boxcutter_in_slot
+  - components_assembled
+  - red_pen_in_slot
   - lid_open
   - object_inserted
   - obstacle_cleared
   - block_in_bowl
   - left_holding
   - right_holding
+  - helper_arm_home
+  - main_arm_home

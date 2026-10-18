@@ -1,0 +1,27 @@
+model:
+  provider: qwen
+  checkpoint: Qwen/Qwen3-VL-4B-Instruct
+  revision: ebb281ec70b05090aa6165b016eac8ec08e71b17
+  device: cuda:0
+  dtype: bfloat16
+  quantization: bnb_4bit
+  max_new_tokens: 400
+inspection:
+  cameras:
+  - top
+  - left_wrist
+  - right_wrist
+  confirmations: 2
+  timeout_s: 10
+  retry_delay_s: 0.1
+  definitions:
+    lid_open: The box lid is open far enough for the left arm to reach every component
+      slot safely.
+    green_pen_in_slot: The green pen is seated in its own intended slot and released
+      by the gripper.
+    red_pen_in_slot: The red pen is seated in its own intended slot and released by
+      the gripper.
+    yellow_boxcutter_in_slot: The yellow boxcutter is seated in its own intended slot
+      and released by the gripper.
+    components_assembled: The green pen, red pen and yellow boxcutter are all seated
+      in their respective slots, with none still held by a gripper.

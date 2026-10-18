@@ -47,7 +47,7 @@ package and its referenced encoders using the
 [BFL setup guide](https://github.com/black-forest-labs/flux-action/blob/main/docs/setup.md).
 Keep the released package intact.
 
-Deploy `scripts/flux_lerobot_worker.py` to the profile's `worker` path. The
+Install this repository in the GPU environment (`pip install -e /path/to/liminal`) so the worker can import the shared `LeRobotEngine`. Deploy `scripts/flux_lerobot_worker.py` to the profile's `worker` path. The
 commissioned path is `/liminal/scripts/flux_lerobot_worker.py`; both normalization
 profiles now use this same source file. Example deployment for that bench:
 

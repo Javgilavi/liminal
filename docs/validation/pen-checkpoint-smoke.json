@@ -1,0 +1,32 @@
+{
+  "kind": "motor_free_real_gpu_smoke",
+  "adapter_repo": "Oskrt/flux-3-action-so101-haller-pen-lora",
+  "adapter_revision": "e85fc5831ae9d28a27ef175aa1c0196b6bc5ec16",
+  "adapter_sha256": "997284e4e0335baccf3849cf6824611a2f8de1feaf70373917d1c49ceb98d76e",
+  "base_revision": "0713a7af6768562e618e81d534372c6795d41b2e",
+  "base_weights_sha256": "0f57664573dde660590060d81b2a0b336fc674f06e0494de9307e52f43b6fd01",
+  "bundle_path": "/liminal/models/so101-haller-pen-raw10000-e85fc583",
+  "bundle_sha256": "4fc883b8e486a75ff9c5b7be032bbeac8d418de0445926a3a8647f1aab420f09",
+  "host": "prd-inf-vm-01",
+  "lerobot_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+  "normalization_profile": "dataset_native",
+  "prompt": "put the red pen in its slot in the cardboard box",
+  "state": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    100
+  ],
+  "images": "blank RGB frames; not a physical scene",
+  "output_shape": [
+    42,
+    6
+  ],
+  "all_actions_finite": true,
+  "first_prediction_ms_rounded": 601,
+  "motors_commanded": false,
+  "task_success_evaluated": false,
+  "remote_log": "/liminal/tmp/pen-runtime-e85fc583/smoke.log"
+}

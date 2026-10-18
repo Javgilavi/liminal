@@ -13,31 +13,10 @@ import json
 import subprocess
 import sys
 import time
-from pathlib import Path
+from types import SimpleNamespace
 
-
-def processor_contract(pre, post, checkpoint: str) -> dict:
-    """Report the quantiles actually loaded, including both sides of action scaling."""
-    saved = {}
-    for step in [*pre.steps, *post.steps]:
-        values = step.state_dict()
-        if "action.q01" in values:
-            saved[type(step).__name__] = {k: v.float().cpu().tolist() for k, v in values.items()}
-    observation = [v for v in saved.values() if "state.q01" in v]
-    if len(saved) != 3 or len(observation) != 1:
-        raise ValueError("expected all three saved FLUX history quantile processors")
-    values = observation[0]
-    for item in saved.values():
-        if any(item[k] != values[k] for k in ("action.q01", "action.q99")):
-            raise ValueError("FLUX processors disagree on action normalization")
-    statistics = {s: {q: values[f"{s}.{q}"] for q in ("q01", "q99")} for s in ("state", "action")}
-    path = Path(checkpoint) / "normalization_source.json"
-    source = json.loads(path.read_text()) if path.exists() else {}
-    profile = source.get("profile", "released")
-    if profile in ("hf_space_native", "dataset_native") and source.get("normalization") != statistics:
-        raise ValueError("Native normalization provenance differs from loaded processor tensors")
-    return {"normalization_profile": profile, "state_statistics": statistics["state"],
-            "action_statistics": statistics["action"], "normalization_source": source}
+# The legacy SSH transport and BT runtime share one motor-free inference implementation.
+from liminal.policy.lerobot_engine import processor_contract  # noqa: F401
 
 
 def main():
@@ -50,27 +29,20 @@ def main():
     with contextlib.redirect_stdout(sys.stderr):
         import numpy as np
         import torch
-        from lerobot.policies.factory import make_pre_post_processors
-        from lerobot.policies.flux3.modeling_flux3 import Flux3Policy
         from lerobot.utils.utils import init_logging
         from PIL import Image
+
+        from liminal.core.types import Observation
+        from liminal.policy.lerobot_engine import LeRobotEngine
 
         init_logging(console_level="INFO")
         torch.set_num_threads(8)
         torch.cuda.set_per_process_memory_fraction(0.40)
-        policy = Flux3Policy.from_pretrained(args.checkpoint).to("cuda").eval()
-        pre, post = make_pre_post_processors(policy.config, pretrained_path=args.checkpoint)
-        normalization = processor_contract(pre, post, args.checkpoint)
-        if normalization["normalization_profile"] != args.normalization_profile:
-            raise ValueError("loaded processor normalization does not match the requested profile")
-        policy.reset()
-        pre.reset()
-        post.reset()
-        cfg = policy.config
-        if (cfg.n_obs_steps, cfg.chunk_size, cfg.fps) != (8, 42, 30):
-            raise ValueError("unsupported checkpoint history/horizon/rate")
-        if list(cfg.camera_keys) != ["observation.images.scene", "observation.images.wrist"]:
-            raise ValueError("unsupported camera contract")
+        contract = SimpleNamespace(device="cuda", obs_history=8, chunk_size=42, control_hz=30,
+                                   camera_roles=("scene", "wrist"), action_dim=6)
+        engine = LeRobotEngine(args.checkpoint, contract, args.normalization_profile)
+        cfg = engine.policy.config
+        normalization = engine.statistics
         revision = subprocess.check_output(
             ["git", "-C", "/liminal/src/lerobot-lora", "rev-parse", "HEAD"], text=True).strip()
     print(json.dumps({"type": "ready", "integration": "lerobot.Flux3Policy + saved pre/post processors",
@@ -85,28 +57,17 @@ def main():
             history = request["history"]
             if len(history) != 8 or not str(request["prompt"]).strip():
                 raise ValueError("eight observations and a prompt are required")
-            batch = {"task": [request["prompt"]]}
-            for source, destination in (("state", "observation.state"),
-                                        ("command_history", "observation.command_history")):
-                values = np.asarray([f[source] for f in history], dtype=np.float32)
-                if values.shape != (8, 6) or not np.isfinite(values).all():
-                    raise ValueError(f"invalid {source}")
-                batch[destination] = torch.from_numpy(values)[None].to("cuda")
-            for role in ("scene", "wrist"):
-                frames = []
-                for frame in history:
+            observations = []
+            for frame in history:
+                images = {}
+                for role in contract.camera_roles:
                     with Image.open(io.BytesIO(base64.b64decode(frame[role], validate=True))) as image:
-                        frames.append(np.asarray(image.convert("RGB")).copy())
-                batch[f"observation.images.{role}"] = (
-                    torch.from_numpy(np.stack(frames)).permute(0, 3, 1, 2)[None].to("cuda").float() / 255)
-            with contextlib.redirect_stdout(sys.stderr), torch.inference_mode():
+                        images[role] = np.asarray(image.convert("RGB")).copy()
+                observations.append(Observation("right", frame["state"], images))
+            with contextlib.redirect_stdout(sys.stderr):
                 start = time.perf_counter()
-                processed = pre(batch)
-                normalized = policy.predict_action_chunk(processed)
-                actions = post(normalized).float().cpu().numpy()
-            if actions.shape != (1, 42, 6) or not np.isfinite(actions).all():
-                raise ValueError("invalid official processor output")
-            reply = {"type": "actions", "actions": actions[0].tolist(),
+                actions = engine.predict(observations, [f["command_history"] for f in history], request["prompt"])
+            reply = {"type": "actions", "actions": actions,
                      "inference_seconds": time.perf_counter() - start}
         except Exception as exc:
             reply = {"type": "error", "detail": f"{type(exc).__name__}: {exc}"}

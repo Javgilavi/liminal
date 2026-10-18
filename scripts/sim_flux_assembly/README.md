@@ -3,7 +3,7 @@
 This follow-on experiment teaches four prompt-conditioned skills on one SO-101:
 pick a blue gear, seat it on a shaft, pick a brass spacer collar, and seat the
 collar over the gear. One shared task LoRA learns the four prompts. A small
-behavior-tree harness runs them sequentially and checks each physical result.
+isolated-skill evaluator checks each physical result from a recorded start state.
 Teacher demonstration success and learned inference success are reported separately.
 
 This prototype requires the prepared single-arm scene, MuJoCo, NumPy and the
@@ -54,30 +54,20 @@ Checkpoints are saved every 250 microbatches. After the user stopped the first
 attempt at step 520 before its first scheduled save, the run restarted from the
 frozen base with the same validated dataset; the interrupted log is retained.
 
-`harness.py` builds the sequence with Liminal's existing `Sequence`, `Check`,
-`SkillNode` and `run_task` implementations. Preconditions are checked again before
-later insertions; unverified backend success does not advance the sequence.
-Pickup requires a stable bilateral grasp with the part bottom above 65 mm,
-clearing the 60 mm shaft top. All recorded pickup endpoints exceed this height.
-`evaluate.py` resets policy and saved processors at each atomic boundary and
-acknowledges the actually issued commands without discarding the 32-step queue.
-Every action passes through the safety supervisor while the tree owns the arm.
-It supplies cameras/state/prompt to FLUX; simulator object poses only drive the
-independent contact/pose predicates used to decide when to stop or advance.
-There is no teacher fallback during learned inference.
-
-Evaluation compares zero-shot, raw and EMA on five identical new scene seeds.
-Separate atomic diagnostics start skills from held-out teacher states; those
-are explicitly labelled and never count as an end-to-end assembly rollout.
+The simulation assembly sequence driver has been removed. Collection, training,
+replay audits and isolated-skill diagnostics remain available. `evaluate.py` runs
+each selected atomic skill from a recorded teacher start, independently checks its
+success predicate, and does not chain the skills into an assembly task. Historical
+full-assembly reports can still be read with `summarize.py`.
 
 ```bash
 python scripts/sim_flux_assembly/evaluate.py \
   --root "$ASSEMBLY_ROOT" --checkpoint "$ASSEMBLY_CHECKPOINT" \
-  --output "$ASSEMBLY_ROOT/evaluation-new" --episodes 5
+  --output "$ASSEMBLY_ROOT/atomic-new" --episodes 5 --skills pick_gear
 ```
 
-Tests for sequencing, failure handling, independent verification and prerequisite
-loss are in `tests/test_assembly_harness.py`; they use mocks and need no ML/GPU/sim.
+For the real skill-runtime, checkpoint registry and live perception, see
+[showcase runtime](../../docs/showcase-runtime.md).
 
 ## Preview artifacts
 

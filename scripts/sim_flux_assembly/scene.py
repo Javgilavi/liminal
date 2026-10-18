@@ -8,7 +8,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sim_flux_lora"))
 
 from common import FrameArm, Supervisor, images  # noqa: E402
-from harness import PROMPTS, SKILLS  # noqa: E402
+
+SKILLS = (
+    ("pick_gear", "gear_held", ()),
+    ("seat_gear", "gear_seated", ("gear_held",)),
+    ("pick_collar", "collar_held", ("gear_seated",)),
+    ("seat_collar", "assembly_complete", ("gear_seated", "collar_held")),
+)
+PROMPTS = {
+    "pick_gear": "Pick up the blue gear and hold it upright above the tray.",
+    "seat_gear": "Lower the blue gear over the metal shaft, release it onto the base, and move the gripper clear.",
+    "pick_collar": "Pick up the brass spacer collar and hold it upright above the tray.",
+    "seat_collar": "Lower the brass spacer collar onto the shaft above the blue gear, release it, and move clear.",
+}
+
 
 FPS = 20
 SUBSTEPS = 25

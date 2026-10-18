@@ -13,10 +13,12 @@ from liminal.sim.embodiment import Embodiment
 
 def test_world_state_negation_and_log(tmp_path):
     w = WorldState(log_path=tmp_path / "e.jsonl")
+    assert not w.holds("lid_open") and not w.holds("!lid_open")
+    w.set("lid_open", False, source="test")
     assert w.holds("!lid_open")
     w.set("lid_open", True, source="test")
     assert w.holds("lid_open") and not w.holds("!lid_open")
-    assert (tmp_path / "e.jsonl").read_text().count("lid_open") == 1
+    assert (tmp_path / "e.jsonl").read_text().count("lid_open") == 2
 
 
 def test_safety_clips_limits_and_step():
