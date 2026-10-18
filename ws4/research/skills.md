@@ -94,7 +94,33 @@ Eval loss: 0.342 at 500, 0.286 at 4,000, 0.276 at 5,000.
 
 ### Yellow cutter
 
-Prep only: the raw data is on the volume, no pod (budget hold).
+No non-augmented run (budget hold); the augmented run below is the only cutter LoRA.
+
+### Augmented runs and pre-robot gates (18 Oct morning)
+
+Same recipe with `--policy.augment=true` (flux3 95 % crop + colour jitter, one draw per window), RUN `lora_aug`, from
+each skill's B base (`ws4/cloud/skill_pod.sh all SKILL`). Gates before any robot time (`ws4/cloud/gate_check.py`):
+(b) from rest (frame-0 state over the 8-tick history, frame-0 images) the first chunk moves >= 20 deg summed over the
+5 arm joints on every held-out take; (c) the same under +-2 px wrist/scene shifts and 0.5x brightness (wrist, both).
+The box and cutter demos move 39 to 150 deg in that window. Gate column = smallest first-chunk move over all takes and perturbations.
+
+| Skill | Model | MAE pan, lift, elbow, wflex, roll (deg); gripper (%) | Gate (deg) | Eval loss 500 / 5k |
+|---|---|---|---|---|
+| Cutter (held out 67 to 69) | aug RAW (winner) | 2.5, 4.7, 7.1, 5.2, 6.8; 11.3 | 44.2 pass | 0.243 / 0.189 |
+| | aug EMA | 3.1, 4.1, 6.4, 6.7, 7.3; 14.9 | 53.1 pass | |
+| Box | aug RAW | 3.2, 7.3, 6.0, 5.7, 4.1; 5.8 | 5.3 fail | 0.381 / 0.294 |
+| | aug EMA | 3.7, 7.6, 6.1, 6.9, 4.9; 8.5 | 5.5 fail | |
+| | non-aug RAW (served) | 3.3, 7.1, 5.8, 5.5, 3.9; 5.7 | 4.9 fail | |
+| Green pen | aug RAW | 2.7, 5.2, 4.9, 5.3, 3.6; 5.4 | 73.3 pass | 0.233 / 0.195 |
+| | aug EMA | 3.0, 5.8, 7.0, 7.5, 4.2; 9.2 | 12.6 fail | |
+| | non-aug RAW (served) | 2.6, 4.7, 4.3, 4.8, 3.4; 5.3 | not run | |
+
+- Augmentation left the offline MAE about where it was (box and green within 0.2 to 0.6 deg per joint of non-aug).
+- The box's from-rest knife edge is not from augmentation: aug and non-aug both barely move on takes 38 and 73
+  (6 to 8 deg unperturbed vs 104 and 71 in the demos), and a dim wrist view drops every take to 5 to 13 deg.
+- EMA fails or nearly fails under a dim wrist on green; RAW keeps its margin. RAW again wins wherever it passes.
+- Cutter winner: `skill_yellow_cutter` = `so101_haller_yellow_cutter_B` + `lora_aug` RAW 5k. Laptop copies of all
+  three runs (raw, EMA, gates, logs) are in `~/haller_rescue/{open_box,green_pen,yellow_cutter}_lora_aug/`.
 
 ## Compute
 
