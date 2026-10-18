@@ -6,6 +6,59 @@
 .intro h1 {
   font-size: clamp(54px, 6vw, 86px);
 }
+.intro {
+  position: relative;
+}
+.page-qr {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: max-content;
+  max-width: 100%;
+  margin: 24px auto 0;
+  padding: 10px 16px 10px 10px;
+  border: 1px solid #d8d8c8;
+  border-radius: 8px;
+  background: #f7f2e6;
+  text-align: left;
+}
+.page-qr img {
+  display: block;
+  width: 128px;
+  height: 128px;
+  flex-shrink: 0;
+}
+.page-qr strong,
+.page-qr small {
+  display: block;
+  max-width: 105px;
+  line-height: 1.5;
+}
+.page-qr strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.page-qr small {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #798078;
+}
+@media (min-width: 1400px) {
+  .page-qr {
+    position: absolute;
+    top: 58px;
+    right: max(38px, calc((100vw - 1320px) / 2 + 38px));
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 12px;
+    text-align: center;
+  }
+  .page-qr strong,
+  .page-qr small {
+    max-width: 128px;
+  }
+}
 .chapter-nav a:hover {
   color: #719850;
 }
