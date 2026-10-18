@@ -19,7 +19,7 @@ soft fin-ray fingers) runs a **4-skill chain with FLUX 3 Action in the control l
 Claude Haiku checks each step from the head camera:
 
 1. robot right arm: "open the box by pulling its handle", then keep holding the lid. **This step is a scripted replay
-   of recorded demo 59, not FLUX** (our FLUX box LoRA would not start from rest; see Results), run through the same
+   of a recorded demo (take 72 in the final runs), not FLUX** (our FLUX box LoRA would not start from rest; see Results), run through the same
    safety stack and labelled as such in the HMI and the logs;
 2. robot left arm, FLUX: "put the green pen in the green slot";
 3. FLUX: "put the yellow cutter in the yellow slot";
@@ -37,7 +37,7 @@ FLUX predicts next to what actually happens.
 | Red pen, 12 held-out takes, offline arm error / direction | 5.5 deg / 66.5 % (our quantiles), hold still 5.6 deg | **3.24 deg / 87.5 %** (RAW 5k); RAW 10k 3.15 deg / 88.6 % |
 | Green pen / yellow cutter on the arm | - | 1/2 / 1 insert (trial log 1/6) |
 | Open the box | - | FLUX 0 (0/3 runner, 0/1 HMI): replaced by a scripted replay |
-| Full chain on the arm | - | `[[NUM:CHAIN_SUCCESS]]` |
+| **Full 4-skill chain on the arm** | - | **2 of 3 runs completed 4/4 with no human touch** (208.6 s and 302.2 s) |
 | Sim, "put the block in the cup", 20 held-out layouts | 0/20 | 0/20 (grasped and lifted in 2) |
 
 ### On the arm (red pen, robot left arm, 120 s per attempt)
@@ -67,8 +67,24 @@ This morning, per skill (trial log, about 09:20; paste the final `trial_log.py s
 | green pen | FLUX RAW 5k | 1/2 (one full insert) |
 | yellow cutter | FLUX augmented RAW 5k | 1 full insert (1/6 in the trial log; the orchestrator reports it reached 5/5 and grasped 4/5 in the first five) |
 | open the box | FLUX RAW 5k, every variant | 0 (0/3 in the runner, 0/1 in the HMI): its first chunk from rest moves 4.9 to 5.5 deg on held-out takes, demos move 39 to 150, so the demo replays recorded take 59 |
-| red pen with the lid held | FLUX RAW 5k | `[[NUM:REH_PENLID]]` |
-| full chain | box replay + three FLUX skills | `[[NUM:CHAIN_SUCCESS]]` |
+| red pen with the lid held | FLUX RAW 10k | 0/5 (held still: a scene the LoRA never saw); not rerun with RAW 5k |
+| full chain (unguarded mode) | box replay + FLUX skills | 2 of 3 runs 4/4 (see below) |
+
+### The full chain
+
+Three runs on the real Haller, Claude Opus planning and Claude Haiku checking every step, in an unguarded demo mode
+(see Safety):
+
+| Run | Result | Time | Replans | Claude cost |
+|---|---|---|---|---|
+| 11:46 | 1/3 steps, operator abort | 186 s | 1 | USD 0.05 |
+| 11:52 | **4/4, no human touch** | 209 s | 0 | USD 0.02 |
+| 12:05 | **4/4, no human touch** | 302 s | 1 (the box replay missed twice; Claude replanned it) | USD 0.05 |
+
+In both completed runs all four objects ended in place without human touch: the box by scripted replay (recorded take
+72), the green pen and the cutter by their FLUX LoRAs (green 58 s and 55 s; cutter 112 s, and 46 s on a second
+attempt), and the red pen **placed by the green-pen LoRA** during its return-home motion; the red-pen step's check
+then confirmed it in 3 to 4 s. The red-pen LoRA's own results are the single-skill runs above.
 
 ### Offline, on held-out takes (same protocol for every row)
 
@@ -143,8 +159,14 @@ the imagination panel, Claude spend and an e-stop. No LLM output reaches a motor
 
 ## Safety
 
-Every command passes soft joint limits, a 1 deg per tick step limit, LeRobot's relative cap, a forward-kinematics
-keep-out, a stall and load freeze and a 60 % servo torque cap, with an e-stop on the HMI and the spacebar. Per skill:
+**The final chain runs used an unguarded demo mode** (commit 18ece73, approved by the operator for the demo): the
+policies ran without keep-out zones and without the stall, keep-out and load stops, start gate or lid precheck; joint
+limits, 1 deg per tick, the 60 % torque cap and the e-stop stayed on. The reason: 17 of 20 keep-out stops in the
+morning came from the demonstrated-envelope zones, not from collision zones, so the guards were stopping good motion.
+
+In the single-skill runs every command passes soft joint limits, a 1 deg per tick step limit, LeRobot's relative cap,
+a forward-kinematics keep-out, a stall and load freeze and a 60 % servo torque cap, with an e-stop on the HMI and the
+spacebar. Per skill:
 
 - each skill's workspace is built from its own demos (station zones plus the demonstrated envelope), with recorded
   overrides (box midline +0.17 m, green -0.23 m, cutter -0.21 m, red pen with the lid held -0.15 m);
@@ -218,7 +240,7 @@ Operator HMI ──goal──> Claude Opus planner         v
 | [ws4/eval/trial_log.py](ws4/eval/trial_log.py) | One JSONL line per graded attempt, markdown summary |
 | [ws4/ttt/](ws4/ttt/), [ws4/sim/](ws4/sim/README.md), [ws4/kinematics/](ws4/kinematics/) | Research: memory, simulation, kinematics |
 | [ws4/data/](ws4/data/), [ws4/teleop/](ws4/teleop/) | Dataset conversion, VR teleop launcher |
-| `[[TEAM:WORKSTREAMS]]` | WS1, WS2, WS3, WS5 parts (`src/liminal/`, `configs/`, `scripts/`); the team's behaviour-tree harness runs on this stack on branch `claude/harness-bridge-11f8b6` (fake arms only so far) |
+| `[[TEAM:WORKSTREAMS]]` | WS1, WS2, WS3, WS5 parts (`src/liminal/`, `configs/`, `scripts/`); the team's behaviour-tree harness drives the Haller through this stack on branch `claude/harness-bridge-11f8b6` |
 
 ## Reproduce
 
@@ -235,9 +257,11 @@ On the robot: [orchestrator/README.md](ws4/orchestrator/README.md) (chain) and
 
 ## What is not verified
 
-- The chain's success rate beyond `[[NUM:CHAIN_SUCCESS]]`; the real-arm numbers are small blocks.
+- The chain's reliability beyond 3 runs (2 complete), and the chain with the guards on; the real-arm numbers are
+  small blocks.
 - A FLUX box skill: every box LoRA failed the from-rest gate; the demo replays a recorded take.
-- The behaviour-tree harness on real hardware (verified on fake arms only).
+- The team's behaviour-tree harness end to end on the arm: it drove the Haller through the ws4 bridge and placed the
+  green pen in its best run, then stopped on its own perception and lid-predicate timeouts and on the start gate.
 - Claude's checks on live frames (measured on recorded held-out frames).
 - Both arms moving at the same time (the chain moves one arm at a time).
 

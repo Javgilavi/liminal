@@ -42,26 +42,44 @@ Sources: Hub `meta/info.json` of each dataset (read 18 Oct 07:20: 75 / 31,678 fr
 126 / 55,422; take-out 11 / 11,385); `ws4/research/orchestrator.md` check table (lines 166 to 169). All recorded by VR
 teleop (box, green, cutter overnight, about 00:25 to 03:00 CEST at "tonight's spot", notes `final_demo_runbook.md`).
 Planner: Claude plans "right arm first, then the three left-arm steps", checked live in 6.4 s for USD 0.02
-(`ws4/orchestrator/README.md`). Chain result: `[[NUM:CHAIN_SUCCESS]]`, steps `[[NUM:CHAIN_STEPS]]` (PENDING,
-demo-rehearsal).
+(`ws4/orchestrator/README.md`). Chain result: 2 of 3 runs 4/4 (section 0.1b).
 
 **Box = scripted replay, never call it FLUX.** The FLUX box LoRA went 0/3 live in the runner plus 0/1 in the HMI
 (orchestrator, 09:00; the trial log has 20 `open_box` FLUX rows, all 0, all "stopped before: reach the handle"). It
 barely moves from rest: the from-rest gate (first chunk must move >= 20 deg on every held-out take) failed for every
 box variant, smallest move 4.9 deg (non-aug RAW), 5.3 (aug RAW), 5.5 (aug EMA) (`ws4/research/skills.md`, augmented
-runs table). In the demo the box step replays recorded demo 59 through the same safety stack (1 deg/tick, the box
+runs table). In the demo the box step replays a recorded demo (take 59 by default, take 72 in the final chain runs) through the same safety stack (1 deg/tick, the box
 kit's keep-out with its envelope, stall freeze, torque cap; the start gate then checks the held lid for the pen
 steps), labelled "SCRIPTED REPLAY OF RECORDED DEMO 59, NOT FLUX" in the HMI, events and trial log (condition
 `scripted`, variant `scripted-replay-ep59`; `ws4/orchestrator/README.md`, `skills.yaml`). Say: "the planner mixes
 learned skills and scripted primitives under the same safety layer". A cutter replay fallback (take 67) also exists.
 
-Executed by, in the demo: box = scripted replay (demo 59); green pen = FLUX non-augmented RAW 5k; yellow cutter = FLUX
+Executed by, in the demo: box = scripted replay (take 72 in the final runs); green pen = FLUX non-augmented RAW 5k; yellow cutter = FLUX
 augmented RAW 5k; red pen = FLUX RAW 5k on B84. All four FLUX adapters are public, root = the served adapter,
 `checkpoints/<run>/<step>/{raw,ema}` for the rest: `Oskrt/flux-3-action-so101-haller-{pen,open-box,green-pen,yellow-cutter}-lora`
 (Hub API lists all four, 18 Oct 09:20).
 
 Each skill is its own LoRA adapter, about 0.45 GB, on one shared FLUX base (`ws4/research/pen_lora.md` setup:
 "raw and EMA adapters (0.45 GB each)"). Hot-swapping adapters on one loaded base per step is future work.
+
+### 0.1b The full chain on the real Haller (final, 18 Oct 11:46 to 12:10)
+
+Source: `ws4/eval/trials.jsonl` (task `haller_chain`, variant `lora_chain_unguarded`, plus one line per step).
+Unguarded demo mode (commit 18ece73, approved by Oscar for the demo; see 0.5).
+
+| Run | Result | Time | Replans | Claude cost | Steps |
+|---|---|---|---|---|---|
+| 11:46 | 1/3 steps, operator abort | 185.9 s | 1 | USD 0.05 | box replay ok; green 2 attempts failed; cutter timeout |
+| **11:52** | **4/4, no human touch** | 208.6 s | 0 | USD 0.02 | box replay 17.6 s; green FLUX 57.7 s; cutter FLUX 112.1 s; red pen check passed in 2.8 s |
+| **12:05** | **4/4, no human touch** | 302.2 s | 1 (5.2 s) | USD 0.05 | box replay missed twice, opened on the replanned third try (17.1 s); green FLUX 55.1 s; cutter FLUX timeout, then inserted in 45.6 s; red pen check passed in 3.8 s |
+
+- **2 of 3 runs completed 4/4 with no human touch during the run.**
+- **The red pen was not placed by the red-pen LoRA in either run:** the green-pen policy slotted it during its
+  return-home window, and the red step's check confirmed it in 2.8 s and 3.8 s. Say: "all four objects ended in place
+  without human touch; the box by scripted replay, green and cutter by their FLUX LoRAs, the red pen placed by the
+  green-pen LoRA". The red-pen LoRA's own numbers stay those of the single-skill runs (3/5, 2/3).
+- The box step replays recorded take **72** in these runs (trial notes: "NOT FLUX: open_box: scripted replay of
+  recorded demo 72"); earlier documentation names take 59 as the default.
 
 ### 0.2 First real-arm successes (red pen, robot left arm, pen84 table, 120 s attempts)
 
@@ -87,8 +105,8 @@ attempt) and `ws4/eval/trials.jsonl`.
   0.6 s for each chunk. At horizon 32 the stall freeze ended 9 of 15 attempts (shoulder lift trailing at about two
   thirds of the 60 % torque cap, no contact).
 - Zero-shot on the arm stays as in section 1: 0/16 graded attempts on Saturday. Zero-shot B84 and median were
-  measured offline only (sections 4 and 0.4); arm attempts `[[NUM:B84_PEN_SUCCESS]]` / `[[NUM:MEDIAN_PEN_SUCCESS]]`
-  only if they are run before 12:30, otherwise delete those rows.
+  measured offline only (sections 4 and 0.4); no arm attempts were run (none in the trial log at 12:20).
+
 ### 0.2b This morning, per skill, live (trial log, `trial_log.py summary --markdown` at about 09:20)
 
 | Skill | Model | Result | Notes |
@@ -99,7 +117,7 @@ attempt) and `ws4/eval/trials.jsonl`.
 | green pen | FLUX non-aug RAW 5k | 1/2 (one full insert, 3/3 steps, 08:33; one no-reach) | the orchestrator's 1/1 predates the second attempt |
 | yellow cutter | FLUX aug RAW 5k | 1/6 inserts in the trial log | orchestrator 09:00: "reached 5/5, grasped 4/5, 0/5 inserts"; the trial log scores those five as 0 steps and has a sixth attempt with a full insert (3/3). Reconcile before quoting |
 | box | FLUX RAW 5k (all variants) | 0 (0/3 runner + 0/1 HMI per the orchestrator; 20 logged rows, all 0) | replaced by the scripted replay in the demo |
-| red pen, lid held | FLUX RAW 5k | `[[NUM:REH_PENLID]]` | one check attempt planned (expect a hold) |
+| red pen, lid held | FLUX RAW 10k | 0/5 (benchmark, held still) | no separate RAW 5k check was logged; in the chain runs the pen was already slotted by the green-pen policy |
 
 ### 0.3 The knife edge: FLUX's decision hangs on the wrist camera's view of the room
 
@@ -145,6 +163,14 @@ benchmark's "What each change did", item 1.
 
 ### 0.5 Safety per skill (chain)
 
+**The final chain runs were unguarded** (commit 18ece73 "--unguarded demo mode", approved by Oscar for the demo):
+policies ran without keep-out zones and without the stall, keep-out and load stops; the start gate, the lid precheck
+and the ramp confirmation are off too (commit message). Joint limits, 1 deg per tick, the 60 % torque cap and the
+e-stop stay on. Why (orchestrator): 17 of 20 keep-out stops in the morning came from the demonstrated-envelope zones,
+not from collision zones, so the guards were stopping good motion. Say this plainly; the guarded numbers below are the
+single-skill runs.
+
+
 Source: `ws4/orchestrator/README.md` "What each step runs with", `ws4/single_arm/README.md` skills section.
 
 - Each skill's workspace is built from its own demos (station zones plus the demonstrated envelope), with recorded
@@ -161,8 +187,11 @@ Source: `ws4/orchestrator/README.md` "What each step runs with", `ws4/single_arm
 
 ### 0.6b Team integration and media
 
-- The teammates' behaviour-tree harness (on main) now runs on the ws4 stack: branch `claude/harness-bridge-11f8b6`
-  (exists on origin). Verified on fake arms only; the hardware dry run is PENDING. Say "runs on fake arms" until then.
+- The teammates' behaviour-tree harness drove the real Haller through the ws4 bridge (branch
+  `claude/harness-bridge-11f8b6`). Best run: the green pen placed. Runs then stopped on the harness's own perception
+  consensus and lid-predicate timeouts, and later on the ws4 start gate (the box arm sagging under the lid). The Opus
+  5.5 hybrid gate is wired in and verified in observation (continue for 15 steps); gated motion runs were refused by
+  the start gate before moving (orchestrator, 18 Oct).
 - Media for slides and the video: Google Drive folder "liminal", subfolder `00_highlights`: red-pen insert clips
   (`redpen_insert_layoutA_94s_flux_raw5k_h16.mp4`, `..._layoutB_91s_...`, `..._layoutC_48s_...`,
   `redpen_insert_morning_A_69s.mp4`, `redpen_insert_morning_C_36s.mp4`), imagination clips
@@ -212,8 +241,8 @@ in one run: anecdotal, not graded, do not quote as a result.
 | Top failure | no reach (D and A stopped at 26 s and 43 s); at horizon 32 the stall freeze (shoulder lift torque-limited) | same |
 | Checkpoint used | RAW 5k = `lora_pen84` checkpoint 005000 on base `so101_haller_pen_B84` | same |
 | Held-out eval loss of that checkpoint | 0.2096 | `ws4/research/pen_lora.md` |
-| Zero-shot B84 / median on the arm | `[[NUM:B84_PEN_SUCCESS]]` / `[[NUM:MEDIAN_PEN_SUCCESS]]`: not run so far; delete if not run by 12:30 | trial log |
-| Full chain (Claude-planned) success, steps | `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | trial log, one line per chain (demo-rehearsal) |
+| Zero-shot B84 / median on the arm | not run (offline only) | trial log, 12:20 |
+| Full chain (Claude-planned) success, steps | 2 of 3 runs 4/4 (unguarded mode; section 0.1b) | trial log |
 | Pen-out skill | not in the final chain (dataset of 11 takes is public) | orchestrator, 18 Oct |
 
 ## 3. The diagnosis: why zero-shot failed (MEASURED unless marked)
@@ -436,9 +465,6 @@ Find what is still open: `grep -rn "\[\[" ws4/pitch`. Times are CEST, Sun 18 Oct
 
 | Placeholder | Meaning | Owner | Expected |
 |---|---|---|---|
-| `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | full 4-skill chain: successes / runs, steps done | demo-rehearsal (Oscar at the arm) | 10:00 to 12:30 |
-| `[[NUM:REH_PENLID]]` | red pen with the lid held, one check attempt | demo-rehearsal | 09:00 to 11:30 |
-| `[[NUM:B84_PEN_SUCCESS]]`, `[[NUM:MEDIAN_PEN_SUCCESS]]` | zero-shot B84 / median on the arm (only if run) | orchestrator decides | by 12:30, else delete |
 | `[[CLIP:HMI_CHAIN]]` | screen recording of the chain in the HMI | demo-rehearsal | with the chain run |
 | `[[CLIP:IMAGINED_VS_ACTUAL]]` | optional live imagination clip (replay clips exist) | demo-rehearsal / ws4-imagine | with the chain run |
 | `[[NUM:GPU_SPEND]]`, `[[NUM:CLAUDE_SPEND]]` | spend for the cost line | Oscar (RunPod billing, HMI) | 13:00 |
