@@ -1,26 +1,15 @@
-<section id="orchestrator" data-transition="fade" style="background:#fbf8f4;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
-<p style="font-size:24px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5b3fe0">Long-horizon</p>
-<h2 style="font-size:64px;font-weight:700;line-height:1.1;letter-spacing:-1px;color:#1c1830">Claude plans and checks. It never touches a motor.</h2>
-<div style="display:flex;flex-direction:row;align-items:center;gap:24px">
-<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#fffdf9;border:1px solid #e6e0f0;border-radius:20px;padding:36px">
-<h3 style="font-size:36px;font-weight:700;color:#5b3fe0">1 · Plan</h3>
-<p style="font-size:28px;line-height:1.35">Claude Opus 5.5 turns the goal into a plan over a fixed skill list, validated for schema, vocabulary, dependencies and deadlocks.</p>
-<p style="font-size:24px;font-weight:700;color:#625d78">5.9 s with a cached prompt</p>
-</div>
-<x-connector style="width:48px;color:#1c1830;border-width:3px"></x-connector>
-<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#fffdf9;border:1px solid #e6e0f0;border-radius:20px;padding:36px">
-<h3 style="font-size:36px;font-weight:700;color:#c2410c">2 · Act</h3>
-<p style="font-size:28px;line-height:1.35">Each step is a FLUX skill with its exact training prompt, or a scripted primitive (home, hold, open, close), through the guards.</p>
-<p style="font-size:24px;font-weight:700;color:#625d78">every attempt logged</p>
-</div>
-<x-connector style="width:48px;color:#1c1830;border-width:3px"></x-connector>
-<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#fffdf9;border:1px solid #e6e0f0;border-radius:20px;padding:36px">
-<h3 style="font-size:36px;font-weight:700;color:#0b7d7d">3 · Check</h3>
-<p style="font-size:28px;line-height:1.35">Claude Haiku 5.5 judges the result from the head camera: move on, retry, or replan with the operator’s approval.</p>
-<p style="font-size:24px;font-weight:700;color:#625d78">97.1 % put, 98.2 % take on 282 recorded Haller frames, no false pass</p>
-</div>
-</div>
-<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;background:#fff3c4;color:#5a4300;border:2px dashed #b07d00;border-radius:12px;padding:8px 16px">live chain result: [[NUM:CHAIN_SUCCESS]]</p>
-<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#625d78">Source: ws4/research/orchestrator.md (live check 17 Oct 15:06, USD 0.04 in total) · ws4/orchestrator/skills.yaml</p>
-<aside>Demo moment 1 and 3. The live goal: "put the pen in the box, take it out, put it back". Planner latency: 12.1 s cold, 5.9 s with the cached system prompt (sim head frame, 640x480). Real-frame checks (orchestrator.md, "Success checks on real frames", offline on recorded head-camera frames, Haiku 5.5 with the tuned station prompt): put 97.1 %, take 98.2 %, no false pass on 278 negatives including 52 frames with the pen still in the gripper; held-out odd episodes 97.8 % and 99.1 %; median 1.3 s and 1.2 s, about USD 0.00018 per check. The generic prompt before tuning passed only 2 of 107 true "put" frames. Not yet measured live. Skills on the Haller (skills.yaml): "put the red pen in its slot in the cardboard box", "take the red pen out of its slot and put it on the mat", plus home and hold. If WS3's behaviour tree drives the live chain instead, retitle this slide and credit WS3.</aside>
+<section id="orchestrator" data-transition="fade" style="background:#fbf8f4;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<p style="font-size:24px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5b3fe0">The demo · four skills, two arms</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1;letter-spacing:-1px;color:#1c1830">Claude plans and checks, FLUX acts</h2>
+<table style="font-size:26px;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif">
+<tr><th style="width:5%">#</th><th style="width:12%">Arm</th><th style="width:47%">FLUX prompt (one LoRA each)</th><th style="width:14%;text-align:right">Demos</th><th style="width:22%;text-align:right">Haiku check, held out</th></tr>
+<tr><td>1</td><td>right</td><td>open the box by pulling its handle</td><td style="text-align:right">75</td><td style="text-align:right">63/63</td></tr>
+<tr><td>2</td><td>left</td><td>put the green pen in the green slot</td><td style="text-align:right">66</td><td style="text-align:right">114/119</td></tr>
+<tr><td>3</td><td>left</td><td>put the yellow cutter in the yellow slot</td><td style="text-align:right">70</td><td style="text-align:right">91/91</td></tr>
+<tr><td>4</td><td>left</td><td>put the red pen in its slot in the cardboard box</td><td style="text-align:right">126</td><td style="text-align:right">65/66</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.35;color:#1c1830"><b>Claude Opus plans</b> (right arm first, 6.4 s, USD 0.02), <b>FLUX does every motion</b> with the skill’s LoRA while the right arm keeps holding the lid, <b>Claude Haiku checks</b> each step from the head camera (about 1.2 s). No LLM output reaches a motor.</p>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace;font-size:24px;background:#fff3c4;color:#5a4300;border:2px dashed #b07d00;border-radius:12px;padding:8px 16px">live chain: [[NUM:CHAIN_SUCCESS]]</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#625d78">Sources: ws4/research/orchestrator.md (checks on held-out frames of the final scene) · ws4/orchestrator/README.md · datasets on the Hub (Oskrt/haller_*)</p>
+<aside>A1 APPROACH, the demo itself. Demo moment 1: the goal box is pre-filled; Plan shows two lanes in about 6 s; Approve and run. Step 1's full prompt is "open the box by pulling its handle"; the box arm then keeps holding the lid. Checks on held-out frames of the final scene: lid open 63/63 (no false pass), green 114/119 (96 %, 2 false passes in 82 not-done frames), cutter 91/91 (no false pass), red pen 65/66 (1 false pass: the pen against the green pen, 1.5 cm off its strip). About 1.2 to 1.3 s and USD 0.0002 per check. Red pen demos: 104 plus 22 recorded with the lid held. Each skill is a LoRA adapter of about 0.45 GB on one shared FLUX base; hot-swapping adapters on one loaded base is future work. Fill the chain pill from the trial log (demo-rehearsal) or delete it.</aside>
 </section>

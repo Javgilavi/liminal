@@ -1,73 +1,64 @@
-# Demo video storyboard
+# Demo video storyboard and this morning's shot list
 
-Draft, Sat 17 Oct 2026 about 22:15 CEST. Two cuts from one shoot: the **main cut (2:00)** for the submission and a
-**60 s cut** for the 5-minute final (marked `60s` in the table). Numbers on captions come from
-[NUMBERS.md](NUMBERS.md). Status: **HAVE** = the file exists now (path given), **MAKE** = can be built on the laptop
-from existing data, **RECORD** = must be filmed Sunday morning.
+Re-centred on the 4-skill chain, Sun 18 Oct about 08:15 CEST. Two cuts from one shoot: the **main cut (2:00)** for
+the submission and a **60 s cut** (`60s`) for the 5-minute final. Captions use [NUMBERS.md](NUMBERS.md) values only.
+Status: **HAVE** (file exists, path given), **MAKE** (build on the laptop from existing material), **RECORD** (film
+this morning, see the shot list).
 
-Where the files are:
-- Runner attempt videos (`ws4/single_arm/runs/<session>/attempt<NN>/video.mp4`, 640x240, scene | wrist side by side,
-  with a task and time caption burned in) are **gitignored**: they are on the laptop only. Keep them out of git; cut
-  from them.
-- VR demo footage: the LeRobot datasets in `~/.cache/huggingface/lerobot/ws4/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box/`
-  (104 takes) and `.../haller_take_the_red_pen_out_of_its_slot/` (11 takes), `videos/observation.images.head/` and
-  `.../right_wrist/`, 640x480 at 30 fps. **People are in frame** in some head-camera takes (Oscar and passers-by):
-  pick takes without faces, or crop to the table (crop `x 160..640, y 110..480` removes the operator's face in
-  file-026) or blur, and ask anyone visible before publishing.
-- Sim clips: `ws4/ttt/results/` (GIFs and JPGs are in git; the MP4s are local only).
+## Shot list for THIS MORNING (priority order)
+
+Filming rules (all shots): phone on a tripod, landscape, 1080p 30 fps, arm + objects + box in frame, started before
+Enter / Approve; HMI screen recording at 1080p. Name each clip with the runner's run-folder id. Failed attempts are
+fine: they are labelled as failed. People in frame: ask before publishing. Spots (notes `final_demo_runbook.md`): the
+red pen runs at the **pen84 spot**; box, green and cutter at **last night's spot** with the box at P3; align with
+`ALIGN=1` before each (wrist offset < 15 px, brightness 0.85 to 1.2).
+
+| P | Shot | When (demo-rehearsal) | Spot | Notes |
+|---|---|---|---|---|
+| 1 | **Red-pen insert, RAW 5k at horizon 16**, one full insert from reach to release, phone wide + runner video | about 07:00 to 07:45, first block (3 graded attempts, phone on each) | pen84 | Runner records scene and wrist automatically; the phone adds the wide shot. If no new success: use this morning's runner videos (HAVE, below) |
+| 2 | **Each skill once**: open the box and hold the lid; green pen; yellow cutter; red pen with the lid held | box (P3) and cutter about 08:15 to 09:00 after the augmented swap; green about 09:00 to 09:30; red pen lid-held: one check attempt with RAW 5k (expect a hold, labelled failed) unless an augmented red pen lands | last night's, P3 | Through the HMI (one run per goal) so the Haiku check shows; 10 to 20 s of each is enough |
+| 3 | **Full chain with the HMI on screen**: Plan, lanes, Approve, the four steps, each Haiku check turning green | about 09:30 to 11:30, 2 to 3 runs, best one kept | last night's, P3 | Screen-record the HMI and run the phone at the same time; this is `[[CLIP:HMI_CHAIN]]` |
+| 4 | **Imagination panel live** during the chain (`--imagine lazy`) | with P3; a first take in the pen84 HMI red-pen run at about 07:45 | | Screen recording of the panel; optional, replay clips exist (HAVE) |
+| 5 | **E-stop**: spacebar during a step, both arms freeze, the lid stays held, Release, Resume | about 07:45, during the pen84 HMI red-pen run (Release + Resume after) | any | 5 s; only if it fits |
+| 6 | **VR teleop b-roll**: Oscar in the Quest Pro, the arm following | sim mode in any 5-minute gap (for example a model swap); real arm only after 12:30 if time allows | any | 10 s; sim mode is fine, caption "sim" |
+
+Slots from demo-rehearsal (07:30 reply); all depend on the Haller being plugged in (not yet at 06:45). Run-folder ids
+arrive from demo-rehearsal as clips land. Hard stop for filming: the 12:30 decision; if the chain is unreliable, P3
+becomes one HMI clip per skill. After that, cut the video from what exists.
 
 ## Main cut (2:00)
 
 | # | Time | Dur | Shot | Caption / voice-over | Source | Status |
 |---|---|---|---|---|---|---|
-| 1 | 0:00 | 5 s | Haller station photo, slow push-in; title "liminal: imagine, then act" | none, music in | `ws4/assets/photos/xlerobot_station.jpg` | HAVE |
-| 2 | 0:05 | 8 s | Zero-shot runaway, red SO-101: shoulder drives up, wrist folds, operator stops it (`60s`) | "FLUX 3 Action, released checkpoint, zero-shot: 0 of 16 graded attempts" | `ws4/single_arm/runs/20261017_171141/attempt01/video.mp4` (12.5 s, variant A0) | HAVE |
-| 3 | 0:13 | 6 s | Zero-shot on the Haller with our quantiles: reaches toward the cup, wrist flex pins, gripper curls back (4x speed) | "Even re-normalized: the wrist runs to its limit" | `ws4/single_arm/runs/20261017_204828/attempt01/video.mp4` (60 s, A0r-B), use 10 to 34 s at 4x | HAVE |
-| 4 | 0:19 | 12 s | The A to E table builds row by row; B and D light up (`60s`, 6 s) | "Root cause: a calibration contract. Our own quantiles: lift error 19.9 to 3.2 deg, direction 80 %. No training." | Slide "The contract" of the deck, screen-captured in Present mode | MAKE (from the deck) |
-| 5 | 0:31 | 6 s | Optional plot: commanded shoulder lift over one A0 attempt vs the package's q01..q99 band (85 to 184 deg) | "FLUX saw an impossible robot" | `trace.npz` of `20261017_171141/attempt01` + `ws4/flux/checkpoint_facts.md:38`; small matplotlib script | MAKE (15 min, skip if short on time) |
-| 6 | 0:37 | 10 s | Oscar teleoperating in the Quest Pro, robot copying the hand (third-person, phone) (`60s`, 5 s) | "Teaching by VR: 96 demos in one evening" | none yet | RECORD (2 takes, landscape, 1080p) |
-| 7 | 0:47 | 6 s | Three VR demos from the head camera in a 3-up grid, 2x speed | "Recorded in FLUX's exact contract: 30 fps, head + wrist, LeRobot degrees" | dataset head videos, pick 3 takes with no faces from different layouts (A to D) | HAVE (pick and crop) |
-| 8 | 0:53 | 5 s | Held-out curve: arm error and direction, zero-shot B84 to LoRA 2.5k, 4k, 5k (and 20k), with hold still and ACT as lines | "One LoRA overnight: a third less arm error by 5k steps, level with ACT on direction" | deck slide "heldout" screen-captured, or a small chart from `ws4/research/pen_lora.md` | MAKE (from the deck) |
-| 9 | 0:58 | 20 s | **Post-training success**: the Haller grasps the pen and puts it in its slot, real time. Phone wide shot, with the runner's scene and wrist video picture-in-picture (`60s`, 15 s) | "After post-training: `[[NUM:LORA_PEN_SUCCESS]]` on the same task" | phone + `runs/<sunday>/attemptNN/video.mp4` | RECORD |
-| 10 | 1:18 | 15 s | **Imagined vs actual**: actual left, FLUX's decoded imagination right, chunk boundaries and surprise trace; then 3 s on the B84 vs 5k comparison sheet (`60s`, 10 s) | "FLUX imagines the next 1.4 s with every chunk. We decode it, and its actions stay bit-identical. Fine-tuning made it imagine better too." | `ws4/imagine/outputs/lora5000_ep101/imagination/imagined_vs_actual.mp4` (5k LoRA, the arm server's model; held-out take 101 replayed, H.264 1048x340, 9.9 s; also ep102, ep103; B84 versions in `replay_ep10x/`), comparison `ws4/imagine/outputs/b84_vs_lora5000_ep101_chunk1.png`; optional live attempt via `compose.render_run` | HAVE (replay; caption "held-out take, replayed"), RECORD live optional |
-| 11 | 1:33 | 14 s | **Claude chains it**: HMI screen capture, goal typed, plan lanes appear, approve; robot does pen out then pen in; Haiku check turns green (`60s`, 12 s) | "Claude plans and checks. It never touches a motor." | OBS / screen recording of `python -m orchestrator hmi` + phone | RECORD (`[[CLIP:HMI_CHAIN]]`) |
-| 12 | 1:47 | 7 s | **Safety holds**: the keep-out freezes a wrong-sign zero-shot run at the mast and base (2x speed), then an e-stop on the spacebar | "Every command: soft limits, 1 deg per tick, FK keep-out, stall and load freeze, 60 % torque cap" | `ws4/single_arm/runs/20261017_210715/attempt01/video.mp4` (A0r-D, keep-out refused 198 mast and 96 base ticks, `meta.json`) + e-stop RECORD | HAVE + RECORD |
-| 13 | 1:54 | 6 s | End card: team names, repo URL, "FLUX 3 Action by Black Forest Labs" (`60s`, 3 s) | `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, github.com/Javgilavi/liminal | deck end slide | MAKE |
+| 1 | 0:00 | 5 s | Haller station photo, title "liminal: imagine, then act" | none, music in | `ws4/assets/photos/xlerobot_station.jpg` | HAVE |
+| 2 | 0:05 | 6 s | Zero-shot runaway (red SO-101): the arm never reaches the cups (`60s`, 4 s) | "Released FLUX 3 Action, zero-shot: 0 of 16" | `ws4/single_arm/runs/20261017_171141/attempt01/video.mp4` | HAVE |
+| 3 | 0:11 | 8 s | The contract: A to E table builds; lift error 19.9 to 3.2 deg | "A calibration contract, fixed offline, no training" | deck slides "contract", "diagnosis" (Present mode capture) | MAKE |
+| 4 | 0:19 | 8 s | VR teleop b-roll + the four datasets as captions (`60s`, 4 s) | "337 VR takes, four skills, one night" | shot P6 | RECORD |
+| 5 | 0:27 | 22 s | **Red-pen insert**: reach, grasp, insert, at 1x then 2x (`60s`, 12 s) | "First full inserts on the real arm: 3 of 5" | shot P1; fallback the runner videos below | RECORD / HAVE |
+| 6 | 0:49 | 30 s | **Full chain**: HMI plan and lanes, then box opens and stays held, green, cutter, red pen, 2x to 4x with step labels; each Haiku check green (`60s`, 20 s) | "Claude plans, FLUX acts, Claude checks" + chain result `[[NUM:CHAIN_SUCCESS]]` | shots P3 (+ P2 if the chain is not filmed) | RECORD |
+| 7 | 1:19 | 14 s | **Imagined vs actual**, then 3 s on the B84 vs 5k comparison sheet (`60s`, 10 s) | "FLUX imagines the next 1.4 s; its actions stay bit-identical. Fine-tuning made it imagine better." | `ws4/imagine/outputs/lora5000_ep101/imagination/imagined_vs_actual.mp4`, `ws4/imagine/outputs/b84_vs_lora5000_ep101_chunk1.png`; live shot P4 if filmed | HAVE |
+| 8 | 1:33 | 10 s | **The knife edge**: recording vs now vs blend of the wrist view | "One pixel of wrist view flipped hold and reach. We align the station and augment." | `ws4/single_arm/runs/station_check/station_vs_pen84.jpg` (people in frame: check) | HAVE |
+| 9 | 1:43 | 8 s | **Safety**: keep-out freeze on a run, then the e-stop (shot P5) | "Per-skill workspaces, a start gate, a slow zone: nothing collided" | `ws4/single_arm/runs/20261017_210715/attempt01/video.mp4` (keep-out holds a wrong-sign run) + P5 | HAVE + RECORD |
+| 10 | 1:51 | 9 s | End card: team, repo, Hub links (`60s`, 3 s) | `[[TEAM:NAME]]`, github.com/Javgilavi/liminal, huggingface.co/Oskrt | deck slide "close" | MAKE |
 
-60 s cut = shots 2, 4 (6 s), 6 (5 s), 9 (15 s), 10 (10 s), 11 (12 s), 13 (3 s) plus 4 s of transitions.
+60 s cut = shots 2 (4 s), 4 (4 s), 5 (12 s), 6 (20 s), 7 (10 s), 10 (3 s) plus 7 s of transitions.
 
-### Optional B-roll (5-minute final, Q&A backup)
+## What already exists (HAVE)
 
-| Shot | Source | Status |
+| Material | Path | Notes |
 |---|---|---|
-| Sim: scripted demo, "put the block in the cup" | `ws4/ttt/results/block_cup_demo_ep0.gif` (11.3 s) | HAVE |
-| Sim: released checkpoint knocks the cup over | `ws4/ttt/results/block_cup_a0_seed9000000_3x.gif` (8.1 s) | HAVE |
-| Sim: TTT / GRU stage tracker overlaid on a FLUX rollout | `ws4/ttt/results/flux_sim_so101sim_A0r_ep0_overlay.mp4` (1280x590, 117.6 s; use 20 s) | HAVE (local) |
-| Sim: progress monitor on stand-in lid cycles | `ws4/ttt/results/inference_lid_cycles_4-100001.mp4` (24 s) | HAVE (local) |
-| Sim vs photo of the station | `ws4/site/img/compare_photo_vs_sim.jpg` | HAVE |
-| Sim LoRA success, same 20 layouts | `[[NUM:SIM_LORA]]` rollout video from `ws4-sim-4500b` | PENDING |
-| Teammates' workstreams | `[[TEAM:WORKSTREAMS]]` clips from WS1, WS2, WS3, WS5 | ASK the team |
-
-## Shoot list for Sunday morning (in this order)
-
-1. **Post-training attempts** (shot 9): the graded LoRA attempts are filmed anyway by the runner. Add a phone on a
-   tripod, landscape, 1080p 30 fps, wide enough for arm, pen and box, fixed for all attempts. Start the phone before
-   pressing Enter, so every graded attempt has a matching wide shot. Name files with the runner's session id.
-2. **Imagined vs actual** (shot 10): run at least one successful attempt with imagination on and render it with
-   `compose.render_run`; also keep one failed attempt with a visible divergence (it makes the point better).
-3. **HMI chain** (shot 11): screen recording at 1080p plus the phone. Two full chains, keep the cleaner one.
-4. **VR teleop** (shot 6): 2 short takes of Oscar in the headset with the robot following. Sim mode is fine if the
-   real arm is busy, but say "sim" on the caption if so.
-5. **E-stop** (shot 12): spacebar during a ramp, the arm holds, Release and Resume.
-
-Do not stage anything: every robot clip in the video is a real, unedited-speed attempt unless the caption says "2x"
-or "4x". Failed attempts are labelled as failed.
+| This morning's five red-pen inserts (runner video, scene and wrist, 640x240) | `ws4/single_arm/runs/20261018_051926/attempt01` (A, 94 s), `20261018_052519/attempt02` (B, 91 s), `20261018_052519/attempt03` (C, 48 s, the best for 2x), `20261018_053419/attempt04` (D), `20261018_053815/attempt04` (D) | gitignored, laptop only, backed up in `~/haller_rescue/single_arm_2026-10-18/runs/` |
+| Imagined vs actual, held-out takes, B84 and 5k LoRA | `ws4/imagine/outputs/replay_ep10{1,2,3}/`, `ws4/imagine/outputs/lora5000_ep10{1,2,3}/imagination/imagined_vs_actual.mp4` | H.264 1048x340, about 10 s; captions say "held-out take, replayed" |
+| B84 vs 5k imagination comparison | `ws4/imagine/outputs/b84_vs_lora5000_ep101_chunk1.png` | slide "imaginebetter" |
+| Wrist view: recording vs now | `ws4/single_arm/runs/station_check/station_vs_pen84.jpg`, `ws4/single_arm/runs/wrist_view_training_vs_now.jpg` | people visible |
+| Zero-shot failures (Saturday) | `ws4/single_arm/runs/20261017_*` | A0 runaway, A0r-B wrist pinned, A0r-D keep-out hold |
+| Sim | `ws4/ttt/results/*.gif`, `ws4/site/img/compare_photo_vs_sim.jpg` | backup only |
+| VR demos (head camera) | `~/.cache/huggingface/lerobot/ws4/haller_*/videos/` and on the Hub | people visible in some takes: crop to the table |
 
 ## Edit notes
 
-- 1920x1080, 30 fps. Runner videos are 640x240 (two 320x240 halves): scale 3x with nearest-neighbour or show them
-  as a picture-in-picture at native size; do not stretch to 16:9.
-- Captions: one line, bottom, high contrast, numbers exactly as in NUMBERS.md.
-- Music low; no voice-over required, but a 2-minute voice-over follows the 3-minute pitch script in
-  [OUTLINE.md](OUTLINE.md) beats P1, D1, A1, R1, I1.
-- Export H.264, under 100 MB, and upload where the submission form asks (`[[TEAM:VIDEO_URL]]`).
+- 1920x1080, 30 fps. Runner videos are 640x240 (two 320x240 halves): show them as picture-in-picture at native size
+  or 3x nearest-neighbour; do not stretch to 16:9.
+- Every robot clip is a real attempt at real speed unless the caption says 2x or 4x. Failed attempts are labelled.
+- Captions: one line, bottom, high contrast, numbers exactly as in NUMBERS.md section 0.
+- Export H.264, under 100 MB, upload where the submission form asks (`[[TEAM:VIDEO_URL]]`).

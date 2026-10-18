@@ -3,14 +3,14 @@
   "createdOnFiles": {"v": 1, "at": "2026-10-17T19:55:00Z"},
   "lists": "css",
   "title": "liminal: a robot that imagines, then acts",
-  "order": ["cover", "zeroshot", "contract", "diagnosis", "architecture", "teach", "heldout", "results", "imagination", "imaginebetter", "orchestrator", "safety", "memory", "sim", "realworld", "team", "next", "close"],
+  "order": ["cover", "zeroshot", "contract", "diagnosis", "architecture", "orchestrator", "teach", "heldout", "results", "knifeedge", "imagination", "imaginebetter", "safety", "memory", "sim", "realworld", "team", "next", "close"],
   "sections": {
     "s1": {"description": "Hook: the Haller and the task", "start": "cover"},
     "s2": {"description": "Problem: the released checkpoint failed every graded zero-shot attempt", "start": "zeroshot"},
     "s3": {"description": "Diagnosis: a calibration contract, fixed offline without training", "start": "contract"},
-    "s4": {"description": "Approach: VR demos, LoRA, FLUX server, guarded runner, Claude orchestrator", "start": "architecture"},
-    "s5": {"description": "Results: held-out offline, then zero-shot vs post-training on the arm", "start": "heldout"},
-    "s6": {"description": "Imagine, then act: decoded imagination and Claude's chain", "start": "imagination"},
+    "s4": {"description": "Approach: the 4-skill chain, VR demos, one LoRA per skill, guarded runners", "start": "architecture"},
+    "s5": {"description": "Results: held-out offline, the first inserts on the arm, the knife-edge finding", "start": "heldout"},
+    "s6": {"description": "Imagine, then act: decoded imagination, improved by fine-tuning", "start": "imagination"},
     "s7": {"description": "Final only: safety, memory, simulation", "start": "safety"},
     "s8": {"description": "Close: real-world use, team, next steps", "start": "realworld"}
   },

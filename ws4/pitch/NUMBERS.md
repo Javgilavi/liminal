@@ -20,6 +20,123 @@ Refresh the trial table right before the slides freeze:
 python ws4/eval/trial_log.py summary --markdown
 ```
 
+## 0. Final demo, Sun 18 Oct: the 4-skill chain (read this section first)
+
+Updated Sun 18 Oct about 07:30 CEST. Sections 1 to 13 below are the Saturday history; where they disagree, this
+section wins.
+
+### 0.1 The chain
+
+Claude Opus plans, Claude Haiku checks each step from the head camera, FLUX 3 Action runs every motion (one LoRA per
+skill on one shared base), the runner's guards bound every command.
+
+| # | Arm | Prompt (exact) | Dataset on the Hub (takes) | Haiku check on held-out frames, final scene |
+|---|---|---|---|---|
+| 1 | robot RIGHT (box arm) | "open the box by pulling its handle" | [Oskrt/haller_open_the_box](https://huggingface.co/datasets/Oskrt/haller_open_the_box) (75) | 63/63, no false pass |
+| 2 | robot LEFT (pen arm) | "put the green pen in the green slot" | [Oskrt/haller_put_the_green_pen_in_the_green_slot](https://huggingface.co/datasets/Oskrt/haller_put_the_green_pen_in_the_green_slot) (66) | 114/119 (96 %), 2 false passes in 82 not-done frames |
+| 3 | robot LEFT | "put the yellow cutter in the yellow slot" | [Oskrt/haller_put_the_yellow_cutter_in_the_yellow_slot](https://huggingface.co/datasets/Oskrt/haller_put_the_yellow_cutter_in_the_yellow_slot) (70) | 91/91, no false pass |
+| 4 | robot LEFT | "put the red pen in its slot in the cardboard box" | [Oskrt/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box](https://huggingface.co/datasets/Oskrt/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box) (126 = 104 + 22 with the lid held) | 65/66, 1 false pass |
+
+Sources: Hub `meta/info.json` of each dataset (read 18 Oct 07:20: 75 / 31,678 frames, 66 / 28,832, 70 / 30,514,
+126 / 55,422; take-out 11 / 11,385); `ws4/research/orchestrator.md` check table (lines 166 to 169). All recorded by VR
+teleop (box, green, cutter overnight, about 00:25 to 03:00 CEST at "tonight's spot", notes `final_demo_runbook.md`).
+Planner: Claude plans "right arm first, then the three left-arm steps", checked live in 6.4 s for USD 0.02
+(`ws4/orchestrator/README.md`). Chain result: `[[NUM:CHAIN_SUCCESS]]`, steps `[[NUM:CHAIN_STEPS]]` (PENDING,
+demo-rehearsal).
+
+Each skill is its own LoRA adapter, about 0.45 GB, on one shared FLUX base (`ws4/research/pen_lora.md` setup:
+"raw and EMA adapters (0.45 GB each)"). Hot-swapping adapters on one loaded base per step is future work.
+
+### 0.2 First real-arm successes (red pen, robot left arm, pen84 table, 120 s attempts)
+
+Source: `ws4/single_arm/benchmarks/red_pen_2026-10-18.md` (05:00 to 05:35 CEST, scored by Oscar after each
+attempt) and `ws4/eval/trials.jsonl`.
+
+| Block | Success | Steps (reach, grasp, insert) | How it ended |
+|---|---|---|---|
+| **FLUX RAW 5k, horizon 16, lift stall 25** | **3/5** full inserts (A 94 s, B 91 s, C 48 s) | 9/15 | D and A stopped by Oscar at 26 s and 43 s without a reach |
+| FLUX RAW 5k, horizon 32 | 0/5 | 8/15 | stall freeze 4, keep-out stop 1 |
+| FLUX EMA 10k, horizon 32 | 0/5 | 4/15 | stall freeze 4 |
+| FLUX RAW 10k, horizon 32 | 0/5 | 3/15 | keep-out stop 3 |
+| ACT pen84 100k | 0/5 | 8/15 (grasp and carry in 4) | timeout 5, never inserted |
+| FLUX RAW 10k, lid-held scene | 0/5 | 0/15 | held still: the scene the LoRA never saw |
+| FLUX RAW 5k, horizon 8, lift stall 25 | 0/2 | 0/6 | darkest room, arm still 70 % of the time |
+
+- **Trial log total right after the benchmark:** RAW 5k at horizon 16 = **5/8** (3 more attempts at 05:35 to
+  05:40: D success, A 2 steps, D success); all RAW 5k rows 5/16 (`trial_log.py summary --markdown`, 18 Oct 07:20).
+  Quote 3/5 with the benchmark file, or 5/8 with the trial log; say which.
+- **Caveats (say them):** small n; horizon 16 came together with the 25 deg lift-stall threshold, two changes at
+  once; the successes ended with Oscar's stop key after the insert; lighting fell during the session.
+- Why horizon 16 helps (benchmark notes): replanning every 16 commands (about 0.5 s); the arm still waits about
+  0.6 s for each chunk. At horizon 32 the stall freeze ended 9 of 15 attempts (shoulder lift trailing at about two
+  thirds of the 60 % torque cap, no contact).
+- Zero-shot on the arm stays as in section 1: 0/16 graded attempts on Saturday. Zero-shot B84 and median were
+  measured offline only (sections 4 and 0.4); arm attempts `[[NUM:B84_PEN_SUCCESS]]` / `[[NUM:MEDIAN_PEN_SUCCESS]]`
+  only if they are run before 12:30, otherwise delete those rows.
+- Per-skill rehearsals (PENDING, demo-rehearsal): box `[[NUM:REH_BOX]]`, green `[[NUM:REH_GREEN]]`, cutter
+  `[[NUM:REH_CUTTER]]`, red pen lid-held `[[NUM:REH_PENLID]]`.
+
+### 0.3 The knife edge: FLUX's decision hangs on the wrist camera's view of the room
+
+Source: notes `single_arm_handover.md` updates 06:50 to 08:00 (18 Oct, offline on saved live frames) and the
+benchmark's "What each change did", item 1.
+
+- Live, after the robot had been moved, RAW 10k returned hold chunks at home: 0/15 steps in the lid-held scene.
+- A field-by-field diff of the live request against a recorded one found them identical in task bytes, image keys
+  and order, shapes, dtypes, units and history; only the wrist image differed. Recorded images with live state and
+  commands gave a reach (elbow +26.7 deg, gripper -96.5 %); live images with recorded state gave a hold.
+- The live wrist frame flips hold and reach on a 1 px shift or a 1 deg tilt; recorded frames reach under the same
+  shifts. Sweep: 0 of 27 wrist shifts and 0 of 10 seeds reach on the live room view; averaging never rescues it.
+- Fixes: `ws4/single_arm/align_station.py` (live alignment against a recording's home view: wrist room offset, scale,
+  brightness; the benchmark ran at offset -11 px, scale 0.97) and image augmentation (crop + colour jitter) in the
+  new LoRAs (box and cutter gates about 08:00, green about 08:25: `[[NUM:AUG_BOX]]`, `[[NUM:AUG_CUTTER]]`,
+  `[[NUM:AUG_GREEN]]`, PENDING, ws4-datasets).
+- Brightness also matters: wrist gain x1.6 to 2.0 made the gripper close (notes 08:00). Runbook target: brightness
+  0.85 to 1.2 of the recording.
+
+### 0.4 Offline, held out (same protocol for every row: 200 frames, moving frames only, guidance 1/1)
+
+| Skill / model | Arm MAE (deg, mean) | Direction | Source |
+|---|---|---|---|
+| hold still (red pen) | 5.6 | - | `pen_lora.md` |
+| red pen, zero-shot B84 / median | 5.5 / 4.8 | 66.5 % / 69 % (6 joints) | `pen_lora.md` |
+| red pen, ACT 100k | 4.3 | 85 % arm (86 % 6 joints) | `pen_lora.md` "ACT baseline" |
+| **red pen, LoRA RAW 5k** (the 3/5 model) | **3.24** | 87.5 % arm | `pen_lora.md` "Raw vs EMA and guidance at 5k" |
+| **red pen, LoRA RAW 10k** (public on the Hub) | **3.15** | 88.6 % (6 joints) | `pen_lora.md` lid-held section, row "old held-out" |
+| red pen RAW 10k on the lid-held takes | 5.57 (hold 9.24) | 80.2 % | same |
+| box, LoRA RAW 5k | 5.11 (hold 6.7) | 73 % arm | `ws4/research/skills.md` |
+| box, ACT 20k | 5.6 | 80 % arm | same |
+| green pen, LoRA RAW 5k | 3.95 | 89.1 % (6 joints) | same |
+| yellow cutter | `[[NUM:CUTTER_OFFLINE]]` | | PENDING (ws4-datasets) |
+
+- RAW beat EMA in every comparison (pen 5k: 3.24 vs 3.62 deg, 87.5 vs 82 % arm direction; green and box likewise):
+  at 1,250 updates a 0.999 EMA still carries much of the initial adapter.
+- Guidance 3/3 and 4/1 gained nothing over 1/1 (arm MAE 3.83 and 3.67 vs 3.24) at twice the compute per chunk.
+- Public adapter: https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora (RAW 10k per the orchestrator,
+  18 Oct; the Hub table in `pen_lora.md` lists the uploads). How-to for others: `ws4/LORA_HOWTO.md`.
+
+### 0.5 Safety per skill (chain)
+
+Source: `ws4/orchestrator/README.md` "What each step runs with", `ws4/single_arm/README.md` skills section.
+
+- Each skill's workspace is built from its own demos (station zones plus the demonstrated envelope), with recorded
+  overrides: box midline +0.17 m, green -0.23 m with a 2 cm trim near the box arm, cutter -0.21 m with 1 cm box-arm
+  clearance, red pen (lid-held) -0.15 m with a 1.4 cm torso margin.
+- Cutter: a 4 cm slow zone near the lid-holding arm (0.5 deg/tick, load freeze at 50 % for 0.2 s).
+- Start gate before every pen-arm step, before anything moves: the box arm's LIVE pose against the skill's recorded
+  hold plus a geometric check; a refusal ends the chain with the reason shown, both arms keep holding (the lid stays
+  held).
+- Box-arm takeover (`--hold-arm right`): the HMI takes over an arm already holding the lid without moving it.
+- On the real arm this morning the keep-out refused ticks in 15 of 33 benchmark attempts and ended 7 of them
+  (`red_pen_2026-10-18.json` per-attempt refusals; benchmark "How attempts ended"). No collision or damage was
+  reported. Do NOT say "0 keep-out refusals": the dry runs had 0 (box ACT, `skills.md`), the real runs did not.
+
+### 0.6 Sim track (final, honest)
+
+0/20 for every policy on "put the block in the cup" in MuJoCo: released A0, A0r-sim, LoRA EMA 1.6k, LoRA raw 2.4k.
+The raw LoRA grasped and lifted the block in 2 of 20 but never released it in the cup
+(`ws4/research/robottt_flux.md` 11.12, status 18 Oct 01:20).
+
 ## 1. Graded attempts on real hardware (zero-shot, as of 17 Oct 21:15)
 
 Source: `ws4/eval/trials.jsonl` via `python ws4/eval/trial_log.py summary --markdown` (16 lines, run 17 Oct
@@ -46,20 +163,19 @@ community datasets) and the LoRA at 5k microsteps, same layouts and budget (`ws4
 zero-shot pen row is A0-E (0/3). A teammate's own script with the median statistics "basically worked" on the Haller
 in one run: anecdotal, not graded, do not quote as a result.
 
-## 2. Post-training on real hardware (PENDING)
+## 2. Post-training on real hardware (filled 18 Oct 07:30; see section 0.2)
 
-| What | Placeholder | Source when filled |
+| What | Value | Source |
 |---|---|---|
-| LoRA pen task success | `[[NUM:LORA_PEN_SUCCESS]]` (x/N) | `trial_log.py summary --markdown`, `condition=post_training` |
-| LoRA pen task steps done (mean of 3: grasp, carry, release in slot) | `[[NUM:LORA_PEN_STEPS]]` | same |
-| LoRA human interventions | `[[NUM:LORA_PEN_HELP]]` | same |
-| LoRA top failure | `[[NUM:LORA_PEN_FAILURE]]` | same |
-| Zero-shot B84 on the pen (variant `A0r-B84`) | `[[NUM:B84_PEN_SUCCESS]]` | same, `condition=zero_shot` |
-| Zero-shot median on the pen (variant `A0r-M`) | `[[NUM:MEDIAN_PEN_SUCCESS]]` | same, `condition=zero_shot` |
-| Checkpoint used (microsteps, raw or EMA) | `[[NUM:LORA_CKPT]]` | `ws4/cloud/RUNPOD.md`, real-track LoRA section |
-| Held-out eval loss of that checkpoint | `[[NUM:LORA_EVAL_LOSS]]` | trainer log on `real-train-6000` |
-| Full chain (Claude-planned) success, steps | `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | `trial_log.py`, one line per chain (orchestrator) |
-| Pen-out skill ("take the red pen out of its slot and put it on the mat") trained? | `[[NUM:PEN_OUT_STATUS]]` | ws4-datasets / ws4-orchestrator |
+| LoRA pen task success | RAW 5k at horizon 16: 3/5 (benchmark block), 5/8 including the three attempts right after | `ws4/single_arm/benchmarks/red_pen_2026-10-18.md`; `ws4/eval/trials.jsonl` |
+| Steps done (reach, grasp, insert) | 9/15 in the benchmark block | same |
+| Human interventions (as scored) | 0 in every block; the successes ended with Oscar's stop key after the insert | same, caveats |
+| Top failure | no reach (D and A stopped at 26 s and 43 s); at horizon 32 the stall freeze (shoulder lift torque-limited) | same |
+| Checkpoint used | RAW 5k = `lora_pen84` checkpoint 005000 on base `so101_haller_pen_B84` | same |
+| Held-out eval loss of that checkpoint | 0.2096 | `ws4/research/pen_lora.md` |
+| Zero-shot B84 / median on the arm | `[[NUM:B84_PEN_SUCCESS]]` / `[[NUM:MEDIAN_PEN_SUCCESS]]`: not run so far; delete if not run by 12:30 | trial log |
+| Full chain (Claude-planned) success, steps | `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | trial log, one line per chain (demo-rehearsal) |
+| Pen-out skill | not in the final chain (dataset of 11 takes is public) | orchestrator, 18 Oct |
 
 ## 3. The diagnosis: why zero-shot failed (MEASURED unless marked)
 
@@ -109,7 +225,7 @@ wrist flex sat at its 93.5 deg soft limit for 1,192 and 1,177 of 1,800 ticks (A0
 | Overnight run `lora_pen84` | 20,000 microsteps = 5,000 updates (about 1 epoch of the train frames), started 19:50:20 UTC on `real-train-6000`, about 1.0 s per microstep, ETA about 02:35 UTC | MEASURED start, `ws4/research/pen_lora.md`; ETA is an estimate |
 | Cost of that run | about $17 at $2.49/h | UNVERIFIED estimate, `ws4/cloud/RUNPOD.md` |
 | Pipeline test (provisional 28-take run) | checkpoint 500: eval loss 0.285 on held-out takes; merged package 13.9 GB; serves at 0.80 s per chunk while sharing the GPU | MEASURED, same |
-| Final steps, final eval loss | `[[NUM:LORA_STEPS_DONE]]`, `[[NUM:LORA_EVAL_LOSS]]` | PENDING |
+| Checkpoints evaluated | to 10k microsteps (RAW 10k eval loss 0.213); later checkpoints not reported in the sources | MEASURED, `ws4/research/pen_lora.md` |
 
 ### Held-out action error: zero-shot B vs LoRA (offline, no robot)
 
@@ -124,7 +240,10 @@ adapter folded in). Raw results on the `real-train-is` volume, `/workspace/real_
 | LoRA EMA | 2,500 | 3.0, 5.1, 4.7, 6.0, 2.9; 9.9 (arm mean 4.3) | 72, 77, 78, 64, 75, 78 % (mean 74) | 71, 68, 71, 96, 63, 90 % |
 | LoRA EMA | 4,000 | 2.4, 4.5, 4.3, 5.4, 2.5; 8.4 (arm mean 3.8) | 76, 82, 80, 71, 82, 81 % | 53, 53, 63, 83, 64, 87 % |
 | **LoRA EMA (Hub tag `step-5000`, served as `lora_5000`)** | 5,000 | **2.1, 4.4, 4.2, 5.0, 2.4; 6.7 (arm mean 3.6)** | **79, 84, 83, 75, 89, 81 % (mean 82; arm 82)** | 46, 48, 60, 75, 64, 79 % |
-| LoRA EMA | 10,000 / 15,000 / 20,000 | `[[NUM:LORA_CURVE]]` | | |
+| LoRA RAW | 5,000 | 1.9, 4.0, 4.0, 4.0, 2.3; 4.7 (arm mean 3.24) | 89, 88, 87, 85, 89, 62 % (arm 87.5) | 47, 44, 55, 46, 53, 72 % |
+| LoRA EMA | 10,000 | 1.7, 4.0, 3.9, 4.2, 2.2; 4.3 | 91, 87, 88, 84, 89, 84 % | 42, 40, 45, 53, 58, 78 % |
+| LoRA RAW (public) | 10,000 | 1.7, 4.0, 3.8, 4.3, 2.1; 4.5 | 93, 85, 88, 84, 89, 92 % | 45, 41, 49, 50, 53, 55 % |
+| ACT 100k (final) | - | 2.7, 5.4, 5.1, 5.1, 3.0; 4.7 (arm mean 4.3) | 86, 85, 88, 78, 87, 94 % (arm 85) | - |
 | ACT baseline (ws4-act), 10k steps | - | arm MAE mean 4.3 | 81 to 90 % | - |
 
 ### Zero-shot with median community statistics (variant M), same 12 held-out takes
@@ -190,7 +309,7 @@ flex, roll and gripper) and better than chance on direction. The slide claim to 
 | RTX 4090, guidance 1.0 (Haller runs) | 0.92 to 0.94 s per chunk round trip | MEASURED, same |
 | One chunk | 42 actions predicted, 32 executed at 30 Hz (1.07 s of motion) | `ws4/CONTEXT.md` (package config) |
 | Two arms on one shared model | arms alternate, 30 % and 28 % motion each, never simultaneous; 1.76 s round trip | MEASURED, `ws4/research/orchestrator.md` |
-| Sunday demo server | `[[NUM:DEMO_SERVER]]` (GPU, guidance, round trip) | PENDING |
+| Sunday demo server | real-serve-6000b (RTX PRO 6000), guidance 1, compile, chunk 42 at horizon 16; the arm waits about 0.6 s per chunk | `ws4/single_arm/benchmarks/red_pen_2026-10-18.md`; notes `final_demo_runbook.md` |
 
 ## 6. Imagination (FLUX's predicted video)
 
@@ -250,7 +369,7 @@ flex, roll and gripper) and better than chance on direction. The slide claim to 
 |---|---|---|
 | Scripted demos, "put the block in the cup" | 60 episodes, 15,578 frames (60 of 137 layouts; 65 out of reach, 12 missed) | `ws4/research/robottt_flux.md` 11.12 |
 | A0 in sim, 20 held-out layouts | 0/20; cup knocked over in 8, block pushed in 2; closest approach median 12 cm | MEASURED, same |
-| A0r-sim and LoRA-sim, same 20 layouts | `[[NUM:SIM_A0R]]`, `[[NUM:SIM_LORA]]` | PENDING (queued on `ws4-sim-4500b`) |
+| A0r-sim and LoRA-sim, same 20 layouts | A0r-sim 0/20; LoRA EMA 1.6k 0/20; LoRA raw 2.4k 0/20 (grasped and lifted in 2, never released) | MEASURED, `ws4/research/robottt_flux.md` 11.12 (18 Oct 01:20) |
 
 ## 11. Kinematics (EE50 feasibility, research)
 
@@ -272,27 +391,21 @@ flex, roll and gripper) and better than chance on direction. The slide claim to 
 |---|---|---|
 | "take the red pen out of its slot" VR takes | 11 takes, 11,385 frames, 30 fps | MEASURED, `~/.cache/huggingface/lerobot/ws4/haller_take_the_red_pen_out_of_its_slot/meta/info.json` |
 
-## 14. Placeholder index (fill in this order)
+## 14. Placeholder index (who fills what, and when)
 
-Overnight / morning numbers, from `trial_log.py summary --markdown`, the trainer log and the sim pod:
+Find what is still open: `grep -rn "\[\[" ws4/pitch`. Times are CEST, Sun 18 Oct.
 
-| Placeholder | Meaning | Where it appears |
-|---|---|---|
-| `[[NUM:LORA_PEN_SUCCESS]]` | LoRA successes / attempts on the pen task | outline, README, deck (results, close) |
-| `[[NUM:LORA_PEN_STEPS]]`, `[[NUM:LORA_PEN_HELP]]`, `[[NUM:LORA_PEN_FAILURE]]` | mean steps of 3, interventions, top failure | outline, deck (results) |
-| `[[NUM:B84_PEN_SUCCESS]]`, `[[NUM:MEDIAN_PEN_SUCCESS]]` | zero-shot B84 and median on the pen task (5 attempts each) | outline, README, deck (results) |
-| `[[NUM:LORA_TABLE]]`, `[[NUM:LORA_ALL]]` | post-training rows of the trial table; all post-training attempts | README |
-| `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | Claude-planned chain results | deck (results, orchestrator) |
-| `[[NUM:LORA_CKPT]]`, `[[NUM:LORA_EVAL_LOSS]]`, `[[NUM:LORA_STEPS_DONE]]` | checkpoint, held-out eval loss, microsteps | README, deck notes |
-| `[[NUM:LORA_CURVE]]` | held-out MAE and direction at 10k / 15k / 20k (section 4; 2.5k, 4k and 5k are filled) | README, deck (heldout) |
-| `[[NUM:RECORD_HOURS]]`, `[[NUM:TRAIN_HOURS]]` | time split for the judges | outline, README, deck (teach) |
-| `[[NUM:SIM_A0R]]`, `[[NUM:SIM_LORA]]` | sim closed loop on 20 held-out layouts | README, deck (results, sim) |
-| `[[NUM:DEMO_SERVER]]` | Sunday server GPU, guidance, round trip | deck notes |
-| `[[NUM:PEN_OUT_STATUS]]` | whether the pen-out skill was trained | this file |
-| `[[NUM:GPU_SPEND]]`, `[[NUM:CLAUDE_SPEND]]` | spend | this file |
-
-Clips: `[[CLIP:IMAGINED_VS_ACTUAL]]` (deck slide "imagination", storyboard shot 10), `[[CLIP:HMI_CHAIN]]` (shot 11).
-
-Team facts (ask, never guess): `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to
-`[[TEAM:WS5]]` and `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]` (deck slide "team"), `[[TEAM:DEMO_LAYOUT]]`,
-`[[TEAM:VIDEO_URL]]`, `[[TEAM:SLIDES_URL]]`, `[[TEAM:CREDITS]]`.
+| Placeholder | Meaning | Owner | Expected |
+|---|---|---|---|
+| `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | full 4-skill chain: successes / runs, steps done | demo-rehearsal (Oscar at the arm) | 10:00 to 12:30 |
+| `[[NUM:REH_BOX]]`, `[[NUM:REH_GREEN]]`, `[[NUM:REH_CUTTER]]`, `[[NUM:REH_PENLID]]` | per-skill rehearsal results (3 attempts each) | demo-rehearsal | 08:30 to 10:30 |
+| `[[NUM:AUG_BOX]]`, `[[NUM:AUG_CUTTER]]`, `[[NUM:AUG_GREEN]]` | augmented LoRAs, offline held-out arm MAE / direction | ws4-datasets | 08:00 (box, cutter), 08:25 (green) |
+| `[[NUM:CUTTER_OFFLINE]]` | cutter LoRA offline numbers | ws4-datasets | with the cutter gate, about 08:00 |
+| `[[NUM:B84_PEN_SUCCESS]]`, `[[NUM:MEDIAN_PEN_SUCCESS]]` | zero-shot B84 / median on the arm (only if run) | orchestrator decides | by 12:30, else delete |
+| `[[CLIP:HMI_CHAIN]]` | screen recording of the chain in the HMI | demo-rehearsal | with the chain run |
+| `[[CLIP:IMAGINED_VS_ACTUAL]]` | optional live imagination clip (replay clips exist) | demo-rehearsal / ws4-imagine | with the chain run |
+| `[[NUM:GPU_SPEND]]`, `[[NUM:CLAUDE_SPEND]]` | spend for the cost line | Oscar (RunPod billing, HMI) | 13:00 |
+| `[[NUM:RECORD_HOURS]]`, `[[NUM:TRAIN_HOURS]]` | time split, if wanted beyond section 0.1 | Oscar | 13:00 |
+| `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to `[[TEAM:WS5]]`, `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]`, `[[TEAM:CREDITS]]` | team facts | Oscar / team | as early as possible |
+| `[[TEAM:VIDEO_URL]]`, `[[TEAM:SLIDES_URL]]` | links for the README and close slide | Oscar | 13:30 |
+| `[[TEAM:DEMO_LAYOUT]]` | live-demo layout | Oscar | 12:30 |

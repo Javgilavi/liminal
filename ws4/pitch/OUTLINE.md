@@ -1,103 +1,101 @@
 # Pitch outline: 3-minute track pitch and 5-minute final
 
-Draft, Sat 17 Oct 2026 about 22:00 CEST. Numbers come from [NUMBERS.md](NUMBERS.md) only; every `[[NUM:...]]`,
-`[[TEAM:...]]` and `[[CLIP:...]]` is a placeholder for the morning (`grep -rn "\[\[" ws4/pitch`). Scope (Oscar,
-17 Oct): one team pitch, the Haller pen task is the live demo, the other workstreams get their own slots.
+Re-centred on the 4-skill chain, Sun 18 Oct about 07:45 CEST. Numbers come from [NUMBERS.md](NUMBERS.md) only
+(section 0 is the final demo); every `[[NUM:...]]`, `[[TEAM:...]]` and `[[CLIP:...]]` is a placeholder with an owner
+and a time in NUMBERS.md section 14 (`grep -rn "\[\[" ws4/pitch`). Scope (Oscar, 17 Oct): one team pitch, the
+Haller chain is the live demo, the other workstreams get their own slot.
 
 ## The one-sentence story
 
-A released world action model failed 16 of 16 times on our robot; we traced it to a silent calibration contract,
-fixed it without training, taught the task by VR in one evening, and now FLUX does it `[[NUM:LORA_PEN_SUCCESS]]`
-under a safety stack, chained by Claude, while showing us what it imagines before it acts.
+A released world action model failed every zero-shot attempt on our robot; we traced it to a calibration contract,
+taught four skills by VR overnight, and now one FLUX base with a small LoRA per skill opens a box with one arm and
+puts away three objects with the other, planned and checked by Claude, under a safety stack, while showing what it
+imagines before it acts.
 
 ## What the judges weigh, and where each beat scores
 
 | Criterion (weight) | What earns it | Beats |
 |---|---|---|
-| Demo works on real hardware (25 %) | The Haller does the pen task live, Claude chains it, the safety stack visibly holds | Live demo, R1, R3 |
-| Technical difficulty (20 %) | The contract diagnosis (A to E table), decoding FLUX's imagined video, TTT at 7B scale, an FK keep-out with the demo envelope | D1, D2, I1 |
-| Use of FLUX (20 %) | FLUX in the loop for every motion, zero-shot vs post-training on the same task, using its video stream and its features, not just its actions | R1, I1, I2 |
-| Idea and originality (15 %) | "Imagine, then act" made literal: imagined vs actual side by side; nobody we found shows decoded FLUX imagination | I1 |
-| Real-world use (10 %) | A bring-up kit for any new arm: diagnose offline before touching hardware, teach by VR, bound a learned policy | W1 |
-| Demo video (10 %) | See [STORYBOARD.md](STORYBOARD.md) | Final only |
+| Demo works on real hardware (25 %) | The 4-skill chain live on the Haller; the first full red-pen inserts (3/5); the safety stack visibly holding | Live demo, R1 |
+| Technical difficulty (20 %) | The contract diagnosis, the wrist-view knife edge found by a field-by-field request diff, two-arm safety (start gate, slow zone, lid held), decoding FLUX's imagined video | D1, K1, I1 |
+| Use of FLUX (20 %) | FLUX in the loop for every motion, one base and four LoRAs, zero-shot vs post-training on the same task, its video stream used (and improved by the fine-tune) | A1, R1, I1 |
+| Idea and originality (15 %) | "Imagine, then act" made literal: imagined vs actual side by side; Claude plans and checks, never moves a motor | I1, A1 |
+| Real-world use (10 %) | A bring-up kit: diagnose offline, teach by VR in a night, bound a learned policy; public data, adapter and a how-to | W1 |
+| Demo video (10 %) | See [STORYBOARD.md](STORYBOARD.md) | Final |
 
-The official brief also grades zero-shot vs post-training with successes, attempts, completed steps, failure points
-and interventions. R1 shows exactly those five columns.
+The brief grades zero-shot vs post-training with successes, attempts, completed steps, failure points and
+interventions: R1 shows all five.
 
-## 3-minute track pitch (180 s, followed by the live demo and Q&A)
+## 3-minute track pitch (180 s, then the live demo and Q&A)
 
-Run order: start the live chain in the HMI during H1 if the robot is warm and the server is READY; talk over it. If
-the server is not READY by 14:25, present first and run the demo after the pitch.
+Run order: if the server is READY and the chain rehearsed, start it in the HMI during H1 and talk over it (the plan
+takes about 6 s). Otherwise present first, then demo. Hard fallback at 12:30 (runbook): skills one by one.
 
-| t (s) | Beat | Slide | Say (draft, trim to taste) | Show |
+| t (s) | Beat | Slide | Say (draft) | Show |
 |---|---|---|---|---|
-| 0-15 | **H1 Hook** | Cover | "This is Haller, our XLeRobot. One arm, soft fin-ray fingers, a head camera. FLUX 3 Action had never seen a robot like it. Last night it learned to put this pen in its slot." | Robot on the table; HMI on the screen; chain starts |
-| 15-35 | **P1 Problem** | "0 of 16" | "Zero-shot, the released checkpoint failed every one of our 16 graded attempts. Not slowly: the shoulder ran straight to its limit, whatever the prompt said." | Big 0/16, one frame of the runaway |
-| 35-70 | **D1 Diagnosis** | A to E table | "The model was fine. The contract was not. The released package normalizes joints with one community dataset in the old SO-100 degree convention: lift 85 to 184 degrees. Today's LeRobot calibration puts our folded arm at minus 100. FLUX saw an impossible robot. We tested five normalizations offline on our own demos, before touching the arm: with our own quantiles, the lift error drops from 19.9 to 3.2 degrees and FLUX predicts the demonstrated direction 80 % of the time. Zero-shot, no training. The adapter proposed in the public flux-action issue does not transfer." | Table with B and D highlighted |
-| 70-100 | **A1 Approach** | Architecture | "Then we taught the task. VR teleop with a Quest: 96 demos in one evening, recorded in FLUX's exact contract. A LoRA from the re-normalized base, overnight on one RTX PRO 6000. FLUX runs on a GPU server; our runner wraps every command in a safety stack; Claude Opus plans the chain, Claude Haiku checks every step from the camera; nothing an LLM says ever reaches a motor." | Architecture diagram, left to right |
-| 100-130 | **R1 Results** | Zero-shot vs post-training | "Same task, same layouts, same time budget. Zero-shot, with the statistics fixed two ways and no training: our own quantiles `[[NUM:B84_PEN_SUCCESS]]`, community median statistics `[[NUM:MEDIAN_PEN_SUCCESS]]`. After the LoRA: `[[NUM:LORA_PEN_SUCCESS]]`, `[[NUM:LORA_PEN_STEPS]]` steps on average, `[[NUM:LORA_PEN_HELP]]` interventions. It still fails when `[[NUM:LORA_PEN_FAILURE]]`." Before the arm, on 12 held-out takes it never trained on: "zero-shot was about as good as holding still; a quarter into the run, the LoRA has 3.6 degrees of arm error against 5.5 and predicts the right direction 82 % of the time against 66.5 %, level with an ACT policy trained on the same demos" (update with `[[NUM:LORA_CURVE]]`). (Use the offline line alone if the real-arm attempts are not in yet.) | The five-column table, plus the held-out curve |
-| 130-160 | **I1 Imagine, then act** | Imagined vs actual | "FLUX predicts a video of the future with every action chunk, and every stack throws it away. We decode it: 41 frames, 1.4 seconds ahead, and its actions stay bit-identical. Left is what happened, right is what FLUX imagined, on a take it never trained on. When they diverge, we know before the step fails. And fine-tuning made FLUX both act better and imagine better: zero-shot imagines a smeared, broken pen; the LoRA imagines it held, as it was." | Replay clip, held-out take 101 (`ws4/imagine/outputs/replay_ep101/imagination/imagined_vs_actual.mp4`); a live Sunday clip if one exists (`[[CLIP:IMAGINED_VS_ACTUAL]]`) |
-| 160-180 | **W1 Why it matters** | Close | "Anyone putting a released VLA on their own arm hits this contract silently. We built the kit: diagnose offline, teach by VR in an evening, and bound the learned policy so a wrong guess costs a frozen arm, not a broken servo. `[[TEAM:NAME]]`, thank you." | Repo link, team names |
+| 0-15 | **H1 Hook** | Cover | "This is Haller. One arm opens a box and holds the lid; the other puts away a green pen, a yellow cutter and a red pen. Claude plans, FLUX 3 Action does every motion, Claude checks every step." | Robot, HMI, chain starts |
+| 15-45 | **D1 Problem and diagnosis** | 0/16, then the contract | "Zero-shot, the released checkpoint failed all 16 of our graded attempts: the shoulder ran to its limit whatever the prompt. The model was fine, the contract was not: its normalization assumes an old degree convention, so our arm looked impossible. Re-normalized offline, with no training, the lift error fell from 20 to 3 degrees." | 0/16, A to E table |
+| 45-75 | **A1 Approach** | Architecture, data | "So we taught it. 337 VR takes over four skills, most of them recorded overnight in FLUX's exact contract, all public on the Hub. One FLUX base, one 0.45 GB LoRA per skill, about two hours each on one GPU. Claude Opus plans the chain, Claude Haiku checks each step from the camera, and nothing an LLM writes reaches a motor." | Architecture, datasets |
+| 75-110 | **R1 Results** | Held-out, then the arm | "On takes it never trained on, the red-pen LoRA cut arm error from 5.5 to 3.2 degrees and predicts the right direction 88 % of the time, ahead of an ACT policy on the same data. On the arm: the first full inserts, 3 of 5, where ACT grasped but never inserted. The chain: `[[NUM:CHAIN_SUCCESS]]`." Say the caveat: small n. | heldout, results |
+| 110-140 | **K1 The knife edge** | Knife edge | "The hardest bug: after the robot moved, FLUX just held still. A field-by-field diff of live versus recorded requests found one difference, the wrist camera's view of the room. One pixel of shift flipped hold to reach. So we built a station-alignment tool and train with image augmentation." | Knife-edge slide |
+| 140-165 | **I1 Imagine, then act** | Imagination | "FLUX also predicts a video of the next 1.4 seconds, and every stack throws it away. We decode it, with its actions bit-identical. Left is what happened, right what FLUX imagined. And fine-tuning made it act better and imagine better." | Clip, comparison |
+| 165-180 | **W1 Close** | Close | "Anyone putting a released VLA on their own arm hits this. Our kit: diagnose offline, teach by VR in a night, bound the policy, and it is all public. `[[TEAM:NAME]]`, thank you." | Repo, Hub links, team |
 
-Cut list if over time: drop the issue-2 sentence in D1 (5 s), drop the Haiku latency detail in A1, shorten W1 to the
-last sentence.
+Cut list if over time: drop the issue-2 and ACT clauses, shorten K1 to its first two sentences.
 
 ## 5-minute final (300 s, with the demo video)
 
-Same spine, plus the safety story, the team, the research results and what is next. Play the video at V1 (or open
-with it if the organisers prefer: then cut H1 to 5 s).
-
 | t (s) | Beat | Slide | Content |
 |---|---|---|---|
-| 0-15 | H1 Hook | Cover | As in the 3-minute version |
-| 15-75 | V1 Video | Video | The 60 s cut of the demo video ([STORYBOARD.md](STORYBOARD.md), "60 s cut") |
-| 75-95 | P1 Problem | "0 of 16" | As above, add: "the brief grades zero-shot and post-training, so we logged every attempt" |
-| 95-135 | D1 Diagnosis | A to E table | As above |
-| 135-160 | **S1 Safety** | Safety stack | "On Saturday afternoon, under zero-shot FLUX, our first arm's elbow pushed against an obstruction at 92 % load and its servo broke. So every command now goes through six layers: soft limits, 1 degree per tick, a forward-kinematics keep-out fitted to the demonstrations, the parked arm as collision capsules, a stall and load freeze, a 60 % torque cap. Replayed, the two damaging attempts are refused within 1.3 seconds; all 24 good demos pass with zero refusals; on the Haller the load never passed 29 %." |
-| 160-185 | A1 Approach | Architecture | As above |
-| 185-215 | R1 Results | Results table | As above, add the sim row: "in simulation the same contract: released 0 of 20, LoRA `[[NUM:SIM_LORA]]`" |
-| 215-240 | I1 Imagination | Imagined vs actual | As above |
-| 240-260 | **I2 Memory** | Memory | "FLUX re-plans every second with 0.27 s of memory. We fitted test-time-training layers inside the 7B model: switched off they are bit-identical, they cost 4 %. And a memory over FLUX's own features tracks the task stage at 0.90, against 0.54 without memory. A GRU gets 0.87, so the memory matters, not TTT itself. Simulation only." |
-| 260-280 | **T1 Team** | Team | `[[TEAM:WORKSTREAMS]]`: one line per workstream (WS1 single SO-101 + LoRA, WS2 bimanual obstacle, WS3 long-horizon orchestration, WS4 Haller + FLUX embodiment, WS5 hardware + UI). Do not claim another workstream's result without its owner's number |
-| 280-300 | **N1 Next + close** | What's next | Both arms at once (two model instances on one 96 GB card), the pretrained EE50 bimanual heads (our IK gate passes: 25,168 frames round-trip at 1e-7 mm), imagination-driven retries. Close as W1 |
+| 0-10 | H1 Hook | Cover | As above, short |
+| 10-70 | V1 Video | Video | The 60 s cut ([STORYBOARD.md](STORYBOARD.md)) |
+| 70-100 | D1 | 0/16, contract, diagnosis | As above |
+| 100-125 | A1 | Architecture, teach | As above, plus "each skill's workspace is built from its own demos" |
+| 125-160 | R1 | heldout, results | As above, plus green 3.95 deg / 89 %, box 5.11 deg (the hardest skill, for ACT too), RAW beat EMA every time, guidance 1/1 as good as 3/3 at half the compute |
+| 160-185 | K1 | Knife edge | As above |
+| 185-210 | **S1 Safety** | Safety | "Two arms share one box. The cutter has a slow zone next to the lid-holding arm, every pen step passes a start gate with the box arm's live pose, and every command goes through soft limits, one degree per tick, a keep-out built from the demos, a stall and load freeze and a torque cap. This morning the keep-out stepped in on 15 of 33 attempts and stopped 7; nothing broke. It exists because on Saturday, under zero-shot FLUX, our first arm's elbow pushed until its servo broke." |
+| 210-235 | I1 | Imagination, imagine better | As above |
+| 235-255 | T1 Team | Team | `[[TEAM:WORKSTREAMS]]`, one line each, no number without its owner |
+| 255-285 | N1 Next | What's next | LoRA hot-swap on one loaded base (today: one package per skill), augmented LoRAs for robustness to the room, both arms moving at once (two model instances), and the honest sim result: 0/20, the raw LoRA grasped in 2 |
+| 285-300 | W1 Close | Close | As above |
 
 ## Demo moments (live, in order of value)
 
-1. **Claude plans, the operator approves.** Type "put the red pen in its slot, then take it out and put it back" in
-   the HMI; the plan appears as lanes; approve. (About 6 to 12 s for the plan: say something while it thinks.)
-2. **FLUX grasps and places the pen.** The imagined-vs-actual panel runs next to the live camera.
-3. **Haiku verifies the step** from the head camera and the chain moves on (median 1.2 to 1.3 s per check; on 282
-   recorded Haller frames 97.1 % for "put" and 98.2 % for "take", no false pass).
-4. **E-stop on the spacebar**, then Release and Resume: the arm holds at its measured pose. Only if time allows.
-5. **Failure handled honestly.** If a grasp misses, the check fails, the orchestrator retries or asks; say "this is
-   the failure mode in our table" and move on.
+1. **Claude plans the chain.** The goal box is pre-filled; Plan shows two lanes (right arm: open the box; left arm:
+   green, cutter, red pen) in about 6 s. Approve and run.
+2. **The box opens and stays held.** Then the pen arm passes the start gate (shown in the events) and goes.
+3. **Each Haiku check turns green** (held-out accuracy on the final scene: lid 63/63, green 114/119, cutter 91/91,
+   red pen 65/66).
+4. **The imagination panel** next to the live camera (`--imagine lazy`, no added round trip).
+5. **E-stop on the spacebar**: both arms freeze, the lid stays held; Release, Resume.
+6. **A failure, handled honestly**: a check fails, the executor retries or stops; say "that is in our table".
 
-Live demo checklist (Sunday 14:00 to 14:30): server READY about 9 min after start (`ws4/PLAN.md` "Risks"); the
-pod idle-stops after 20 to 30 min without traffic, so warm it at 14:15; one process holds `/dev/haller_arm_*`
-(`fuser /dev/ttyACM*` empty); the parked robot-right arm readable (else the e-stop latches by design); pen and box
-at layout `[[TEAM:DEMO_LAYOUT]]`; fallback video loaded on the laptop.
+Live demo checklist (from notes `final_demo_runbook.md`): server real-serve-6000b READY and warmed (it stops after
+45 min idle); station aligned with `ALIGN=1` (wrist offset < 15 px, scale 0.95 to 1.05, brightness 0.85 to 1.2);
+one process per arm (`fuser /dev/haller_arm_right /dev/haller_arm_left` empty); hand near the power cable and on the
+lid at every handover; box at P3, objects per the overview image; fallback video on the laptop.
 
 ## Q&A prep (honest answers)
 
 | Likely question | Answer |
 |---|---|
-| Is the gain from the LoRA or from the normalization? | Both are measured separately: zero-shot B84 (the LoRA's exact base) on the pen is `[[NUM:B84_PEN_SUCCESS]]`, the LoRA on that base `[[NUM:LORA_PEN_SUCCESS]]`. Offline, normalization alone fixes direction (chance to 80 %) but not magnitude (46 to 102 % displacement error) |
-| Why not just use the issue-2 adapter? | Tested as variant C: lift error 16.8 deg, direction at chance. Its offsets belong to that reporter's calibration |
-| Did zero-shot ever succeed? | No: 0/16 on hardware, 0/20 in sim. With our quantiles the shoulder runaway stops, but wrist flex still pins at its soft limit (cause UNVERIFIED) |
-| How much data, and why your own? | 96 VR demos for one task, `[[NUM:RECORD_HOURS]]` of recording. The released corpus has zero XLeRobot data and 11 of 1,021 head or overhead cameras; our fin-ray fingers and head camera are new to it |
-| Does Claude control the robot? | No. Claude picks skills from a fixed list and checks outcomes. Plans are validated (schema, vocabulary, dependencies) and every motion is FLUX or a scripted primitive through the guards |
-| Is the imagined video real or rendered? | Decoded from the latents FLUX denoises with every chunk (LeRobot `modeling_flux3.py:578` drops them). Decoding leaves the actions unchanged: bit-identical with imagination on or off, with `compile_model` on and off (measured on the RTX PRO 6000 pod). If asked about small differences between servers: separately compiled server processes can differ slightly; imagination itself changes nothing. On the scene camera the imagined frame beats "nothing moves" on 80 % of offsets (`ws4/imagine/README.md`) |
-| Why guidance 1.0? | Halves the server time (1.46 to 0.76 s on the 4500). Its effect on quality vs the default 3.0 is UNVERIFIED |
-| Two arms at once? | One shared model makes the arms take turns (30 % motion each, measured). Simultaneous motion needs two instances: next step |
-| What broke? | The red SO-101's elbow servo, Saturday 17:30, under zero-shot A0 before the keep-out existed. That is why the safety stack exists |
-| How does it compare to a non-FLUX policy? | ws4-act trained an ACT baseline on the same demos: at 10k steps arm MAE mean 4.3 deg, direction 81 to 90 % on the held-out takes (cited in `ws4/research/pen_lora.md`; ACT's own section is not in yet). The FLUX LoRA at 5k steps: 3.6 deg, 82 %, so level on direction with lower arm error; at 2.5k ACT was ahead. Final numbers come from the 20k checkpoint and the arm (`[[NUM:LORA_CURVE]]`, `[[NUM:LORA_PEN_SUCCESS]]`). FLUX also predicts the video it expects to see, which ACT does not, and that video gets better with the same fine-tune |
-| What is the "median" condition? | Stock weights with the median statistics of current-calibration SO-101 community datasets, taken from multimodalart's public Space (`multimodalart/flux-3-action-so101-sim@09edebb`). Offline on our 12 held-out takes it has the lowest arm error (4.8 deg mean vs 5.5 for B84 and 5.6 for holding still) and the most balanced motion (every joint at 0.57 to 0.89 of the demo path; B84 over-swings pan 1.49x and barely lifts, 0.32x). But overall direction is no better (69 vs 67 %), wrist roll is below chance (42 %), and its gripper range is 0..40 vs our 0..100. So the LoRA stays on B84 (`ws4/research/pen_lora.md`) |
-| Why TTT, if a GRU does almost as well? | TTT's case is a constant-size state over long contexts; our episodes are too short to show it, so on this data a GRU (0.87) is nearly as good as TTT (0.90). The finding is that FLUX's own features plus any memory track the stage (0.54 without memory). Caveat: on FLUX's failed sim rollouts, monitors trained only on demos invented progress (GRU 43 %, TTT 37 % of re-plans said "in cup"); adding 12 failed rollouts to training fixed it (`ws4/research/robottt_flux.md` 11.12). The real chain does not use this monitor: it uses Claude Haiku checks (97.1 % and 98.2 % on recorded Haller frames) |
-| How reliable are Claude's checks? | Offline on 282 recorded Haller head-camera frames: "put" 97.1 %, "take" 98.2 %, no false pass on 278 negatives (52 with the pen still in the gripper); odd episodes held out from prompt tuning score 97.8 % and 99.1 %. Not yet measured live (`ws4/research/orchestrator.md`, "Success checks on real frames") |
+| Did zero-shot ever work? | No: 0/16 on the arm on Saturday, 0/20 in sim. Re-normalized offline it predicts the right direction (67 %) but no better than holding still in magnitude (5.5 vs 5.6 deg) |
+| Is the gain from the LoRA or the normalization? | Both measured offline on the same 12 held-out takes: zero-shot B84 5.5 deg, median statistics 4.8, LoRA RAW 5k 3.24 (direction 66.5 to 87.5 %) |
+| How sure are the 3/5 inserts? | Small n. Horizon 16 came with a 25 deg lift-stall threshold, two changes at once. Five of eight counting the three attempts logged right after. Same model at horizon 32: 0 inserts (stall freeze) |
+| Compared with a non-FLUX policy? | ACT on the same red-pen data: offline 4.3 deg and 85 % (LoRA 3.24 and 87.5 %); on the arm it grasped and carried in 4 of 5 but never inserted (8/15 steps), FLUX RAW 5k at horizon 16 inserted 3 of 5. On the box ACT has better direction (80 vs 73 %), FLUX lower error (5.11 vs 5.6) |
+| Isn't the knife edge a sign it is fragile? | Yes, and we measured it: one pixel of wrist-view shift flips hold vs reach on live frames. Recorded frames are robust to the same shifts, so it is the room view, not the pipeline. Fixes: align the station to the recording view (and its brightness) before running, and train with crop and colour augmentation |
+| Why one LoRA per skill? | Each skill trains in about two hours on one GPU and can be checked on its own; the adapters are 0.45 GB on one shared base. Hot-swapping them on one loaded base is the next step |
+| Why RAW and not EMA? | Measured: RAW beat EMA every time (pen 5k 3.24 vs 3.62 deg); at 1,250 updates a 0.999 EMA still carries much of the initial adapter |
+| Why guidance 1.0? | Measured: 3/3 and 4/1 gave no better actions (3.83 and 3.67 vs 3.24 deg) at twice the compute per chunk |
+| Does Claude control the robot? | No. It picks skills from a fixed list and checks outcomes; plans are validated; every motion is FLUX or a scripted primitive through the guards |
+| How reliable are the checks? | Held-out frames of the final scene: lid 63/63, green 114/119 (2 false passes), cutter 91/91, red pen 65/66 (1 false pass); about 1.2 to 1.3 s and USD 0.0002 per check |
+| Is the imagined video real? | Decoded from the latents FLUX denoises with every chunk. Bit-identical actions with imagination on or off, compile on and off, also on the live arm server. Separately compiled server processes can differ slightly; imagination itself changes nothing |
+| What broke? | The red SO-101's elbow servo on Saturday, under zero-shot FLUX, before the keep-out existed. Nothing since; this morning the keep-out stopped 7 of 33 attempts |
+| What is the "median" condition? | Median statistics of current-calibration SO-101 community datasets (multimodalart's Space, commit `09edebb`): lowest zero-shot arm error (4.8 deg), most balanced motion, but wrist roll below chance; the LoRAs train from our own quantiles |
+| TTT / memory? | Backup only: a memory over FLUX features tracks the stage at 0.90 vs 0.54 in sim (GRU 0.87, so the memory matters, not TTT itself); the chain uses Claude checks |
 
-## Open team facts (ask the team, do not guess)
+## Open team facts (ask, do not guess)
 
-- `[[TEAM:NAME]]` team name; `[[TEAM:MEMBERS]]` names and roles; who presents and who drives the robot.
-- `[[TEAM:WORKSTREAMS]]` what WS1, WS2, WS3 and WS5 each finished, with their own numbers and clips.
-- `[[TEAM:DEMO_LAYOUT]]` which pen and box layout for the live demo.
-- Whether WS3's tree or the ws4 orchestrator drives the live chain (both exist; say one).
+- `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, who presents, who drives the robot.
+- `[[TEAM:WORKSTREAMS]]`: what WS1, WS2, WS3 and WS5 each finished, with their own numbers.
+- `[[TEAM:DEMO_LAYOUT]]` and whether the live demo is the full chain or the skills one by one (12:30 decision).
