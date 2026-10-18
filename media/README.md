@@ -4,6 +4,9 @@ Real material from the Haller rig (two SO-101 arms on a static XLeRobot tower), 
 (`examples/dual_so101_sim/`), FLUX 3 Action runs and the liminal UIs. Every caption says what the clip really shows;
 simulated runs are labelled as such, and no clip here shows a learned policy completing a task.
 
+**More media (full-length and large videos):**
+[team Google Drive folder](https://drive.google.com/drive/folders/12o1NtHUl7T0MT6S8XCD6xT_aypJyLUwz?usp=drive_link).
+
 ## `real_robot/`
 
 | File | What it shows |
