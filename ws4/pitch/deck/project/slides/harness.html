@@ -1,0 +1,13 @@
+<section id="harness" data-transition="fade" style="background:#fbf8f4;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:32px">
+<p style="font-size:24px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5b3fe0">The behaviour-tree harness · Stanislaw Sufin, Simone Utili</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1;letter-spacing:-1px;color:#1c1830">A behaviour tree drives the same robot</h2>
+<div style="display:flex;flex-direction:row;gap:56px">
+<img src="/_blob/365f06811e436274d5ed62bc02db9ba6" alt="Liminal architecture: a deterministic behaviour-tree harness coordinates left and right FLUX 3 Action policies with task LoRAs, a skill registry selects checkpoints, safety gates every command, and Qwen3-VL perception updates verified world-state predicates" style="width:1000px;height:563px;object-fit:contain;border-radius:16px;background:#ffffff">
+<div style="flex:1;display:flex;flex-direction:column;gap:20px">
+<p style="font-size:28px;line-height:1.35"><b>Task YAML to a behaviour tree</b>, VLM perception, a per-skill checkpoint registry and one coherent skill runtime.</p>
+<p style="font-size:28px;line-height:1.35"><b>Live on the Haller</b> through our bridge: the tree ran open-the-box (scripted replay) and placed the green pen with its FLUX LoRA.</p>
+<p style="font-size:28px;line-height:1.35"><b>Opus 5.5 hybrid gate</b>: verified in observation (continue for 15 steps).</p>
+</div>
+</div>
+<aside>Sources: main README architecture figure and "configured runtime" note; ws4/HARNESS_BRIDGE.md (the tree decides what runs, when and on which arm; ws4 executes every motion under its safety stack); branches integrate/harness-main ("integrate behavior-tree orchestration and VLM perception", Stanislaw Sufin) and feat/coherent-skill-runtime (Simone Utili). Live result (orchestrator, 18 Oct): through the ws4 bridge the tree ran open_box (scripted replay) and placed the green pen live; later runs stopped on the harness's perception consensus and lid-predicate timeouts and on the ws4 start gate. The Opus 5.5 hybrid gate is wired in and verified in observation (continue for 15 steps); gated motion runs were refused by the start gate before moving. The filmed 4/4 chain runs used the ws4 orchestrator, not this harness.</aside>
+</section>

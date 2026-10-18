@@ -116,7 +116,10 @@ def _link_or_copy(src: Path, dst: Path, link: bool) -> None:
             return
         except OSError:
             pass
-    shutil.copy2(src, dst)
+    try:
+        shutil.copy2(src, dst)
+    except PermissionError:  # S3 FUSE volumes (RunPod geesefs) refuse copy2's metadata copy: contents only
+        shutil.copyfile(src, dst)
 
 
 def remap(

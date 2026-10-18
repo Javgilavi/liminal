@@ -12,7 +12,7 @@ true*, and *whether the goal really happened*.
 
 ## Hackathon results (ERH Physical AI Hackathon, 18 October 2026)
 
-**[Submission video (2 min)](https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view)**
+**Team Liminal:** Oscar Devos, Javier Gil, Tomas Leggaet, Simone Utili, Stanislaw Sufin. **[Submission video (2 min)](https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view)**
 
 - **Full 4-skill chain on the real Haller**, planned by Claude with a camera check after every step:
   **2 of 3 runs finished 4/4** with no human touch during the run (208.6 s and 302.2 s).
@@ -21,6 +21,13 @@ true*, and *whether the goal really happened*.
   - In the filmed runs, the green-pen policy also slotted the red pen on its way home.
   - Demo mode: keep-out zones and stall/load stops were off. Joint limits, 1 deg per tick, a 60 % torque cap and the
     e-stop stayed on.
+- **Behavior-tree harness on the real robot** (Stanislaw Sufin, Simone Utili): the task-YAML behavior tree drove the
+  Haller through the ws4 safety stack. It skipped the box step when it saw the lid already open, placed the green pen
+  live with its FLUX LoRA, and ran with Claude Opus 5.5 checks. The Opus 5.5 hybrid gate is wired in and was verified
+  in observation mode. See [ws4/HARNESS_BRIDGE.md](ws4/HARNESS_BRIDGE.md).
+- **Live lab and digital twin** (Javier Gil): the [project page](https://javgilavi.github.io/liminal/) and a paired
+  full-screen [live lab](https://javgilavi.github.io/liminal/live.html) that mirrors the real arms' measured joints in
+  a MuJoCo twin of the Haller, also shown inside the orchestrator HMI. See [docs/research-ui.md](docs/research-ui.md).
 - **Per-skill FLUX LoRAs** (rank 32, each skill normalized on its own demos): the red pen went 3/5, then 2/3, real
   inserts. Stock zero-shot FLUX went 0/16.
 - **Public models and data:** Hugging Face

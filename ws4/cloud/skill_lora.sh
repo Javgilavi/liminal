@@ -81,6 +81,7 @@ train)
   host="${3:?HOST e.g. root@1.2.3.4}"; port="${4:?PORT}"
   remote "$host" "$port" "set -e; source /etc/rp_environment; source /workspace/skills/$skill/skill.env
     [ -e /workspace/skills/$skill/lora ] && { echo 'lora output exists: not starting twice'; exit 1; }
+    mkdir -p /workspace/logs  # a fresh pod (bootstrap.sh, not the real-train-is volume) has no logs dir yet
     used=\$(du -s --block-size=1G /workspace 2>/dev/null | cut -f1)
     free=\$(( ${QUOTA_GB:-250} - used ))
     echo \"volume: \$used GB used of ${QUOTA_GB:-250}, \$free GB free; a 5k run needs about 7 GB\"

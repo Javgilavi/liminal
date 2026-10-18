@@ -22,6 +22,9 @@ blobs = {
     "f25d638b8d67b23a39d12d7cd90de910": "wrist_view_recording_vs_now.jpg",
     "d309d6edc931a2e2483b0e5733225a67": "cover_haller_venue.jpg",
     "b0e129329e2b5f9a0b0e78c6d1be9b6b": "sim_venue_vs_sim.jpg",
+    "5aff003f1c7516fc7946dd16db3ba437": "twin_mujoco_scene.jpg",
+    "365f06811e436274d5ed62bc02db9ba6": "liminal_architecture.jpg",
+    "08927518db4bba1591cf428494ed2018": "twin_real_vs_mujoco.jpg",
 }
 order = json.loads((deck / "deck.json").read_text())["order"]
 
@@ -44,6 +47,7 @@ pages = []
 for sid in order:
     html = (deck / "slides" / f"{sid}.html").read_text()
     html = re.sub(r"<aside>.*?</aside>", "", html, flags=re.S)
+    html = re.sub(r"(<section [^>]*?) hidden", r"\1", html, count=1)
     html = re.sub(r"<!--.*?-->", "", html, flags=re.S)
     for bid, name in blobs.items():
         html = html.replace(f"/_blob/{bid}", (img / name).as_uri())

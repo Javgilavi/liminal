@@ -1,22 +1,73 @@
 {
   "v": 4,
-  "createdOnFiles": {"v": 1, "at": "2026-10-17T19:55:00Z"},
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-17T19:55:00Z"
+  },
   "lists": "css",
   "title": "liminal: a robot that imagines, then acts",
-  "order": ["cover", "zeroshot", "contract", "diagnosis", "architecture", "orchestrator", "teach", "heldout", "results", "knifeedge", "imagination", "imaginebetter", "safety", "memory", "sim", "realworld", "team", "next", "close"],
+  "order": [
+    "cover",
+    "zeroshot",
+    "diagnosis",
+    "orchestrator",
+    "teach",
+    "heldout",
+    "results",
+    "knifeedge",
+    "imagination",
+    "harness",
+    "twin",
+    "team",
+    "close",
+    "contract",
+    "architecture",
+    "imaginebetter",
+    "safety",
+    "memory",
+    "sim",
+    "realworld",
+    "next"
+  ],
   "sections": {
-    "s1": {"description": "Hook: the Haller and the task", "start": "cover"},
-    "s2": {"description": "Problem: the released checkpoint failed every graded zero-shot attempt", "start": "zeroshot"},
-    "s3": {"description": "Diagnosis: a calibration contract, fixed offline without training", "start": "contract"},
-    "s4": {"description": "Approach: the 4-skill chain, VR demos, one LoRA per skill, guarded runners", "start": "architecture"},
-    "s5": {"description": "Results: held-out offline, the first inserts on the arm, the knife-edge finding", "start": "heldout"},
-    "s6": {"description": "Imagine, then act: decoded imagination, improved by fine-tuning", "start": "imagination"},
-    "s7": {"description": "Final only: safety, memory, simulation", "start": "safety"},
-    "s8": {"description": "Close: real-world use, team, next steps", "start": "realworld"}
+    "s1": {
+      "description": "Hook and problem: the Haller, and 0 of 16 zero-shot",
+      "start": "cover"
+    },
+    "s2": {
+      "description": "Diagnosis: a calibration contract, fixed offline without training",
+      "start": "diagnosis"
+    },
+    "s3": {
+      "description": "The demo: the 4-skill chain, VR data, one LoRA per skill",
+      "start": "orchestrator"
+    },
+    "s4": {
+      "description": "Results: held-out, the first real inserts, the chain, the knife edge",
+      "start": "heldout"
+    },
+    "s5": {
+      "description": "Imagine, then act",
+      "start": "imagination"
+    },
+    "s6": {
+      "description": "The team's harness and live digital twin; team and close",
+      "start": "harness"
+    },
+    "s7": {
+      "description": "Backup for Q&A (hidden in the 5-minute run)",
+      "start": "contract"
+    }
   },
   "faces": {
-    "plus-jakarta-sans": {"family": "Plus Jakarta Sans", "href": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"},
-    "jetbrains-mono": {"family": "JetBrains Mono", "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"}
+    "plus-jakarta-sans": {
+      "family": "Plus Jakarta Sans",
+      "href": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    },
+    "jetbrains-mono": {
+      "family": "JetBrains Mono",
+      "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+    }
   },
   "designSystems": []
 }

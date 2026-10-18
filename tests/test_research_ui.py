@@ -249,3 +249,115 @@ def test_companion_rejects_rebound_hosts_and_cross_site_camera_embedding(compani
         client.get("/pair", headers={"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"}).status_code == 200
     )
     runner.assert_not_called()
+
+
+@pytest.fixture
+def orchestrator_bridge(monkeypatch):
+    """A fake ws4 orchestrator HMI on loopback: joints of both arms, a head frame, plan / approve / estop."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from fastapi.testclient import TestClient
+
+    from liminal.ui.research import create_research_app
+
+    seen = {"posts": [], "planned": None}
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code, body, ctype="application/json"):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):  # noqa: N802
+            if self.path == "/api/twin/state":
+                started = any(p == "/api/approve" for p, _ in seen["posts"])
+                return self._send(200, json.dumps({
+                    "t": time.time(), "joints": {"left": [1, 2, 3, 4, 5, 6], "right": [0, 0.8, 2, 0.4, 0, 99.7]},
+                    "modes": {"left": "policy" if started else "idle", "right": "holding"},
+                    "planning": False, "estopped": False, "run": "running" if started else "idle"}).encode())
+            if self.path == "/api/state":
+                goal = seen["planned"]
+                proposal = {"goal": goal, "version": 3, "ok": True, "errors": []} if goal else None
+                return self._send(200, json.dumps({"planning": False, "proposal": proposal}).encode())
+            if self.path == "/api/frame/head.jpg":
+                return self._send(200, b"\xff\xd8jpeg", "image/jpeg")
+            self._send(404, b"{}")
+
+        def do_POST(self):  # noqa: N802
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])) or b"{}")
+            assert self.headers["X-HMI"] == "1"
+            seen["posts"].append((self.path, body))
+            if self.path == "/api/plan":
+                seen["planned"] = body["goal"]
+                return self._send(202, b'{"ok": true}')
+            self._send(200, b'{"ok": true, "message": "ok"}')
+
+        def log_message(self, *args):
+            pass
+
+    class FakeMirror:
+        applied = []
+
+        def __init__(self, path):
+            pass
+
+        def geometry(self):
+            return {"poses": self.poses(), "geometries": [], "meshes": {}}
+
+        def poses(self):
+            return [[0, 0, 0, 1, 0, 0, 0]]
+
+        def apply(self, arms):
+            FakeMirror.applied.append(arms)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setattr("liminal.ui.twin.JointMirror", FakeMirror)
+    app = create_research_app(orchestrator=f"http://127.0.0.1:{server.server_address[1]}",
+                              site_url="https://javgilavi.github.io/liminal/")
+    try:
+        with TestClient(app) as client:
+            deadline = time.monotonic() + 5
+            while not client.get("/api/state").json()["connected"] and time.monotonic() < deadline:
+                time.sleep(0.05)
+            yield client, seen, FakeMirror
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_orchestrator_bridge_mirrors_both_arms_and_runs_the_plan(orchestrator_bridge):
+    client, seen, mirror = orchestrator_bridge
+    state = client.get("/api/state").json()
+    assert state["connected"] and state["profile_configured"] and state["active_arm"] == "right"
+    # robot left (the pen arm) is Haller's and the scene's "right"
+    assert state["arms"]["right"]["positions"] == [1, 2, 3, 4, 5, 6] and state["arms"]["left"]["mode"] == "holding"
+    assert mirror.applied[-1]["right"] == [1, 2, 3, 4, 5, 6]
+    assert client.get("/api/cameras/top").content == b"\xff\xd8jpeg"
+    goal = "open the box, put the green pen in the green slot"
+    planned = client.post("/api/run", json={"prompt": goal, "execute": False}).json()
+    assert planned["started"] is False and [p for p, _ in seen["posts"]] == ["/api/plan"]
+    assert client.post("/api/run", json={"prompt": goal, "execute": True}).status_code == 409  # no acknowledgement
+    started = client.post("/api/run", json={"prompt": goal, "execute": True, "engage_acknowledged": True}).json()
+    assert started["started"] and seen["posts"][-1] == ("/api/approve", {"version": 3})
+    deadline = time.monotonic() + 5
+    while client.get("/api/state").json()["job"]["state"] != "running" and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert client.get("/api/state").json()["job"]["state"] == "running"
+    assert client.post("/api/stop").json()["stopped"] and seen["posts"][-1][0] == "/api/estop"
+
+
+def test_orchestrator_bridge_rejects_a_remote_orchestrator_and_a_profile(tmp_path):
+    pytest.importorskip("mujoco")  # create_research_app builds the twin mirror before it checks the arguments
+    from liminal.ui.research import create_research_app
+
+    with pytest.raises(ValueError, match="local orchestrator"):
+        create_research_app(orchestrator="http://10.0.0.5:8080")
+    profile = tmp_path / "profile.yaml"
+    profile.write_text("arm: right\n")
+    with pytest.raises(ValueError, match="do not pass --profile"):
+        create_research_app(str(profile), orchestrator="http://127.0.0.1:8080")
