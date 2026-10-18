@@ -56,7 +56,70 @@ def run_stage(command, log, timeout):
         raise RuntimeError(f"FIT_DOWNSTREAM: exit={code}; inspect {log}")
 
 
+def validate_evaluator_cli(help_text):
+    if not all(option in help_text for option in ["--atomic", "--atomic-split", "--skills", "both"]):
+        raise ValueError("FIT_EVALUATOR: evaluator must support atomic train/validation splits and skill selection")
+
+
+def resume_evaluation(args):
+    """Resume only verified prediction/rollout work, retaining the original failed status."""
+    root, output = args.root.resolve(), args.output.resolve()
+    evaluator = args.evaluator
+    if evaluator is None:
+        raise ValueError("FIT_RESUME: --evaluator must explicitly identify the corrected evaluator")
+    original = json.loads((output / "status.json").read_text())
+    optimization = json.loads((output / "optimization.json").read_text())
+    config = json.loads((output / "config.json").read_text())
+    if (not optimization.get("completed") or optimization["microbatches"] != config["steps"]
+            or optimization["optimizer_updates"] != config["steps"] // 4):
+        raise ValueError("FIT_RESUME: training did not finish its configured optimizer budget")
+    checkpoint = output / f"training/checkpoints/{config['steps']:06d}/pretrained_model"
+    for name, expected in original["saved_checkpoint_sha256"].items():
+        if digest(checkpoint / name) != expected:
+            raise ValueError(f"FIT_RESUME: checkpoint changed: {name}")
+    frozen = json.loads((output / "windows.json").read_text())
+    inputs = [output / "windows.json", output / "config.json", root / "dataset-manifest.json",
+              root / "scene.xml", root / "hf-sim-normalization.json",
+              *(Path(w["source"]) for w in frozen["windows"])]
+    for path in set(inputs):
+        if digest(path) != original["input_sha256"][str(path)]:
+            raise ValueError(f"FIT_RESUME: frozen input changed: {path}")
+    validate_evaluator_cli(subprocess.check_output([sys.executable, str(evaluator), "--help"], text=True))
+    state = {"completed": False, "original_status_sha256": digest(output / "status.json"),
+             "evaluator_sha256": digest(evaluator), "commands": [], "stage": "rollouts"}
+    status = output / "evaluation-resume-status.json"
+    if status.exists():
+        raise ValueError("FIT_RESUME: recovery evidence already exists; inspect it before another attempt")
+    with (root / ".fixed-window-fitting.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            for name, selected in [("recovered-before-rollouts", root / "training/checkpoints/003000/pretrained_model"),
+                                   ("recovered-after-rollouts", checkpoint)]:
+                state["stage"] = name
+                command = [sys.executable, str(evaluator), "--root", str(root), "--checkpoint", str(selected),
+                           "--output", str(output / name), "--atomic", "--atomic-split", "both",
+                           "--episodes", "1", "--skills", "pick_gear"]
+                state["commands"].append(command)
+                write_json(status, state)
+                run_stage(command, output / f"{name}.log", 600)
+            before = json.loads((output / "before.json").read_text())
+            after = json.loads((output / "after.json").read_text())
+            rolls = json.loads((output / "recovered-after-rollouts/summary.json").read_text())
+            result = decide(before, after, rolls)
+            result.update(checkpoint=str(checkpoint), original_pipeline_failed=True,
+                          recovery="Rollout-only continuation; no repeated fitting or overwritten failure evidence")
+            write_json(output / "decision.json", result)
+            state.update(completed=True, stage="completed", decision=result)
+        except BaseException as exc:
+            state.update(failed_stage=state["stage"], stage="failed", error=f"{type(exc).__name__}: {exc}")
+            raise
+        finally:
+            write_json(status, state)
+
+
 def main(args):
+    if getattr(args, "resume_evaluation", False):
+        return resume_evaluation(args)
     root, output = args.root.resolve(), args.output.resolve()
     if shutil.disk_usage(root).free < 30 * 1024**3:
         raise ValueError("FIT_DISK: require at least 30 GiB free before writing checkpoints")
@@ -72,6 +135,9 @@ def main(args):
     code = Path(__file__).resolve().parent
     baseline = root / "training/checkpoints/003000/pretrained_model"
     try:
+        evaluator = getattr(args, "evaluator", None) or code / "evaluate.py"
+        validate_evaluator_cli(subprocess.check_output([sys.executable, str(evaluator), "--help"], text=True))
+        state["evaluator"] = str(evaluator)
         manifest = json.loads((root / "dataset-manifest.json").read_text())
         frozen = freeze_windows(manifest)
         if {r["seed"] for r in frozen["windows"]} != {100, 10000}:
@@ -82,7 +148,7 @@ def main(args):
                                  output / "training", args.steps)
         write_json(output / "config.json", config)
         inputs = [root / "dataset-manifest.json", root / "hf-sim-normalization.json", root / "scene.xml",
-                  output / "config.json", windows, *code.glob("*.py"), *baseline.glob("*.json"),
+                  output / "config.json", windows, evaluator, *code.glob("*.py"), *baseline.glob("*.json"),
                   *baseline.glob("*.safetensors"),
                   *checkpoint_inputs(baseline, resolve_reference=resolve_cached_encoder),
                   *(Path(r["source"]) for r in frozen["windows"])]
@@ -131,7 +197,7 @@ def main(args):
             raise ValueError("FIT_SERIALIZATION: saved adapter is identical to warm start")
         stage("after", [*prefix, "--checkpoint", str(checkpoint), "--output", str(output / "after.json")])
         for name, selected in [("before-rollouts", baseline), ("after-rollouts", checkpoint)]:
-            stage(name, [sys.executable, str(code / "evaluate.py"), "--root", str(root),
+            stage(name, [sys.executable, str(evaluator), "--root", str(root),
                          "--checkpoint", str(selected), "--output", str(output / name),
                          "--atomic", "--atomic-split", "both", "--episodes", "1", "--skills", "pick_gear"])
         before = json.loads((output / "before.json").read_text())
@@ -161,4 +227,6 @@ if __name__ == "__main__":
     parser.add_argument("--lerobot", type=Path, required=True)
     parser.add_argument("--steps", type=int, default=1000)
     parser.add_argument("--audit-only", action="store_true")
+    parser.add_argument("--evaluator", type=Path)
+    parser.add_argument("--resume-evaluation", action="store_true")
     main(parser.parse_args())

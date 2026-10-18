@@ -220,6 +220,11 @@ probes; `decision.json` separates scientific acceptance from process completion.
 Training and inference logs, prediction tensors, checkpoints and rollout videos
 remain in that unique directory. Inspect a failed run before choosing a new output
 directory; there is no automatic restart or hidden continuation.
+The evaluator CLI is checked before fitting. `--evaluator PATH` selects a compatible
+prepared evaluator. If rollouts fail after training and prediction evaluation have
+completed, `--resume-evaluation --evaluator PATH` verifies the original input and
+checkpoint hashes, then runs only the matched rollout pair. It retains the original
+failed `status.json` and writes separate recovery evidence; it never repeats training.
 
 References checked 2026-10-18:
 [BFL SO-101 LoRA guide](https://github.com/black-forest-labs/flux-action/blob/main/docs/so101-lora.md),

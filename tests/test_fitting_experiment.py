@@ -154,7 +154,9 @@ def test_pipeline_stops_after_failed_contract_and_keeps_failure_evidence(tmp_pat
         "dataset": {}, "policy": {}, "accelerator": {"gradient_accumulation": {"steps": 4}}
     }))
     monkeypatch.setattr(module.shutil, "disk_usage", lambda _: SimpleNamespace(free=50 * 1024**3))
-    monkeypatch.setattr(module.subprocess, "check_output", lambda *a, **kw: "test-revision\n")
+    monkeypatch.setattr(module.subprocess, "check_output", lambda command, **kw: (
+        "--atomic --atomic-split {train,validation,both} --skills" if "--help" in command else "test-revision\n"
+    ))
     commands = []
 
     def fail(command, log, timeout):
@@ -204,3 +206,58 @@ def test_pinned_hub_encoder_references_resolve_only_from_offline_cache(tmp_path,
                       "allow_patterns": ["text_encoder", "text_encoder/**"]}]
     with pytest.raises(ValueError, match="FIT_ENCODER_PIN"):
         module.resolve_cached_encoder("org/model:text_encoder@main")
+
+
+def test_obsolete_evaluator_is_rejected_before_expensive_fit():
+    module = load_script("run_fitting")
+    with pytest.raises(ValueError, match="FIT_EVALUATOR"):
+        module.validate_evaluator_cli("usage: evaluate.py --root --checkpoint --atomic")
+    assert module.validate_evaluator_cli("--atomic --atomic-split {train,validation,both} --skills") is None, (
+        "[BUG-3 REGRESSION] rollout CLI compatibility must be validated before training"
+    )
+
+
+def test_evaluation_recovery_preserves_failure_and_never_repeats_training(tmp_path, monkeypatch):
+    module = load_script("run_fitting")
+    output = tmp_path / "run"
+    output.mkdir()
+    checkpoint = output / "training/checkpoints/001000/pretrained_model"
+    checkpoint.mkdir(parents=True)
+    weight = checkpoint / "adapter_model.safetensors"
+    weight.write_bytes(b"saved checkpoint fixture")
+    files = [output / "config.json", output / "windows.json", tmp_path / "dataset-manifest.json",
+             tmp_path / "scene.xml", tmp_path / "hf-sim-normalization.json", tmp_path / "source.npz"]
+    for path in files:
+        path.write_text("{}")
+    (output / "config.json").write_text(json.dumps({"steps": 1000}))
+    (output / "windows.json").write_text(json.dumps({"windows": [{"source": str(files[-1])}]}))
+    original = {"stage": "failed", "completed": False,
+                "input_sha256": {str(p): fit.digest(p) for p in files},
+                "saved_checkpoint_sha256": {weight.name: fit.digest(weight)}}
+    (output / "status.json").write_text(json.dumps(original))
+    original_hash = fit.digest(output / "status.json")
+    (output / "optimization.json").write_text(json.dumps({
+        "completed": True, "microbatches": 1000, "optimizer_updates": 250
+    }))
+    (output / "before.json").write_text(json.dumps(metrics(10)))
+    (output / "after.json").write_text(json.dumps(metrics(8)))
+    evaluator = tmp_path / "evaluator.py"
+    evaluator.write_text("# fixture")
+    monkeypatch.setattr(module.subprocess, "check_output", lambda *a, **kw:
+                        "--atomic --atomic-split {train,validation,both} --skills")
+    commands = []
+
+    def rollout(command, log, timeout):
+        commands.append(command)
+        folder = Path(command[command.index("--output") + 1])
+        folder.mkdir()
+        rolls = [{"seed": seed, "task_report": {"goal_verified": False}} for seed in [100, 10000]]
+        (folder / "summary.json").write_text(json.dumps(rolls))
+
+    monkeypatch.setattr(module, "run_stage", rollout)
+    module.resume_evaluation(SimpleNamespace(root=tmp_path, output=output, evaluator=evaluator))
+    assert fit.digest(output / "status.json") == original_hash
+    recovery = json.loads((output / "evaluation-resume-status.json").read_text())
+    assert recovery["completed"] and len(commands) == 2
+    assert all(command[1] == str(evaluator) and "--atomic" in command for command in commands)
+    assert not json.loads((output / "decision.json").read_text())["window_fit_passed"]
