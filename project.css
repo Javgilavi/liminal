@@ -509,7 +509,7 @@
   clip-path: inset(0 calc(100% - var(--split)) 0 0);
 }
 .image-comparison-top img {
-  object-position: center 35%;
+  object-position: center;
 }
 .comparison-divider {
   position: absolute;
