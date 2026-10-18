@@ -11,6 +11,12 @@ every real-arm run per session with its start and home-check frames (`01_real_ro
 and reports per checkpoint (`02_imagination/`), sim renders and experiments (`03_sim/`) and slide figures (`04_figures/`).
 Its `00_highlights/` is mirrored here.
 
+## `launch_video/`
+
+| File | What it shows |
+|---|---|
+| `liminal_launch_16x9.mp4`, `liminal_launch_9x16.mp4` | The 30 s launch video (1920x1080 and 1080x1920, original synthesized score). Built from the clips below by [`video/`](../video/README.md), which lists every shot and source timestamp; simulated shots carry a `SIM` tag. |
+
 ## `real_robot/`
 
 | File | What it shows |
