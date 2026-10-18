@@ -75,23 +75,23 @@ requestAnimationFrame(animate);
 const architecture = {
   tree: [
     "Behavior-tree harness",
-    "A planner proposes task YAML. The compiler validates it. The tree enforces sequencing, support invariants, arm ownership and verified completion; a policy cannot mark its own task successful.",
+    "The tree schedules skills, checks support conditions and waits for independent verification.",
   ],
   left: [
     "Left arm · manipulation",
-    "The task arm receives scene and wrist observations plus its own joint state. Its six-channel SO-101 FLUX instance keeps a separate observation and command history, and loads the checkpoint bundle selected for the active object skill.",
+    "Scene and wrist images plus measured joints feed the task arm’s FLUX instance. Each skill selects its task checkpoint.",
   ],
   right: [
     "Right arm · support",
-    "The helper arm has its own FLUX instance and history. A support skill establishes access, then the runtime can maintain a local holding condition while the other arm manipulates. Opening and some object-specific bundles still need staging and physical validation.",
+    "The helper has a separate FLUX instance. It establishes access, then a local controller maintains the hold.",
   ],
   safety: [
     "Safety supervisor",
-    "Every motor command passes through a supervisor. Arm ownership, calibrated limits, telemetry freshness, tracking and stop conditions constrain execution. The research page does not open a serial connection or take ownership of an arm.",
+    "Commands pass through ownership, joint-limit, freshness, tracking and stop checks.",
   ],
   perception: [
     "Independent scene inspection",
-    "Qwen scene inspection produces schema-validated observations. The WorldState stores predicates with timestamps and expiry. A task advances from independent feedback rather than accepting the manipulation policy’s own success claim.",
+    "Qwen updates timestamped scene predicates. The runtime uses these observations to verify progress.",
   ],
 };
 $$(".arch-node").forEach(
@@ -111,7 +111,7 @@ const stages = [
     "pending",
     "pending",
     "AFTER: establish access",
-    "The helper arm changes the scene. The placement skill waits for a verified open-lid condition.",
+    "The helper opens the lid. Placement waits for verification.",
   ],
   [
     "Maintain lid support",
@@ -119,7 +119,7 @@ const stages = [
     "true",
     "pending",
     "WHILE: establish support",
-    "An open lid is not enough. The runtime checks that support can be maintained before allowing the task arm to enter.",
+    "Verify lid support before the placement arm enters.",
   ],
   [
     "Hold position locally",
@@ -127,7 +127,7 @@ const stages = [
     "true",
     "pending",
     "WHILE: lid_open",
-    "The task arm runs the object skill while the helper maintains the lid. Loss of the support invariant cancels dependent placement.",
+    "Place the object while the helper holds the lid. Lost support cancels placement.",
   ],
   [
     "Keep the lid open",
@@ -135,7 +135,7 @@ const stages = [
     "true",
     "verify",
     "UNTIL: object_inserted",
-    "The policy finishing its action chunk does not prove placement. The scene verifier must observe the object inside.",
+    "Wait for the scene verifier to observe the object inside.",
   ],
   [
     "Release support",
@@ -143,7 +143,7 @@ const stages = [
     "release",
     "true",
     "AFTER: insertion verified",
-    "Only after independent verification may the helper release its support. This illustration covers one insertion; the showcase repeats for three objects.",
+    "Release support after insertion is verified. Repeat for the remaining objects.",
   ],
 ];
 function taskStage() {
@@ -156,7 +156,7 @@ function taskStage() {
     lid = "false";
     runtime = "WHILE violated → cancel";
     explanation =
-      "The supporting condition has disappeared. Liminal cancels the dependent skill and requires recovery or a verified new plan before continuing.";
+      "Lid support was lost. Cancel placement and recover before continuing.";
   }
   $("#helper-action").textContent = helper;
   $("#task-action").textContent = task;
@@ -216,25 +216,25 @@ const slides = [
     "real-prediction.mp4",
     "Real recorded input / visual prediction",
     "What the policy imagines next.",
-    "On held-out red-pen take 101, the RAW-5k LoRA’s imagined video appears beside recorded camera frames. A predicted future is not a measured outcome.",
+    "Held-out take 101: RAW-5k predicted frames beside recorded camera views.",
   ],
   [
     "flux-session.mp4",
     "Learned policy · simulated arms",
     "The inference loop, running in MuJoCo.",
-    "This archived interface session uses real FLUX inference with simulated arms. It demonstrates integration and policy behavior; it is not evidence of physical dual-arm task completion.",
+    "FLUX inference controlling simulated arms in MuJoCo.",
   ],
   [
     "perception-session.mp4",
     "Perception · recorded human demonstration",
     "Observe the scene without commanding a robot.",
-    "An archived Qwen analysis session inspects a recorded demonstration and reports scene observations. No real robot commands are issued by this session.",
+    "Qwen inspects a recorded human demonstration. No robot commands.",
   ],
   [
     "predicted-future.mp4",
     "Visual prediction diagnostic",
     "Observed frames and an imagined future.",
-    "A recorded action chunk shows what the camera observed beside the future predicted by FLUX. The imagined video is a model output, not a measured outcome.",
+    "Observed simulated frames beside FLUX’s predicted future.",
   ],
 ];
 let slide = 0;

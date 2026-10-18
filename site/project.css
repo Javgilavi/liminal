@@ -1011,3 +1011,37 @@ footer a:hover {
     font-size: 27px;
   }
 }
+/* Warm paper and faint fibers keep the page quiet behind the demonstrations. */
+body {
+  background-color: var(--paper);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.045' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 20% 0%, #fffaf0 0%, transparent 65%);
+  background-size:
+    180px 180px,
+    100% 1500px;
+  background-repeat: repeat, no-repeat;
+}
+.button.light,
+.task-explorer,
+.demo-grid {
+  background-color: #faf7ef;
+}
+.intro-actions {
+  flex-wrap: wrap;
+}
+.section-heading > p,
+.overview-prose,
+.twin-explanation p {
+  color: #68735f;
+}
+@media (max-width: 520px) {
+  .intro h1 {
+    font-size: 42px;
+    letter-spacing: -2px;
+  }
+  .intro-actions {
+    max-width: 360px;
+    margin-inline: auto;
+  }
+}

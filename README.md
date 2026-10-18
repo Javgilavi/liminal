@@ -1,5 +1,7 @@
 # liminal
 
+**[Project page](https://javgilavi.github.io/liminal/) · [Live lab](https://javgilavi.github.io/liminal/live.html)**
+
 **Long-horizon, dual-arm collaboration on SO-101 / XLeRobot, using FLUX 3 Action for manipulation.**
 
 One arm changes or holds something in the scene so the other arm can do what it
