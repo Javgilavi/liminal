@@ -1379,12 +1379,15 @@ def main(argv: list[str] | None = None) -> None:
         print(f"backend: {backend.label} ({info['root']}, {info['columns']}_* columns, {info['frames']} frames), "
               f"time-warped to {args.max_step:g} deg/tick: {'NOT FLUX' if args.backend == 'replay' else 'then FLUX'}",
               flush=True)  # fmt: skip
-        # the take's own first frames, when the kit has them: the placement overlay and the home check use them
-        own = {d: reference_frame(d, info["episode"]) for d in {args.layout_ref, args.home_check} if d}
+    if args.backend == "replay":
+        # The take's own first frames, when the kit has them: the placement overlay and the home check use them.
+        # --backend replay only: FLUX runs (also --prime-ticks) keep the last held-out take, so home checks and --align
+        # stay comparable across rows (so101-zeroshot).
+        own = {d: reference_frame(d, backend.info["episode"]) for d in {args.layout_ref, args.home_check} if d}
         for path in sorted({str(v) for v in own.values() if v}):
             print(f"placement reference: {path} (the replayed take's first head frame)", flush=True)
         if args.home_check and own.get(args.home_check) and args.home_check_take is None:
-            args.home_check_take = info["episode"]
+            args.home_check_take = backend.info["episode"]
     if args.action_steps is not None and args.backend in ("remote", "fake", "replay"):
         # The runner reads the horizon from the backend's contract (DualArmRunner._accept keeps n_action_steps). For a
         # replay it only sets how often the take is asked for: the commands sent are the same.
@@ -1441,7 +1444,7 @@ def main(argv: list[str] | None = None) -> None:
                     continue
                 task = tasks[i % len(tasks)]
                 ref = refs[layout][k % len(refs[layout])] if layout in refs else None
-                if isinstance(backend, ReplayBackend) and args.layout_ref:  # place the objects as at the take's start
+                if args.backend == "replay" and args.layout_ref:  # place the objects as at the take's start
                     ref = reference_frame(args.layout_ref, backend.info["episode"]) or ref
                 ref_img = read_rgb(ref) if ref is not None else None
                 label = f"attempt {i + 1}/{len(layouts)}: layout {layout}" + (f", reference {ref.stem}" if ref else "")

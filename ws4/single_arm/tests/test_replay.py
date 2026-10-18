@@ -228,3 +228,20 @@ def test_replay_places_and_home_checks_against_the_take_own_first_frame(tmp_path
     assert meta["layout_ref"] == "P3_ep005_head"  # not the layout's first take (ep 3)
     home = json.loads(next((tmp_path / "runs").glob("*/home_check.json")).read_text())
     assert home["reference"] == "P3_ep005_head.jpg"
+    # a FLUX run, primed from the same take, keeps the layout's references (so101-zeroshot: comparable home checks)
+    flux = FakeBackend(SO101_CONTRACT, velocity=0.0)
+    server = make_server({"so101": flux}, port=0, token="secret")
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        (meta,) = _run(tmp_path / "primed", monkeypatch, "--backend", "remote", "--server",
+                       f"http://127.0.0.1:{server.server_address[1]}", "--token-cmd", "echo secret", "--no-log",
+                       "--prime-ticks", "32", "--replay-root", str(root), "--replay-episode", "5", "--seconds", "2",
+                       "--no-keepout", "--layouts", "P3", "--layout-ref", str(refs), "--home-check",
+                       str(refs))  # fmt: skip
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert meta["layout_ref"] == "P3_ep003_head"  # the layout's first take, as for any FLUX row
+    home = json.loads(next((tmp_path / "primed").glob("*/home_check.json")).read_text())
+    assert home["reference"] == "P3_ep009_head.jpg"  # the last held-out take, as without a replay
+    assert "placement reference" not in capsys.readouterr().out
