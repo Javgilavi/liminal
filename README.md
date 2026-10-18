@@ -18,3 +18,5 @@ buffers are gzip compressed. Its poses and three camera videos come from one
 scripted 14-second expert trajectory, with the left arm parked and lid fixed.
 This is not learned-policy task success. Selected checkpoint and diagnostic
 videos come from the source repository's labeled `media/` archive.
+
+Real-run website copies are encoded as H.264/yuv420p with fast-start metadata; original MP4V recordings in `media/` remain intact.
