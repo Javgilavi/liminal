@@ -113,6 +113,10 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     h.add_argument("--prefetch-ticks", type=int, default=None,
                    help="request the next chunk when this many commands are left (default: env WS4_PREFETCH_TICKS, "
                         "else 0 = off)")
+    h.add_argument("--unguarded", action="store_true",
+                   help="demo mode: policies run with no keep-out and no stall/keep-out/load stops; no start gate, no "
+                        "lid precheck, no operator confirmation before ramps. Kept: joint limits, deg/tick step, "
+                        "torque cap, the station keep-out on scripted ramps, the held box arm, the e-stop")
     e = p.add_argument_group("execution and logging")
     e.add_argument("--no-gate", action="store_true", help="disable the inter-arm collision gate")
     e.add_argument("--fast", action="store_true", help="sim: run as fast as possible instead of 30 Hz")
@@ -149,7 +153,7 @@ def _config(a: argparse.Namespace):
             right_arm_port=a.right_arm_port, right_robot_id=a.right_robot_id,
             right_keepout_config=a.right_keepout_config, keepout_window=a.keepout_window,
             token_cmd=a.token_cmd, hold_arms=tuple(a.hold_arm), action_steps=a.action_steps,
-            lift_stall_deg=a.lift_stall_deg, prefetch_ticks=a.prefetch_ticks,
+            lift_stall_deg=a.lift_stall_deg, prefetch_ticks=a.prefetch_ticks, unguarded=a.unguarded,
             fake_start=tuple(a.fake_start) if a.fake_start else None,
             right_fake_start=tuple(a.right_fake_start) if a.right_fake_start else None,
         )

@@ -235,6 +235,7 @@ class HallerRig:
     hold_arms: tuple[str, ...] = ()
     holding: set[str] = field(default_factory=set)
     ramp_step: float = 1.0  # deg per simulated step of the joint-by-joint ramp search (= the ramp speed per tick)
+    unguarded: bool = False  # --unguarded: policies run with no keep-out and no slow zone (ramps keep the station's)
 
     # -------------------------------------------------------------------- single-arm views (pen-only vocabulary)
     @property
@@ -280,6 +281,8 @@ class HallerRig:
         self.guard.keepouts[arm] = ko.without_envelope() if on and hasattr(ko, "without_envelope") else ko
         own = skill is not None and arm in getattr(skill, "arms", ())
         self.guard.slow[arm] = dict(getattr(skill, "runner", None) or {}) if own and not on else {}
+        if self.unguarded and not on:
+            self.guard.keepouts[arm], self.guard.slow[arm] = None, {}
         self._ramping[arm] = on
         self.guard.config = self.limits()
         if arm not in self.hold_arms:
@@ -496,19 +499,24 @@ def build(cfg: Any, station: Any = None) -> HallerRig:
     load_cap = 10.0 * (cfg.torque_limit if real else 100.0)  # Present_Load units at the torque cap (run_attempt)
     monitors: list = []
     lift_stall = getattr(cfg, "lift_stall_deg", None)  # resolved by the session (CLI, WS4_LIFT_STALL_DEG, haller 25)
+    unguarded = bool(getattr(cfg, "unguarded", False))
     for a, x in arms.items():
+        if unguarded:  # only the ramps' keep-out (joint-by-joint fallback); policies have no keep-out to trip it
+            monitors.append(KeepOutMonitor(guard, cfg.keepout_ticks, slot=a, window=cfg.keepout_window))
+            continue
         monitors += [StallMonitor(a, cfg.stall_deg, cfg.stall_ticks, lift_stall_deg=lift_stall),
                      KeepOutMonitor(guard, cfg.keepout_ticks, slot=a, window=cfg.keepout_window),
                      LoadMonitor(x.robot.arm_load, load_cap, cfg.load_sustain, cfg.load_peak, cfg.load_ticks, slot=a,
                                  slow=lambda a=a: guard.slow_load(a))]
     hold_arms = tuple(a for a in getattr(cfg, "hold_arms", ()) or () if a in arms)
-    for a in hold_arms:
+    for a in hold_arms + (tuple(arms) if unguarded else ()):
         # as run_single_arm's OtherArmHolder: its only command is its own pose, so no keep-out acts on it (one would
-        # make the goal follow a sagging arm); the other arm's keep-out still sees it live as capsules
+        # make the goal follow a sagging arm); the other arm's keep-out still sees it live as capsules. Unguarded: no
+        # arm has a keep-out until its first ramp (set_ramp)
         guard.keepouts[a] = None
     rig = HallerRig(sar, arms, robot_iface, guard, monitors, real, cfg.observe, cfg.other_arm_port, cfg.other_arm_id,
                     cfg.read_other_arm, cfg.other_arm_max_age_s, keepout_cls=keepout_cls, hold_arms=hold_arms,
-                    holding=set(hold_arms), ramp_step=cfg.home_speed)
+                    holding=set(hold_arms), ramp_step=cfg.home_speed, unguarded=unguarded)
     guard.config = rig.limits()
     return rig
 

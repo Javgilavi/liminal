@@ -455,6 +455,7 @@ def test_cli_builds_the_chain_config():
     assert cfg.skill_packages == {"open_box": "lora_open_box", "put_pen_in_slot": "lora_red_pen"}
     assert cfg.imagine == "lazy" and cfg.policy == "remote" and cfg.task == "haller_chain"
     assert cfg.right_arm_port == "/dev/haller_arm_left" and cfg.right_robot_id == "haller_left"
+    assert not cfg.unguarded and _config(p.parse_args(["--env", "haller", "--unguarded"])).unguarded
     with pytest.raises(SystemExit):
         _config(p.parse_args(["--env", "haller", "--skill-package", "open_box"]))
 
@@ -590,6 +591,31 @@ def test_start_gate_refusal_ends_the_chain_with_both_arms_holding(tmp_path):
         assert "start gate REFUSED" in trials[-1].failure
         assert {r.task for r in backends[PACKAGES["put_green_pen_in_slot"]].requests} == {STRINGS[CHAIN[1]]}
         assert len(backends[PACKAGES["put_green_pen_in_slot"]].requests) == 1  # its warm-up only
+    finally:
+        s.close()
+        server.shutdown()
+        server.server_close()
+
+
+def test_unguarded_runs_the_chain_past_the_start_gate(tmp_path):
+    """--unguarded: the box-arm pose the start gate refuses above no longer ends the chain; no lid precheck, no stall or
+    load stops, and policies run with no keep-out while ramps keep the station's (no envelope)."""
+    server, url, token, backends = serve(tmp_path, box_pose=RED_PEN_HOLD)
+    s = chain_session(tmp_path, url, token, unguarded=True)
+    try:
+        s.verifier = checks = ScriptedChecks(box_pose=RED_PEN_HOLD)
+        assert {type(m).__name__ for m in s.rig.monitors} == {"KeepOutMonitor"}
+        assert not any(s.vocab[n].precheck for n in CHAIN) and not s.vocab.station.confirm_unknown_ramps
+        result = s.execute(s.plan(GOAL).result.plan)
+        assert result.status == "succeeded" and result.steps_done == 4, result.failure
+        assert checks.calls.count("open_box") == 1  # no lid precheck before the pen steps
+        assert s.rig.guard.keepouts["left"] is None and s.rig.guard.keepouts["right"] is None
+        s.rig.set_ramp("left", True, s.vocab["put_green_pen_in_slot"])
+        ramp = s.rig.guard.keepouts["left"]
+        assert ramp is not None and not ramp.env_cells
+        s.rig.set_ramp("left", False, s.vocab["put_yellow_cutter_in_slot"])
+        assert s.rig.guard.keepouts["left"] is None and not s.rig.guard.slow["left"]
+        assert any("UNGUARDED" in e["msg"] for e in s.events.recent(500))
     finally:
         s.close()
         server.shutdown()

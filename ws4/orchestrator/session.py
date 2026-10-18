@@ -157,6 +157,10 @@ class SessionConfig:
     # held where they are (goal = present pose, then torque on, as connect_so101 does), never driven, torque on at
     # close.
     hold_arms: tuple[str, ...] = ()
+    # Demo mode (--unguarded): the policy runs with no keep-out, no stall/keep-out/load stops, no start gate, no lid
+    # precheck and no operator confirmation before ramps. Kept: joint limits, deg/tick step, torque cap, the station
+    # keep-out on scripted ramps (with its joint-by-joint fallback), the held box arm, the e-stop.
+    unguarded: bool = False
     # Execution
     gate: bool = True
     realtime: bool = True
@@ -219,6 +223,10 @@ class Session:
                 raise ValueError(f"--skill-backend {name}={backend}: needs a skill of {self.vocab.names()} with a "
                                  "replay entry in the vocabulary, and flux or replay")
             self.vocab.skills[name] = dataclasses.replace(skill, backend=backend)
+        if cfg.unguarded:
+            for name, skill in self.vocab.skills.items():
+                self.vocab.skills[name] = dataclasses.replace(skill, precheck="")
+            self.vocab.station.confirm_unknown_ramps = False
         for name, episode in cfg.replay_episodes.items():
             if name != "*" and not (name in self.vocab.skills and self.vocab.skills[name].replay):
                 raise ValueError(f"--replay-episode {name}={episode}: {name} has no replay entry in the vocabulary")
@@ -739,7 +747,7 @@ class Session:
             on_estop=self.rig.hold if self.rig is not None else None,
             before_attempt=self._before_attempt if self.rig is not None else None,
             ramp_mode=self.rig.set_ramp if self.rig is not None else None,
-            start_gate=self._start_gate if self.rig is not None else None,
+            start_gate=self._start_gate if self.rig is not None and not cfg.unguarded else None,
             hold_arms=self.rig.hold_arms if self.rig is not None else (),
             on_hold=self.rig.mark_holding if self.rig is not None else None,
             ramp_order=self.rig.ramp_order if self.rig is not None else None,
@@ -875,6 +883,8 @@ class Session:
         out = [f"action horizon {cfg.action_steps or 'package'}", f"lift stall {cfg.lift_stall_deg or cfg.stall_deg}"
                f" deg (others {cfg.stall_deg})", f"prefetch {cfg.prefetch_ticks or 'off'}",
                f"{cfg.max_step} deg/tick", f"torque limit {cfg.torque_limit:.0f}%"]
+        if cfg.unguarded:
+            out.append("UNGUARDED (no policy keep-out, no stall/keep-out/load stops, no start gate, no lid precheck)")
         if self.rig is not None and self.rig.hold_arms:
             out.append(f"held from launch: {', '.join(self.rig.hold_arms)}")
         out += [f"{s.name}: {s.driver} (not FLUX)" for s in self.vocab.skills.values() if s.driver]
