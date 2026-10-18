@@ -278,10 +278,14 @@ Same script on the overnight LoRA (`imagine/speed_check.py`; B84 rerun through i
 | model / demo travel | pan | lift | elbow | wrist flex | roll | gripper | median arm travel (demo 53.5 deg) |
 |---|---|---|---|---|---|---|---|
 | B84 zero-shot | 1.49 | 0.32 | 0.55 | 1.06 | 0.99 | 1.00 | 40.2 deg |
-| LoRA 3000 steps | **0.86** | **0.52** | 0.56 | 0.64 | 0.56 | 0.96 | 30.1 deg |
+| LoRA 3000 steps | 0.86 | 0.52 | 0.56 | 0.64 | 0.56 | 0.96 | 30.1 deg |
+| base (B84) on 8790, compile on | 1.46 | 0.34 | 0.57 | 1.12 | 0.98 | 1.03 | 41.1 deg |
+| LoRA 5000 steps on 8790, compile on | **0.76** | **0.78** | 0.64 | 0.60 | 0.55 | 1.02 | 33.5 deg |
 
-At 3000 steps the LoRA stops over-swinging the pan and uses the lift more, but it moves more cautiously
-overall than the demos. 5000 steps: pending.
+The 5k LoRA more than doubles the shoulder-lift reach (0.34 to 0.78 of the demos) and halves the pan over-swing,
+measured against the base on the same server (compile on). The B84 rows agree with or without compile (1.49 vs
+1.46 pan, 0.32 vs 0.34 lift). It still moves more cautiously overall than the demos (33.5 vs 53.5 deg of arm
+travel per chunk). Data: `imagine/outputs/speed_8790_{base,lora_5000}/`.
 
 The mismatch is which joints move, not speed. The model barely uses shoulder lift and elbow (the reach toward the
 pen) and swings the pan more. This fits the lift findings in `single_arm/README.md`. It is what the pen LoRA has

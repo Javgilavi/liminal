@@ -21,6 +21,7 @@ CPU-testable PyTorch prototype that goes with `ws4/research/robottt_flux.md`. St
 | `cup_stages.py` | Three-stage tracking (reach, carry, in cup) for the cup task: trains none/GRU/TTT on the demos, scores FLUX rollouts with stages from privileged block and cup poses |
 | `pod_sim_lora.sh` | Pod: A0r-sim cup package (demo quantiles), LoRA probe and run (LeRobot `lora.json`), adapter merge for `flux.remote` |
 | `lora_train_te_cpu.py` | `lerobot_train` with FLUX's frozen text encoder kept on the CPU, which lets the LoRA preset fit the 32 GB card |
+| `serve_lora.py` | `flux.remote` that also serves LeRobot LoRA checkpoints, merged into their base package in memory (no merged copy on the volume) |
 | `pod_sim_eval.sh`, `pod_job_watchdog.sh` | Pod: serve one package, run `eval_block_cup.py`, stop serving; idle stop that also counts running ws4/ttt jobs as busy |
 | `extract_flux_features.py` | GPU: FLUX 3 Action tap features at every re-plan, with the runner's exact request building |
 | `pod_job.py` | One model load for a time-boxed GPU slot: the scale check, then the feature extraction (what ran on the RunPod pod) |

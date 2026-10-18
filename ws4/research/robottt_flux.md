@@ -80,6 +80,11 @@ Serving was restored and verified, then the idle watchdog stopped the pod as des
 - **Toy lesson that carries over**: the tanh gate keeps a pretrained policy intact (identical arg-max at
   initialization), but learning to *use* the memory from a pretrained start is several times slower than from
   scratch. For FLUX that means a long adapter training run on long episodes, i.e. post-hackathon.
+- **Sim track, "put the block in the cup" (Sec. 11.12, 17 Oct night)**: on 20 held-out sim layouts, stock FLUX,
+  FLUX with sim normalization and two LoRA checkpoints all score 0/20. A LoRA on 60 scripted demos (600 updates, half
+  an epoch) gets FLUX to approach (4.5 cm against 12), stop fighting the guard (0% against 92% of ticks) and grasp,
+  lift and carry the block in 2/20, without releasing it. Stage trackers trained on scripted demos report false
+  progress on FLUX rollouts; adding failed FLUX rollouts to their training fixes that.
 
 ---
 
@@ -991,8 +996,10 @@ Reading:
 
 ### 11.12 Sim track: "put the block in the cup" (`sim_block_cup.py`, `eval_block_cup.py`, `cup_stages.py`, 17 Oct evening)
 
-**Status (19:05 UTC): demos, the A0 closed loop and stage tracking are done; the LoRA is training (ETA about 20:57
-UTC); A0r-sim and LoRA-sim evaluations follow on the same pod.** Nothing here shows FLUX solving the task in sim yet.
+**Status (18 Oct, 01:20 CEST): done. No policy solved the task in sim: 0/20 for A0, A0r-sim and two LoRA
+checkpoints.** The LoRA (600 optimizer updates on 48 demos, half an epoch) moves FLUX the right way: it goes to the
+block (median closest approach 4.5 cm against 12 for A0), stops fighting the guard (0% of ticks against 92%), and
+grasps, lifts and carries the block in 2 of 20 layouts, once to just above the cup, without releasing it.
 
 **Task and contract.** One skill on the left arm, mirroring the real track (ws4/PLAN.md): the same per-arm FLUX
 contract (30 fps, task-arm 6-D state and action in LeRobot degrees, gripper 0..100), `scene` = head D455 render
@@ -1025,8 +1032,12 @@ the check at every re-plan:
 |---|---|---|---|---|
 | scripted expert (demos) | 60/72 executed (83%) | 60/72 | | IK-feasible layouts only; the 20 eval layouts are ones it solves |
 | **A0** `so101` as released | **0/20** | **0/20** | reach (20/20) | cup knocked over in 8, block pushed in 2 (3 and 6 cm); closest TCP approach 3.8 to 17 cm (median 12); guard step limit on 92% of ticks; 0.66 s per chunk |
-| A0r-sim `so101sim_cup_left` (demo quantiles) | pending | pending | | |
-| LoRA-sim on the 60 demos | pending | pending | | training |
+| A0r-sim `so101sim_cup_left` (demo quantiles) | 0/20 | 0/20 | reach (20/20) | cup knocked over in 2, block never moved; closest approach median 13 cm; guard on 57% of ticks |
+| LoRA, EMA adapter at 1,600 microsteps (400 updates) | 0/20 | 0/20 | reach (20/20) | block pushed (more than 2 cm) in 5, cup knocked over in 2; closest approach median 5.6 cm; guard on 7% |
+| **LoRA, raw adapter at 2,400 microsteps (600 updates)** | **0/20** | **0/20** | **carry (2/20)** | block grasped and lifted in 2 (carried 9 and 16 cm, the second to 8 cm from the cup axis at 13 cm height), pushed in 6 more; cup knocked over in 2; closest approach median 4.5 cm; guard on 0% |
+
+All four served packages ran at 0.65 s per chunk (A0r-sim and the LoRA load the same 7B weights; the adapters are
+merged in memory, see below).
 
 A0 swings the arm down from upright and sweeps through the scene: it knocks the cup over or pushes the block, then
 pulls back, and never grasps (`results/block_cup_a0_seed9000000_3x.gif`, `_sheet.jpg`; `..._seed9000005_3x.gif`
@@ -1034,7 +1045,16 @@ pushes the block). From the sim's `HOME_DEG` (v1) it had only lifted away, never
 approach median 14 cm). The lid task looks the same (Sec. 11.10): A0 0/12, and the lid A0r-sim (`so101sim`, lid/pack
 quantiles) removed the guard interventions but still passed no step (0/12). The cup package uses the new demos' own
 quantiles: state pan -9..39, lift -4..83, elbow -74..36, wrist flex 0..95, roll 0..143, gripper 28..100; command
-deltas about ±1 to 2.6 deg per tick, gripper target 0..100.
+deltas about ±1 to 2.6 deg per tick, gripper target 0..100. With them (A0r-sim) the arm moves within normal ranges
+(guard on 57% instead of 92% of ticks) but goes nowhere useful: it never touches the block.
+
+The LoRA rollouts (`results/block_cup_lora_seed9000005_3x.gif`, `_sheet.jpg`): the arm comes down to the block,
+grasps, loses it, grasps again, lifts it and carries it over the cup (at 20 s: 8 cm from the axis, 13 cm up), then
+holds it there until the budget runs out. It never opens the gripper over the cup. In the other 18 layouts it
+reaches for the block and nudges or pushes it. Reading: the LoRA learned the approach and the grasp first, which
+take the most frames in a demo; the release has not come out of 600 updates. More updates (the preset's 2,500) or
+more demos are the obvious next try. The EMA adapter at 400 updates is weaker than the raw one at 600: on a run
+this short the EMA lags, as expected.
 
 **Stage tracking.** `cup_stages.py`: three coarse stages that both kinds of episode can be labelled with, without
 FLUX: *reach* (block on the table), *carry* (block off the table, not in the cup), *in cup* (also the done signal).
@@ -1063,9 +1083,20 @@ Checked: `cup_stages.py train --rollouts <A0 rollouts> --tag _mixa0` adds 12 of 
 | GRU | 0.795 | 0.983 |
 | TTT | 0.803 | 0.989 |
 
-A dozen failed FLUX rollouts remove the false progress without costing demo accuracy. Not yet shown: whether this
-holds for rollouts that do make progress (the LoRA's, once evaluated), where *carry* and *in cup* must still be
-recognized.
+A dozen failed FLUX rollouts remove the false progress without costing demo accuracy.
+
+On the other policies' rollouts (`results/cup_stages_score_<package>[_mixa0].json`), truth is again almost all
+*reach*, and the trackers behave better than on A0's, because those arms stay near the table like the expert's:
+
+| Memory (demo-only / with A0 rollouts) | A0r-sim (20) | LoRA EMA-1600 (20) | LoRA raw-2400 (20) | LoRA raw-2400: *carry* found (of 4 re-plans) | LoRA raw-2400: false *in cup* calls (of 440) |
+|---|---|---|---|---|---|
+| none | 0.761 / 0.836 | 0.895 / 0.873 | 0.932 / 0.930 | 2 / 3 | 24 / 15 |
+| GRU | 0.582 / 0.891 | 0.777 / 0.818 | 0.889 / 0.825 | 3 / 4 | 24 / 16 |
+| TTT | **0.945** / 0.909 | **0.975** / 0.955 | 0.914 / 0.927 | 3 / 3 | 12 / 17 |
+
+Only 2 rollouts made real progress (4 re-plans in *carry*), so nothing can be said yet about recognizing progress
+on FLUX rollouts; the false *in cup* calls (12 to 24 of 440 re-plans) still rule out using the done head as a stop
+signal on FLUX. TTT is the most robust of the demo-only trackers on these near-table rollouts.
 
 **LoRA run on the 32 GB card** (`pod_sim_lora.sh`, LeRobot `examples/flux3/lora.json`):
 - LeRobot counts `steps`, `save_freq` and `eval_steps` in microsteps (optimizer updates = steps / accumulation), so
@@ -1076,10 +1107,18 @@ recognized.
   blank). Base memory drops from 25.6 to 17.1 GiB and the preset's batch 2 × accumulation 4 fits (peak 21.5 GB).
 - DataLoader workers (spawn) each take about 3.5 min to start, one after the other, because torch imports from the
   network volume. Two workers instead of four save 7 min per run; data loading is not the bottleneck (7 ms/step).
-- Running: 3,200 microsteps (800 updates at effective batch 8: 6,400 samples, half an epoch of LeRobot's 48 training
-  episodes, 12,521 frames; it holds out the last 12), started 18:49 UTC, 2.2 s per microstep, loss 0.22 at step 44; checkpoints every 200 updates; EMA decay 0.995 instead of 0.999 (at
-  800 updates a 0.999 shadow would still hold 45% of the initial adapter). Then `merge` (adapter folded into a plain
-  package for `flux.remote`) and the same 20-layout evaluation for A0r-sim and the LoRA.
+- Run: planned 3,200 microsteps (800 updates at effective batch 8, about 0.5 epoch of LeRobot's 48 training
+  episodes, 12,521 frames; it holds out the last 12), EMA decay 0.995 instead of 0.999 (at 800 updates a 0.999
+  shadow would still hold 45% of the initial adapter). Started 18:49 UTC, 2.2 s per microstep, peak 21.8 GB; train
+  loss 0.25 at the start, about 0.10 at 2,400 (action MSE 0.25 to 0.04); held-out loss 0.127 (800), 0.116 (1,600),
+  0.111 (2,400). LeRobot's offline eval over the 12 held-out episodes took 21 to 33 min each time: on a short run,
+  set `eval_steps` high. The run ended at 2,400: the volume ran out of quota while writing that checkpoint (below).
+  Usable: raw adapter at 2,400, raw and EMA at 1,600 and 800.
+- Serving: a merged package would be a second full copy of the 7B weights, which the volume cannot hold.
+  `serve_lora.py` runs `flux.remote` with `Flux3Policy.from_pretrained` patched: an adapter directory is merged into
+  the base package its `adapter_config.json` names, in memory, and the processors come from the adapter directory.
+  `pod_sim_eval.sh serve` uses it when the path holds an adapter. (`pod_sim_lora.sh merge` stays for a roomier
+  volume.)
 
 **Pods** (for `ws4/cloud/RUNPOD.md`):
 - `ws4-sim-4500` (`fnxekskwlu0095`, RTX PRO 4500, EU-RO-1, $0.72/h, volume `6j5vbwvfu8`), created 16:07 UTC by the
@@ -1090,7 +1129,16 @@ recognized.
   terminated at 18:26 UTC. Running time about 2 h 9 min, about $1.55.
 - `ws4-sim-4500b` (`epfpraa5z5038c`, RTX PRO 4500, EU-RO-1, $0.72/h, same volume, image and env), created 18:24:31
   UTC with Oscar's approval, ssh.direct up within a minute. Idle stop: `ttt/pod_job_watchdog.sh 30`, which also
-  counts a running training, eval, scoring or merge job as busy.
+  counts a running training, eval, scoring or merge job as busy. At 21:36 UTC the volume (`ws4-inference`, 100 GB)
+  hit "Disk quota exceeded" while the LoRA wrote its 2,400 checkpoint: files total about 64 GB apparent and 79 GB in
+  blocks (hf 37, uv-cache 27, ttt 7, ws4 6.5, venv-simeval 1.8), and directories on this filesystem show 1 to 3 MB
+  each, which probably fills the rest. The save hung; the container was stopped at 22:07:10 UTC (the job watchdog
+  logged no stop; RunPod gives no reason). It could not restart (host GPU taken) and was terminated at 22:28 UTC.
+  Running time 3 h 43 min, about $2.70. I freed about 4 GB (the optimizer states).
+- `ws4-sim-4500c` (`hd964rl8tep939`, same settings), created 22:20:39 UTC with Oscar's approval, ran the three
+  evaluations, stopped by me at 23:13 UTC once they were copied off (53 min, about $0.65). It is stopped, not
+  terminated (storage only); terminate it when the sim track is closed.
+- Total GPU for the sim track: about 6 h 45 min, about $4.90.
 - The container disk resets on stop: `pod_sim_eval.sh eval` reinstalls the EGL loader. Outputs stay under
   `/workspace/ttt/` (packages in `/workspace/ttt/packages/`).
 
@@ -1099,20 +1147,23 @@ To redo it on a pod with the volume (from `/workspace`, after syncing `ws4/ttt` 
 ```bash
 source /etc/rp_environment; setsid nohup bash liminal/ws4/ttt/pod_job_watchdog.sh 30 >> logs/job_watchdog.log 2>&1 &
 bash liminal/ws4/ttt/pod_sim_lora.sh package        # cup quantiles -> ttt/packages/so101sim_cup_left
-bash liminal/ws4/ttt/pod_sim_lora.sh train          # about 2 h; then: bash liminal/ws4/ttt/pod_sim_lora.sh merge
+EVAL_STEPS=4000 bash liminal/ws4/ttt/pod_sim_lora.sh train    # resume or longer runs: check the volume quota first
 bash liminal/ws4/ttt/pod_sim_eval.sh serve so101simcup /workspace/ttt/packages/so101sim_cup_left
 bash liminal/ws4/ttt/pod_sim_eval.sh eval so101simcup && bash liminal/ws4/ttt/pod_sim_eval.sh stop
-bash liminal/ws4/ttt/pod_sim_eval.sh serve so101simcuplora /workspace/ttt/packages/so101sim_cup_lora
-bash liminal/ws4/ttt/pod_sim_eval.sh eval so101simcuplora && bash liminal/ws4/ttt/pod_sim_eval.sh stop
+C=/workspace/ttt/lora_sim_block_cup/checkpoints         # adapters are served merged in memory (serve_lora.py)
+bash liminal/ws4/ttt/pod_sim_eval.sh serve so101simcupraw2400 $C/002400/pretrained_model
+bash liminal/ws4/ttt/pod_sim_eval.sh eval so101simcupraw2400 && bash liminal/ws4/ttt/pod_sim_eval.sh stop
 # laptop: copy /workspace/ttt/block_cup_eval/<package> back, then
 python ttt/cup_stages.py score .cache/ttt/block_cup_eval/<package>/seed* --out ttt/results/cup_stages_score_<package>.json
 ```
 
 Frames and GIFs for slides (`ws4/ttt/results/`): `block_cup_demo_ep0.gif` and `block_cup_demo_ep0_sheet.jpg` (a
 scripted demo, head | wrist), `block_cup_a0_seed9000000_3x.gif` and `_sheet.jpg` (A0 knocks the cup over, with the
-ground-truth check and stage), `block_cup_a0_seed9000005_3x.gif` (A0 pushes the block). Numbers:
-`cup_stages_train.json`, `cup_stages_score_so101.json`; A0 rollouts in `ws4/.cache/ttt/block_cup_eval/so101/`
-(`index.jsonl`, `summary.json`, three `rollout.mp4`).
+ground-truth check and stage), `block_cup_a0_seed9000005_3x.gif` (A0 pushes the block),
+**`block_cup_lora_seed9000005_3x.gif` and `_sheet.jpg` (the LoRA grasps, lifts and carries the block over the cup)**.
+Numbers: `cup_stages_train*.json`, `cup_stages_score_*.json`; rollouts per package in
+`ws4/.cache/ttt/block_cup_eval/<package>/` (`index.jsonl`, `summary.json`, three `rollout.mp4`), copies of the pod's
+`/workspace/ttt/block_cup_eval/`; the training log in `ws4/.cache/ttt/lora_sim_block_cup.log`.
 
 ## 12. Sources
 

@@ -17,12 +17,27 @@ case "${1:-}" in
 stop)
   pkill -f "^bash $LIMINAL/ws4/cloud/runpod_serve.sh" || true
   pkill -f "^python -m flux.remote" || true
-  for _ in $(seq 60); do pgrep -f "^python -m flux.remote" >/dev/null || break; sleep 2; done
+  pkill -f "^python $LIMINAL/ws4/ttt/serve_lora.py" || true
+  for _ in $(seq 60); do pgrep -f "^python (-m flux.remote|$LIMINAL/ws4/ttt/serve_lora.py)" >/dev/null || break; sleep 2; done
   nvidia-smi --query-gpu=memory.used --format=csv,noheader
   ;;
 serve)
   name="$2"; path="$3"
   echo "put the block in the cup" > /workspace/prompts_cup.txt
+  extra="${EXTRA_ARGS:---override guidance_scale=1.0 --override guidance_scale_action=1.0 --override compile_model=true}"
+  if [ -f "$path/adapter_config.json" ]; then
+    # A LoRA checkpoint: ttt/serve_lora.py merges it into its base in memory (runpod_serve.sh runs plain flux.remote).
+    [ -f /etc/rp_environment ] && source /etc/rp_environment
+    source "${WS4_ROOT:-/workspace/ws4}/lerobot/.venv/bin/activate"
+    export PYTHONPATH="$LIMINAL/ws4"
+    # shellcheck disable=SC2086
+    setsid nohup python "$LIMINAL/ws4/ttt/serve_lora.py" --host 127.0.0.1 --port 8765 --token-file /workspace/flux_token \
+      --package "$name=$path" --text-encoder-on-cpu $extra >> /workspace/logs/flux_remote_lora.log 2>&1 < /dev/null &
+    { python "$LIMINAL/ws4/cloud/warm_prompts.py" --prompts-file /workspace/prompts_cup.txt --token-file /workspace/flux_token \
+        >> /workspace/logs/warm_prompts.log 2>&1 && echo "READY: $name"; } > "/workspace/logs/serve_$name.out" 2>&1
+    tail -2 "/workspace/logs/serve_$name.out"
+    exit 0
+  fi
   # The same inference settings as every closed-loop run on this pod (A0 and the lid A0r-sim): no CFG, compiled.
   EXTRA_ARGS="${EXTRA_ARGS:---override guidance_scale=1.0 --override guidance_scale_action=1.0 --override compile_model=true}" \
   PACKAGES="$name=$path" IDLE_MIN=0 PROMPTS=/workspace/prompts_cup.txt \
