@@ -20,7 +20,7 @@
   src: url("./assets/vendor/instrument-serif-normal.woff2") format("woff2");
 }
 :root {
-  --paper: #f3efe5;
+  --paper: #eee8da;
   --ink: #24372c;
   --green: #315d43;
   --muted: #798078;
