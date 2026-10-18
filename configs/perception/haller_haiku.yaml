@@ -16,6 +16,13 @@ model:
     red_pen_in_slot: put_pen_in_slot
   derived:
     components_assembled: [green_pen_in_slot, red_pen_in_slot, yellow_boxcutter_in_slot]
+  # The box arm is frozen holding the lid while the pen arm works and often hides the box from the head camera: an
+  # unclear lid view keeps the last confident verdict for up to 45 s, then counts as unknown (the WHILE breaks).
+  # Measured on 53 kept pen takes (785 lid checks, one per 5 s of policy time at 5x the demo duration, 0 "closed"):
+  # the WHILE breaks in 15/16 green, 16/17 cutter, 6/20 red takes without keep_s, 3/53 at 15 s, 0/53 at 30 s and
+  # 45 s; the longest unclear stretch was 25 s (ws4/eval/while_lid_refresh.py).
+  keep_s:
+    lid_open: 45
 inspection:
   cameras: [top]
   confirmations: 2

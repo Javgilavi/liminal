@@ -373,3 +373,33 @@ def test_session_settings_per_run(monkeypatch, tmp_path):
     monkeypatch.setenv("LIMINAL_WS4_SESSION", "[1]")
     with pytest.raises(ValueError, match="JSON object"):
         Ws4Bridge(cfg).session_config()
+
+
+def test_unclear_lid_view_keeps_the_last_confident_verdict_for_keep_s(ws4):
+    from orchestrator.verifier import Verdict
+
+    from liminal.perception.types import InspectionRequest
+    from liminal.ws4_bridge.vision import Ws4HaikuVisionModel
+
+    answers, now = [], [0.0]
+
+    class Fake:
+        def check(self, step, skill, obs):
+            return answers.pop(0)
+
+    model = Ws4HaikuVisionModel(verifier=Fake(), keep_s={"lid_open": 30}, clock=lambda: now[0])
+    request = InspectionRequest(("lid_open",), cameras=("top",))
+    frame = [np.zeros((48, 64, 3), np.uint8)]
+
+    def lid(done, conf, t):
+        answers.append(Verdict(done, conf, "seen", "fake"))
+        now[0] = t
+        return asyncio.run(model.inspect_request(request, frame))["predicates"]["lid_open"]
+
+    assert lid(False, 0.4, 0)["value"] == "unknown"  # nothing confident yet: fail closed
+    assert lid(True, 0.9, 5)["value"] == "true"
+    kept = lid(False, 0.35, 20)  # the pen arm hides the box
+    assert kept["value"] == "true" and "kept the confident verdict from 15 s ago" in kept["evidence"]
+    assert lid(False, 0.35, 36)["value"] == "unknown"  # 31 s since the last confident view
+    assert lid(False, 0.9, 40)["value"] == "false"  # a confident closed lid always counts
+    assert lid(True, 0.5, 45)["value"] == "false"  # and is what an unclear view keeps

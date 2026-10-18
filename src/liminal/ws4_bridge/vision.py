@@ -5,12 +5,20 @@ Each predicate maps to the ws4 skill whose check decides it, with that skill's t
 cutter 91/91, red pen 65/66, research/orchestrator.md). The checks were tuned on the head camera only, so only the
 ``scene_camera`` image is sent. A verdict below the skill's confidence threshold is ``unknown`` (the prompts ask for
 low confidence when the object is hidden or ambiguous). A ``derived`` predicate is true when all its parts are.
+
+``keep_s``: for a predicate an arm keeps true physically (the box arm frozen holding the lid), an unclear view is no
+evidence either way: the last confident verdict is reported again while it is at most ``keep_s`` old, then the
+predicate is unknown (fail closed). Without it, one occluded frame breaks a WHILE: on 785 head frames through 53 pen
+takes the lid check never read "closed" but was unsure on 74 (the pen arm hiding the box), enough to break the WHILE
+in 37 of the 53 takes; with 30 s or more, in none (configs/perception/haller_haiku.yaml).
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping, Sequence
+import threading
+import time
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from liminal.perception.types import InspectionRequest
@@ -28,7 +36,8 @@ HALLER_DERIVED = {"components_assembled": ["green_pen_in_slot", "red_pen_in_slot
 class Ws4HaikuVisionModel:
     def __init__(self, checks: Mapping[str, str] | None = None, derived: Mapping[str, Sequence[str]] | None = None,
                  scene_camera: str = "top", vocabulary: str | None = None, budget_usd: float = 2.0,
-                 effort: str = "low", thinking: str = "adaptive", verifier: Any = None):
+                 effort: str = "low", thinking: str = "adaptive", keep_s: Mapping[str, float] | None = None,
+                 verifier: Any = None, clock: Callable[[], float] = time.monotonic):
         self.checks = dict(HALLER_CHECKS if checks is None else checks)
         self.derived = {k: list(v) for k, v in (HALLER_DERIVED if derived is None else derived).items()}
         for name, parts in self.derived.items():
@@ -37,8 +46,14 @@ class Ws4HaikuVisionModel:
                 raise ValueError(f"derived predicate {name!r} needs checked parts and no check of its own ({missing})")
         self.scene_camera = scene_camera
         self.vocabulary, self.budget_usd, self.effort, self.thinking = vocabulary, budget_usd, effort, thinking
+        self.keep_s = {k: float(v) for k, v in (keep_s or {}).items()}
+        if set(self.keep_s) - set(self.checks):
+            raise ValueError(f"keep_s names unchecked predicates {sorted(set(self.keep_s) - set(self.checks))}")
         self._verifier = verifier
         self._vocab: Any = None
+        self.clock = clock
+        self._confident: dict[str, tuple[str, float]] = {}  # predicate -> (last confident value, when)
+        self._lock = threading.Lock()
 
     def load(self) -> None:
         """Load the ws4 vocabulary and the verifier; with no API key, fail now rather than inside a WHILE."""
@@ -105,6 +120,15 @@ class Ws4HaikuVisionModel:
             value = "unknown"
         else:
             value = "true" if verdict.done else "false"
+        now = self.clock()
+        with self._lock:
+            if value != "unknown":
+                self._confident[predicate] = (value, now)
+            elif predicate in self.keep_s and predicate in self._confident:
+                kept, when = self._confident[predicate]
+                if now - when <= self.keep_s[predicate]:
+                    return {"value": kept, "evidence": f"view unclear ({verdict.confidence:.2f}: {evidence}); kept the "
+                                                       f"confident verdict from {now - when:.0f} s ago"}
         return {"value": value, "evidence": evidence, "confidence": float(verdict.confidence)}
 
 

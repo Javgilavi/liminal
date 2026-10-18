@@ -22,7 +22,8 @@ policy server :8790 (ws4/cloud/lora_adapter.py serve, SSH tunnel) -> skill_open_
 ```
 
 After each ws4 step, the harness's own perception looks again (`ws4_haiku`: ws4's measured Haiku prompts, one per
-predicate, on the head frame) so `SkillNode` verifies `success` on fresh evidence, not on ws4's word.
+predicate, on the head frame) so `SkillNode` verifies `success` on fresh evidence, not on ws4's word. While the pen
+arm works, the WHILE node re-checks `lid_open` every 5 s on top of ws4's lid precheck.
 
 ## Run it on the Haller
 
@@ -85,7 +86,7 @@ have driven the box arm. Fixed on this branch (b84ba76).
 - `tests/test_remote_engine.py`: liminal's own `FluxPolicyBackend` with `engine: remote`
   (`configs/policy/haller_remote_registry.yaml`, the four served packages) runs the unchanged `assemble_components`
   task on mock arms against the HTTP server; each package served only its own prompt.
-- Their suite with the new tests: 356 passed, 3 skipped (uv env, Python 3.12, plus numpy and Pillow that the `dev`
+- Their suite with the new tests: 357 passed, 3 skipped (uv env, Python 3.12, plus numpy and Pillow that the `dev`
   extra lacks); in the robot laptop's Python 3.13: 359 passed, 1 failed (`test_haller_feedback_integration`, which only
   runs where `haller_hmi` is installed and needs their unapplied `integrations/haller/command-feedback.patch`);
   `ruff check src tests scripts` clean; `liminal validate configs/tasks/*.yaml` all ok. ws4:
@@ -95,11 +96,18 @@ have driven the box arm. Fixed on this branch (b84ba76).
 
 - Nothing ran on the Haller, its cameras, the pod or the real Claude API. Before a hardware run: the observe dry run
   above (ports, cameras, tunnel, token, packages, Haiku), then one real run with a hand on the lid.
-- The WHILE re-checks `lid_open` with Haiku every 5 s while the pen arm works; one verdict below 0.7 confidence
-  (lid occluded) breaks the WHILE: e-stop, both arms freeze, the run fails. The lid check is measured on box takes
-  (63/63), not on frames from the middle of pen skills. VERIFY on the green / cutter / red takes.
+- The WHILE re-checks `lid_open` with Haiku every 5 s while the pen arm works, and their WHILE treats one unclear
+  verdict as a broken invariant (e-stop, both arms freeze, the run fails). Measured offline on the recorded pen takes
+  (`ws4/eval/while_lid_refresh.py`: 53 takes, 785 checks at the live cadence with the policy 5x slower than the
+  demos): 0 "closed" verdicts, but 74 unclear ones while the pen arm hides the box, which would break the WHILE in
+  37 of 53 takes. So `ws4_haiku` keeps the last confident lid verdict through an unclear view for up to 45 s
+  (`keep_s` in `configs/perception/haller_haiku.yaml`; 0/53 breaks at 30 s, longest unclear stretch 25 s). A confident
+  "closed" still breaks the WHILE at once. ws4's own chain checks the lid only before each pen skill. Not measured
+  on live policy runs, whose occlusions may last longer than in the demos.
 - Timing: the tree gives each skill 240 s; the bridge runs one ws4 attempt per skill (`max_attempts: 1`, attempts
   time out at 120 s). The tree has no retry node; add `retry` in the task file to retry a skill.
 - liminal's native SO-101 path (`configs/robot/xlerobot.yaml`) has none of the Haller keep-outs, start gate or load
   freeze; its e-stop switches torque off unless `estop: freeze`. Use the bridge on the Haller.
 - Their Qwen perception path is unchanged and still unmeasured on Haller frames (CUDA, the laptop has a 4 GB T550).
+- `liminal serve --backend ws4` (their web UI) should run (arms read from the ws4 session, e-stop maps to ws4's) but
+  was not exercised; its manual jogs would latch the e-stop, since ws4 arms refuse direct commands.
