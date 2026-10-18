@@ -12,6 +12,8 @@ true*, and *whether the goal really happened*.
 
 ## Hackathon results (ERH Physical AI Hackathon, 18 October 2026)
 
+**[Submission video (2 min)](https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view)**
+
 - **Full 4-skill chain on the real Haller**, planned by Claude with a camera check after every step:
   **2 of 3 runs finished 4/4** with no human touch during the run (208.6 s and 302.2 s).
   - The box is opened by a **scripted replay of a recorded demo**, not FLUX.
