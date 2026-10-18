@@ -301,6 +301,7 @@ function card(st, isRun) {
   if (st.skill === "hold") html += `<div class="p">holds until <b>${esc((st.hold_until || []).join(", "))}</b> are done</div>`;
   else if (st.kind === "primitive") html += `<div class="p">scripted: <b>${esc(st.skill)}</b></div>`;
   else if (st.kind === "operator") html += `<div class="p">operator: <b>${esc(st.instruction || st.skill)}</b></div>`;
+  else if (st.driver) html += `<div class="p"><b>REPLAY</b> ${esc(st.driver)}, not FLUX</div>`;
   else html += `<div class="p"><b>FLUX</b> "${esc(st.prompt || "")}"</div>`;
   if (st.success_check) html += `<div class="c">check: ${esc(st.success_check)}</div>`;
   if (st.depends_on && st.depends_on.length) html += `<div class="c">after ${esc(st.depends_on.join(", "))}</div>`;
@@ -375,7 +376,7 @@ function render() {
     $("planmeta").textContent = `v${p.version} from ${p.source}, ${p.attempts} attempt(s), ${p.latency_s} s, USD ${p.cost_usd.toFixed(4)}` + (p.concurrent_pairs && p.concurrent_pairs.length ? `, ${p.concurrent_pairs.length} parallel pair(s)` : "");
     $("rationale").textContent = p.plan ? (p.plan.rationale || "") : "";
     $("errors").innerHTML = (p.errors || []).map(e => "&#9888; " + esc(e)).join("<br>");
-    const steps = p.plan ? p.plan.steps.map(s => ({ ...s, kind: (S.vocabulary.find(v => v.name === s.skill) || {}).kind, prompt: (S.vocabulary.find(v => v.name === s.skill) || {}).prompt })) : [];
+    const steps = p.plan ? p.plan.steps.map(s => ({ ...s, kind: (S.vocabulary.find(v => v.name === s.skill) || {}).kind, prompt: (S.vocabulary.find(v => v.name === s.skill) || {}).prompt, driver: (S.vocabulary.find(v => v.name === s.skill) || {}).driver })) : [];
     renderLanes(steps, p.levels, p.concurrent_pairs, false);
   } else if (run) {
     proposalVersion = null; $("approve").disabled = true; $("approve").textContent = "Approve and run";

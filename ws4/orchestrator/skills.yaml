@@ -110,6 +110,14 @@ skills:
     # the check passes the policy stops and the runner holds the arm's last command, and from then on nothing drives it
     finish: hold
     package: skill_open_box
+    # Fallback, the FLUX box LoRA went 0/4 on the arm (18 Oct 08:20): `--skill-backend open_box=replay` (or
+    # `backend: replay` here) replays recorded take 59's box-arm actions instead of FLUX (ws4/single_arm/replay.py):
+    # time-warped to 1 deg/tick, through the same guard, this kit's keep-out with its envelope and the freezes; the lid
+    # check runs once the take has been replayed to its end; the HMI, events and trial notes say "scripted replay of
+    # recorded demo 59", never FLUX, and no trial row is written for it. Take 59: P3, nearest the box home at its
+    # start, widest pen-skill gate margins at its end (single_arm/replay.py DEFAULT_EPISODE).
+    backend: flux
+    replay: {episode: 59, root: ~/.cache/huggingface/lerobot/ws4/haller_open_the_box, columns: left}
     # box takes 7-74, right-arm midline +0.17 m (box only), approved overrides recorded in skills/box/skill.json
     keepout: skills/box/workspace.json
     keywords: ["open the box", "open the lid", "open it", "pull its handle", "pull the handle"]

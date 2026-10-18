@@ -44,6 +44,11 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--right-package", default=None)
     g.add_argument("--skill-package", action="append", default=[], metavar="SKILL=PACKAGE",
                    help="repeatable: the policy server package of one skill (one LoRA per skill)")
+    g.add_argument("--skill-backend", action="append", default=[], metavar="SKILL=flux|replay",
+                   help="repeatable: replay = that skill's recorded take (its `replay:` entry, "
+                        "ws4/single_arm/replay.py) as a scripted policy through the same safety stack instead of FLUX "
+                        "(open_box=replay: the box fallback); never logged as a FLUX trial")
+    g.add_argument("--replay-episode", type=int, default=None, help="the take of every replay skill (default: yaml)")
     g.add_argument("--imagine", choices=("lazy",), default=None,
                    help="the server keeps FLUX's imagined frames per chunk; the HMI shows imagined vs actual")
     g.add_argument("--sync-inference", action="store_true", help="block the control loop during inference")
@@ -154,6 +159,7 @@ def _config(a: argparse.Namespace):
         server=a.server or ("http://127.0.0.1:8790" if haller else "http://127.0.0.1:8765"),
         token_file=a.token_file, package=a.package, left_package=a.left_package,
         skill_packages=dict(_pair(x, "--skill-package") for x in a.skill_package), imagine=a.imagine or "",
+        skill_backends=dict(_pair(x, "--skill-backend") for x in a.skill_backend), replay_episode=a.replay_episode,
         right_package=a.right_package, async_inference=False if a.sync_inference else None, seed=a.seed,
         image_size=(h, w), randomize=not a.no_randomize, lid_on_box=a.lid_on_box,
         robot_id=a.robot_id or ("haller_right" if haller else "xlerobot"), left_port=a.left_port,

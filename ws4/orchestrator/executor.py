@@ -95,6 +95,7 @@ class StepRun:
             "elapsed_s": round(max(0.0, elapsed), 1), "timeout_s": self.skill.timeout_s, "chunks": self.chunks,
             "reason": self.reason, "phase": self.phase, "plan_version": self.plan_version,
             "verifying": self.verifying is not None, "instruction": self.skill.instruction,
+            "driver": self.skill.driver,  # e.g. "scripted replay of recorded demo 59": not FLUX
             "last_verdict": self.verdicts[-1].as_dict() if self.verdicts else None,
         }
 
@@ -569,6 +570,8 @@ class Executor:
         run.target = target
         run.policy_started = skill.is_flux
         what = f"FLUX prompt {skill.prompt!r}" if skill.is_flux else "scripted primitive"
+        if skill.driver:
+            what = f"{skill.driver.upper()}, NOT FLUX"
         self.events.add("info", f"{step.id}: start on {step.arm} arm, attempt {run.attempt}/{step.max_attempts}, "
                         f"{what} via {target}")
 
@@ -658,7 +661,10 @@ class Executor:
                     continue
             elif run.verifying is None:
                 scripted_done = hasattr(backend, "finished") and backend.finished(run.target, state6)
-                if scripted_done or run.chunks >= run.verify_at:
+                # a replay is checked once the take has been replayed to its end (the pen skills' start gate expects
+                # the box arm where a box take ends, not mid-take)
+                periodic = run.chunks >= run.verify_at and not getattr(backend, "verify_when_finished", False)
+                if scripted_done or periodic:
                     run.verify_at = run.chunks + skill.verify_every_chunks
                     run.final_check = bool(scripted_done)
                     self._verify(run, obs)

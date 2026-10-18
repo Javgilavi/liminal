@@ -144,15 +144,18 @@ class ToPose(FakeBackend):
         return dataclasses.replace(response, commands=np.asarray(frames))
 
 
-def serve(tmp_path, box_pose=GREEN_HOLD, policies=None):
+def serve(tmp_path, box_pose=GREEN_HOLD, policies=None, omit=()):
     """flux.remote's HTTP server on localhost with one fake package per chain skill: the box policy goes to
-    ``box_pose``, the pen-arm policies hold still unless ``policies`` (skill -> backend) says otherwise."""
+    ``box_pose``, the pen-arm policies hold still unless ``policies`` (skill -> backend) says otherwise; ``omit``:
+    skills whose package the server does not serve."""
     from flux.remote import make_server
 
     backends = {pkg: FakeBackend(SO101_CONTRACT, velocity=0.0, delay_s=0.005) for pkg in PACKAGES.values()}
     backends[PACKAGES["open_box"]] = ToPose(box_pose)
     for skill, backend in (policies or {}).items():
         backends[PACKAGES[skill]] = backend
+    for skill in omit:
+        del backends[PACKAGES[skill]]
     server = make_server(backends, "127.0.0.1", 0, token="chain-token")
     threading.Thread(target=server.serve_forever, daemon=True).start()
     token = tmp_path / "flux_token"
@@ -168,21 +171,23 @@ def chain_server(tmp_path):
     server.server_close()
 
 
-def short_chain_vocab(tmp_path, timeout=3.0):
+def short_chain_vocab(tmp_path, timeout=3.0, replay=None):
     data = yaml.safe_load(DEFAULT_VOCABULARY.read_text())
     for name in CHAIN:
         data["skills"][name]["timeout_s"] = timeout
         data["skills"][name]["verify_every_chunks"] = 1
+    if replay is not None:
+        data["skills"]["open_box"]["replay"] = replay
     path = tmp_path / "skills.yaml"
     path.write_text(yaml.safe_dump(data))
     return str(path)
 
 
-def chain_session(tmp_path, server, token, step_timeout=3.0, **kw):
+def chain_session(tmp_path, server, token, step_timeout=3.0, replay=None, **kw):
     """The packages come from skills.yaml (the fixed demo names), not from --skill-package."""
     cfg = SessionConfig(env="haller", robot="fake", policy="remote", server=server, token_file=token,
                         planner="stub", verifier="manual", realtime=False,
-                        task="final_chain", vocabulary=short_chain_vocab(tmp_path, step_timeout), max_run_s=120,
+                        task="final_chain", vocabulary=short_chain_vocab(tmp_path, step_timeout, replay), max_run_s=120,
                         condition="post_training", variant="lora_chain", checkpoint="ws4/chain-loras@test",
                         trial_log=str(tmp_path / "trials.jsonl"), runs_dir=str(tmp_path / "runs"), **kw)
     return Session(cfg)
@@ -821,3 +826,93 @@ def test_cli_wires_the_runner_settings_and_the_handover():
     assert (cfg.action_steps, cfg.lift_stall_deg, cfg.prefetch_ticks, cfg.hold_arms) == (None, None, None, ())
     sim = _config(p.parse_args([]))
     assert sim.server == "http://127.0.0.1:8765" and sim.max_run_s == 600
+
+
+# ---------------------------------------------------------------------------------------------- box fallback: replay
+def write_box_take(root, episode, take):
+    """A LeRobot v3 parquet with one take: the box arm's actions in the left_* columns, the pen arm tucked."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    pen = np.tile([3, -83.6, 81.9, 82.8, -10.2, 0.9], (len(take), 1))
+    rows = np.hstack([np.asarray(take, float), pen])
+    (root / "data" / "chunk-000").mkdir(parents=True)
+    pq.write_table(pa.table({"episode_index": pa.array([episode] * len(rows), pa.int64()),
+                             "frame_index": pa.array(range(len(rows)), pa.int64()),
+                             "action": pa.array(rows.tolist(), pa.list_(pa.float32()))}),
+                   root / "data" / "chunk-000" / "file-000.parquet")
+    return root
+
+
+def box_take():
+    """From the box home out to the hold the start gate allows, at up to 4 deg per frame (faster than the guard)."""
+    home, hold = np.array([0, 0, 0, 0, 0, 100.0]), np.array(GREEN_HOLD)
+    return np.vstack([home + (hold - home) * k / 12 for k in range(13)] + [hold] * 8)
+
+
+def test_box_replay_runs_the_chain_and_is_never_called_flux(tmp_path):
+    """--skill-backend open_box=replay: the box step replays a recorded take through the same stack (1 deg/tick,
+    the box kit's keep-out, the hold), checked once the take has ended; the box package is not even served. It is
+    labelled a scripted replay in the events, the HMI state and the chain's trial line, and writes no trial row."""
+    from orchestrator.haller import import_single_arm
+
+    import_single_arm()
+    import replay as replay_module
+
+    root = write_box_take(tmp_path / "box", 7, box_take())
+    server, url, token, backends = serve(tmp_path, omit=("open_box",))
+    s = chain_session(tmp_path, url, token, skill_backends={"open_box": "replay"},
+                      replay={"episode": 7, "root": str(root), "columns": "left"})
+    try:
+        box = s.vocab["open_box"]
+        assert box.backend == "replay" and box.driver == replay_module.label(7) == "scripted replay of recorded demo 7"
+        assert "right:replay_open_box" in s.target_backend and "right:skill_open_box" not in s.target_backend
+        s.verifier = checks = ScriptedChecks()
+        right = []
+        send = s.rig.robot.send_action
+        s.rig.robot.send_action = lambda c: right.append((s.runner._owner.get("right"), np.array(c[6:12]))) or send(c)
+        snaps = []
+        original = s.runner.start
+        s.runner.start = lambda target, task: snaps.append(s.executor.snapshot()) or original(target, task)
+        result = s.execute(s.plan(GOAL).result.plan)
+        assert result.status == "succeeded" and (result.steps_done, result.steps_total) == (4, 4), result.failure
+        assert checks.waits == 0 and checks.calls.count("open_box") == 4  # checked once, at its end; 3 prechecks
+        replayed = np.array([c for owner, c in right if owner == "right:replay_open_box"])
+        assert np.abs(np.diff(replayed[:, :5], axis=0)).max() <= 1.0 + 1e-9  # the take time-warped onto 1 deg/tick
+        assert np.allclose(s.rig.arms["right"].robot.joints()[:5], GREEN_HOLD[:5], atol=1e-6)  # holds at its end
+        assert s.rig.holding == {"right"}
+        msgs = [e["msg"] for e in s.events.recent(800)]
+        start = [m for m in msgs if "start on right arm" in m]
+        assert start and all("SCRIPTED REPLAY OF RECORDED DEMO 7, NOT FLUX" in m and "FLUX prompt" not in m
+                             for m in start)
+        assert any("not logged as a trial: scripted replay of recorded demo 7, not FLUX" in m for m in msgs)
+        assert any("open_box: scripted replay of recorded demo 7 (not FLUX)" in m for m in msgs)  # runner settings
+        card = [st for snap in snaps for st in snap["steps"] if st["skill"] == "open_box"]
+        assert card and all(st["driver"] == "scripted replay of recorded demo 7" for st in card)
+        assert {v["name"]: v["driver"] for v in s.snapshot()["vocabulary"]}["open_box"] == box.driver
+        trials = load_trial_log().load(tmp_path / "trials.jsonl")
+        assert [t.task for t in trials] == CHAIN[1:] + ["final_chain"]  # no trial row for the replay
+        chain = trials[-1]
+        assert "NOT FLUX: open_box: scripted replay of recorded demo 7" in chain.notes
+        assert chain.checkpoint == "ws4/chain-loras@test (open_box: scripted replay of recorded demo 7, not FLUX)"
+        assert PACKAGES["open_box"] not in backends
+    finally:
+        s.close()
+        server.shutdown()
+        server.server_close()
+
+
+def test_replay_backend_needs_a_replay_entry(tmp_path, chain_server):
+    server, token, _ = chain_server
+    with pytest.raises(ValueError, match="skill-backend put_green_pen_in_slot=replay"):
+        chain_session(tmp_path, server, token, skill_backends={"put_green_pen_in_slot": "replay"})
+    import argparse
+
+    from orchestrator.__main__ import _config, _session_args
+
+    p = argparse.ArgumentParser()
+    _session_args(p)
+    cfg = _config(p.parse_args(["--env", "haller", "--skill-backend", "open_box=replay", "--replay-episode", "40"]))
+    assert cfg.skill_backends == {"open_box": "replay"} and cfg.replay_episode == 40
+    v = load_vocabulary(DEFAULT_VOCABULARY)
+    assert v["open_box"].backend == "flux" and v["open_box"].replay["episode"] == 59  # FLUX unless asked

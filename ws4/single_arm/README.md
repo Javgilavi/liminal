@@ -454,6 +454,39 @@ provisional split, eval_skill commands for the box on the right arm, the refusal
 test box skill (built from the pen data with the right arm's columns) against the live 8790 server: right-arm flags,
 `open_box` steps, and the home check reporting the missing left-wrist reference instead of crashing.
 
+### Box fallback: scripted replay of a recorded take (18 Oct, morning)
+
+The FLUX box LoRA (`skill_open_box`) went 0/4 on the arm (runs/20261018_082015, orchestrator
+runs/20261018_081707_open_the_box): it crawls from rest, the wrist rolls about 5 deg where the demos roll about 50, and
+the tcp_env keep-out stops it; offline from the recorded frame 0 it barely moves either. `--backend replay`
+([replay.py](replay.py)) feeds one recorded take's box-arm actions (`left_*` columns) to the runner as policy chunks,
+so every command passes the same guard, keep-out with the box envelope, stall / keep-out / load freezes, torque cap and
+start check as a FLUX command. The take is time-warped onto the step limit first (each recorded step split into ticks
+of at most `--max-step` deg, 5 % on the gripper, linear in joint space, from the arm's pose at the start), so the arm
+follows the recorded path, only slower where the operator moved faster. When the last command has been executed the
+attempt ends with `replay finished: scripted replay of recorded demo N, holding where the take ends`; the arm keeps
+holding (x, the default) or returns on r. meta.json carries `replay` and `checkpoint: scripted replay of recorded demo
+N (...)`; a replay is never asked for a score or written to trials.jsonl. Default take 59 (P3, train): nearest the
+box home at its start (1.6 deg), the widest pen-skill gate margins at its end, settled in its last second, 0
+keep-out refusals over its 549 ticks from box home (18.3 s). `python ws4/single_arm/replay.py 59` summarises a take.
+
+```bash
+python ws4/single_arm/run_single_arm.py --backend replay --replay-episode 59 \
+  --port /dev/haller_arm_left --robot-id haller_left --other-arm-port /dev/haller_arm_right --other-arm-id haller_right \
+  --other-arm-lo 1.1 -83.7 81.8 82.8 -10.4 0.9 --other-arm-hi 5.4 -83.5 81.9 82.8 -10.1 0.9 --other-arm-tol 5 \
+  --scene-cam /dev/haller_cam_mast --scene-fourcc none \
+  --wrist-cam /dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.3:1.0-video-index0 --wrist-fourcc none --wrist-rotate 180 \
+  --task-side right --keepout-config ws4/single_arm/skills/box/workspace.json --start-pose 0 0 0 0 0 100 \
+  --task "open the box by pulling its handle" --trial-task open_box --layouts P3 \
+  --layout-ref ws4/single_arm/skills/box/layouts --home-check ws4/single_arm/skills/box/layouts \
+  --seconds 60 --max-step 1.0 --max-relative-target 20 --lift-stall-deg 25
+```
+
+`--prime-ticks K` with `--backend remote` replays the first K ticks (rounded up to the action horizon) and then lets
+FLUX take over with that history, for trying a primed FLUX box start; such attempts are logged with the variant
+`<variant>+primed-ep<N>-<K>`. Tests: `tests/test_replay.py` (fake arm, a synthetic parquet; take 59 against the box
+workspace when the dataset is in the cache).
+
 ### Imported by ws4-orchestrator (stable through Sunday)
 
 `ws4/orchestrator` drives the Haller task arm with these, imported read-only; only keyword arguments with defaults

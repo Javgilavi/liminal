@@ -19,6 +19,7 @@ KINDS = ("flux", "primitive", "operator")  # operator: the arm waits while a per
 PRIMITIVES = ("hold", "home", "tuck", "open_gripper", "close_gripper")
 VERIFIER_MODELS = ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5")
 FINISHES = ("", "home", "hold")
+BACKENDS = ("flux", "replay")  # replay: a recorded take as a scripted policy (ws4/single_arm/replay.py), not FLUX
 
 
 def resolve_keepout(path: str | Path) -> Path:
@@ -114,6 +115,10 @@ class Skill:
     runner_args: tuple[str, ...] = ()  # as recorded, for the logs
     start_gate: dict | None = None  # other_arm_gate (gate.py): the other arm's pose is checked before the step
     kit: str = ""  # path of that skill.json
+    # flux: the skill's package on the policy server. replay: ``replay`` = {episode, root, columns} of a recorded take,
+    # fed through the same safety stack as a scripted policy (the box fallback, 18 Oct); never FLUX, never a trial row.
+    backend: str = "flux"
+    replay: dict | None = None
     keywords: tuple[str, ...] = ()
     sim: dict | None = None
     sim_check: dict | None = None
@@ -121,6 +126,14 @@ class Skill:
     @property
     def is_flux(self) -> bool:
         return self.kind == "flux"
+
+    @property
+    def driver(self) -> str:
+        """What drives the arm when it is not FLUX (the HMI, the events and the trial notes show it); "" for FLUX.
+        The same text as ws4/single_arm/replay.py ``label``."""
+        if self.backend == "replay" and self.replay:
+            return f"scripted replay of recorded demo {self.replay['episode']}"
+        return ""
 
     def planner_view(self) -> dict[str, Any]:
         """What Claude sees: no sim internals, no package names."""
@@ -242,6 +255,16 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             errors.append(f"{name}: unknown primitive (have {PRIMITIVES})")
         if (spec.get("finish") or "") not in FINISHES:
             errors.append(f"{name}: finish must be home, hold or absent")
+        backend, replay = str(spec.get("backend") or "flux"), spec.get("replay")
+        if backend not in BACKENDS:
+            errors.append(f"{name}: backend must be one of {BACKENDS}")
+        if replay is not None:
+            replay = {"episode": int(replay.get("episode", -1)), "root": str(replay.get("root") or ""),
+                      "columns": str(replay.get("columns") or "")}
+            if kind != "flux" or replay["episode"] < 0 or not replay["root"] or replay["columns"] not in ARMS:
+                errors.append(f"{name}: replay needs a flux skill and {{episode, root, columns: left|right}}")
+        if backend == "replay" and replay is None:
+            errors.append(f"{name}: backend replay needs a replay: {{episode, root, columns}} entry")
         runner, runner_args, start_gate, kit = {}, (), None, ""
         if spec.get("keepout"):
             runner, runner_args, start_gate, kit, kit_errors = load_kit(
@@ -287,6 +310,8 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             runner_args=runner_args,
             start_gate=start_gate,
             kit=kit,
+            backend=backend,
+            replay=replay,
             keywords=tuple(str(k).lower() for k in spec.get("keywords") or ()),
             sim=spec.get("sim"),
             sim_check=spec.get("sim_check"),
