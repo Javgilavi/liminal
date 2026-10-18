@@ -999,6 +999,15 @@ perception = [
     { name = "numpy" },
     { name = "opencv-python-headless" },
 ]
+research = [
+    { name = "fastapi" },
+    { name = "mujoco" },
+    { name = "numpy" },
+    { name = "opencv-python-headless" },
+    { name = "pillow" },
+    { name = "uvicorn" },
+    { name = "websockets" },
+]
 sim = [
     { name = "mujoco" },
 ]
@@ -1028,14 +1037,17 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "huggingface-hub", marker = "extra == 'flux'" },
     { name = "lerobot", extras = ["feetech"], marker = "extra == 'hardware'", specifier = "==0.5.1" },
+    { name = "liminal", extras = ["ui", "live", "sim"], marker = "extra == 'research'" },
     { name = "mujoco", marker = "extra == 'sim'", specifier = ">=3" },
     { name = "numpy", marker = "extra == 'hybrid'", specifier = ">=1.24" },
     { name = "numpy", marker = "extra == 'perception'" },
+    { name = "numpy", marker = "extra == 'research'", specifier = ">=1.26" },
     { name = "numpy", marker = "extra == 'vlm-qwen'" },
     { name = "opencv-python-headless", marker = "extra == 'hardware'", specifier = ">=4.9,<5" },
     { name = "opencv-python-headless", marker = "extra == 'live'", specifier = ">=4.9,<5" },
     { name = "opencv-python-headless", marker = "extra == 'perception'", specifier = ">=4.9,<5" },
     { name = "peft", marker = "extra == 'flux'" },
+    { name = "pillow", marker = "extra == 'research'", specifier = ">=10" },
     { name = "pillow", marker = "extra == 'vlm-qwen'" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pyyaml", specifier = ">=6" },
@@ -1049,7 +1061,7 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'ui'", specifier = ">=0.32,<1" },
     { name = "websockets", marker = "extra == 'live'", specifier = ">=15,<17" },
 ]
-provides-extras = ["hardware", "live", "flux", "sim", "perception", "vlm-qwen", "llm", "hybrid", "ui", "dev"]
+provides-extras = ["hardware", "live", "flux", "sim", "perception", "vlm-qwen", "llm", "hybrid", "ui", "research", "dev"]
 
 [[package]]
 name = "markdown-it-py"
