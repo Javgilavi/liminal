@@ -1,6 +1,6 @@
 # Submission video: edit list
 
-Status: **v4 = final candidate, Sun 18 Oct 12:45 CEST**: chain timelapse cold open, full-chain run on the console,
+Status: **v4 = final, chosen for submission by Oscar (`liminal_2min_v4.mp4`), Sun 18 Oct 12:50 CEST**: chain timelapse cold open, full-chain run on the console,
 voice-over, original music, animated cards. v3 (12:32) is the same without the timelapse cold open.
 Numbers in captions and voice come only from [NUMBERS.md](NUMBERS.md) (chain: section 0.1b; demo mode: 0.5).
 
