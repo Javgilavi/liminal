@@ -13,6 +13,7 @@ Candidate scenes (check licences/quality before adopting; see docs/research/04):
 
 from __future__ import annotations
 
+import atexit
 import math
 import threading
 import time
@@ -39,6 +40,9 @@ class MujocoWorld:
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="mujoco", daemon=True)
         self._thread.start()
+        # Nothing else stops the world (arms share it, disconnect is a no-op): without this the daemon
+        # thread can still be in mj_step while the interpreter frees the model, a segfault at exit.
+        atexit.register(self.stop)
 
     def _run(self) -> None:
         dt = 1.0 / self.sim_hz
