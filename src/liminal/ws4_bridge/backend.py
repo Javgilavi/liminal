@@ -106,5 +106,13 @@ class Ws4ChainBackend:
                                              context=f"The robot finished the bounded skill {skill.name!r}.")
             await ctx.inspector.inspect_until_known(request, timeout_s=ctx.inspection.timeout_s,
                                                     retry_delay_s=ctx.inspection.retry_delay_s)
+            passed = result.get("passed_check")
+            if passed and ctx.world.evaluate(skill.success) is None:
+                # The tree's own look was unclear (no consensus, or below the confidence threshold), not contrary:
+                # ws4's confident pass of the same check stands, as in ws4's re-check rule (live 18 Oct run 3: the
+                # green pen was seated, ws4 passed it at 0.80, the tree's look said 0.6 / 0.7 without agreeing).
+                ctx.world.observe(skill.success, True, source="ws4_step_check", confidence=passed["confidence"],
+                                  evidence=f"ws4 check passed ({passed['source']}, {passed['confidence']:.2f}): "
+                                           f"{passed['observation']}; the tree's own look was unclear")
         return SkillResult(Status.SUCCESS, skill, f"ws4 step succeeded, {driver} ({result.get('run_dir')})",
                            time.monotonic() - t0)

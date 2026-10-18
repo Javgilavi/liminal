@@ -43,7 +43,8 @@ class Ws4Bridge:
 
     def __init__(self, settings: Mapping[str, Any] | None = None, session_factory: Callable[[Any], Any] | None = None):
         self.settings = dict(settings or {})
-        unknown = set(self.settings) - {"session", "token_cmd_env", "hmi_port", "poll_s", "verifier_model"}
+        unknown = set(self.settings) - {"session", "token_cmd_env", "hmi_port", "poll_s", "verifier_model",
+                                         "flux_timeout_s"}
         if unknown:
             raise ValueError(f"unknown ws4 bridge settings {sorted(unknown)}")
         self.poll_s = float(self.settings.get("poll_s", 0.1))
@@ -105,13 +106,19 @@ class Ws4Bridge:
 
         cfg = SessionConfig(**self.session_config())
         session = self._factory(cfg) if self._factory is not None else Session(cfg, threaded=True)
+        import dataclasses
+
         model = self.settings.get("verifier_model")
         if model:  # every step check on this model instead of the vocabulary's (Haiku 5.5 by default)
-            import dataclasses
-
             for name, skill in list(session.vocab.skills.items()):
                 session.vocab.skills[name] = dataclasses.replace(skill, verifier_model=model)
             session.events.add("info", f"liminal bridge: every step check runs on {model}")
+        timeout = self.settings.get("flux_timeout_s") or os.environ.get("LIMINAL_WS4_FLUX_TIMEOUT_S")
+        if timeout:  # the Opus chunk gate makes each FLUX chunk wait for Opus: the attempt budget grows with it
+            for name, skill in list(session.vocab.skills.items()):
+                if skill.is_flux and skill.backend != "replay":
+                    session.vocab.skills[name] = dataclasses.replace(skill, timeout_s=float(timeout))
+            session.events.add("warn", f"liminal bridge: FLUX attempt timeout {float(timeout):.0f} s (Opus gate)")
         return session
 
     def disconnect(self) -> None:
@@ -244,4 +251,10 @@ class Ws4Bridge:
             result = dict(summary.get("result") or {})
             result["run_dir"] = str(s.run_dir) if s.run_dir else ""
             result["trial"] = summary.get("trial")
+            run = getattr(s.executor, "runs", {}).get(step_id) if s.executor is not None else None
+            threshold = run.skill.confidence if run is not None else 1.0
+            passed = [v for v in (run.verdicts if run is not None else []) if v.done and v.confidence >= threshold]
+            if passed:  # ws4's own confident pass of this step's check (the tree may use it, see backend.py)
+                result["passed_check"] = {"observation": passed[-1].observation, "source": passed[-1].source,
+                                          "confidence": float(passed[-1].confidence)}
             return result

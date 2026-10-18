@@ -37,6 +37,7 @@ class HybridConfig:
     frame_description: str = "SO-101 MJCF root frame; gripperframe site; not camera coordinates"
     timeout_s: float = 30.0
     max_tokens: int = 4096
+    effort: str = ""  # output_config.effort (low | medium | high | xhigh | max); "" = the model's default
     max_student_steps: int = 15
     history_turns: int = 8
     max_position_delta_m: float = .05
@@ -184,6 +185,8 @@ class ClaudeReasoner:
                   "messages": [{"role": "user", "content": content}],
                   "tools": [{"name": "hybrid_decision", "description": "Choose the next bounded robot segment",
                              "input_schema": schema}]}
+        if self.config.effort:
+            kwargs["output_config"] = {"effort": self.config.effort}
         if self.config.model in AUTO_TOOL_MODELS:
             # These models reject a forced tool_choice (HTTP 400): ask for the call instead; the checks below
             # still refuse any answer that is not exactly one hybrid_decision call.

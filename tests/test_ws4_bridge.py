@@ -453,3 +453,35 @@ def test_a_slow_check_counts_as_unclear_and_keeps_the_lid(ws4):
     slow = asyncio.run(model.inspect_request(request, frame))["predicates"]["lid_open"]
     release.set()
     assert slow["value"] == "true" and "longer than" in slow["evidence"] and "kept the confident" in slow["evidence"]
+
+
+@pytest.mark.parametrize("tree_sees, expected", [("unknown", True), ("false", False)])
+def test_unclear_tree_look_keeps_the_ws4_pass(ws4, tmp_path, policy_server, tree_sees, expected):
+    """Run 3: ws4 passed the seated green pen (0.80), the tree's own look was unclear and the step failed. An unclear
+    tree look now keeps ws4's confident pass; a confident contrary look still fails the step."""
+    from liminal.core.types import Skill
+
+    server, token, _ = policy_server
+    ctx, bridge, scene = bridge_context(ws4, tmp_path, server, token)
+
+    async def fake_run_step(skill, arm, **kw):
+        return {"status": "succeeded", "run_dir": "x",
+                "passed_check": {"observation": "upright in the green holder", "source": "opus", "confidence": 0.8}}
+
+    async def look(request, images):
+        return {"predicates": {p: {"value": "true" if p == "lid_open" else tree_sees, "evidence": "tree"}
+                               for p in request.predicates}}
+
+    bridge.connect()
+    try:
+        bridge.run_step = fake_run_step
+        scene.inspect_request = look
+        result = asyncio.run(ctx.skills.policy.execute(
+            Skill("left", "put_green_pen_in_slot", prompt="put the green pen in the green slot",
+                  success="green_pen_in_slot"), ctx))
+        assert result.status.ok
+        assert ctx.world.evaluate("green_pen_in_slot") is expected
+        source = ctx.world.observation("green_pen_in_slot").source
+        assert source == ("ws4_step_check" if expected else "vlm_scene_inspector")
+    finally:
+        bridge.disconnect()

@@ -232,6 +232,11 @@ def test_claude_multimodal_tool_contract_no_network(monkeypatch):
     asyncio.run(ClaudeReasoner(HybridConfig(model="claude-opus-4-8")).decide(
         {"task": "pick"}, [{"label": "scene", "data": "eA=="}], decision_schema("id")))
     assert seen["tool_choice"] == {"type": "tool", "name": "hybrid_decision"} and "fallbacks" not in seen
+    assert "output_config" not in seen  # no effort set: the model's default
+    seen.clear()
+    asyncio.run(ClaudeReasoner(HybridConfig(model="claude-opus-5-5", effort="low")).decide(
+        {"task": "pick"}, [{"label": "scene", "data": "eA=="}], decision_schema("id")))
+    assert seen["output_config"] == {"effort": "low"}
 
 
 def test_schema_rejects_nonfinite_unused_fields():

@@ -5,6 +5,10 @@
 # arms: {...}}` (configs/policy/haller_remote_registry.yaml); `enabled` below only applies to the standalone runners.
 enabled: true
 model: claude-opus-5-5
+# The FLUX 3 Action report's most efficient hybrid (F3A + Astra at LOW effort: 90 % success, $8.77 and 8m08s per
+# success, vs medium 84 % / 10m05s and xhigh 94 % / 11m53s; bfl.ai/models/flux-3-action#hybrid-policies, Table 7).
+# Without it Opus 5.5 runs at its default medium: 8.2-8.6 s per decision on the Haller (18 Oct, ~10-14k tokens in).
+effort: low
 model_path: sim/single_arm/so101.xml
 site: gripperframe
 # q_model_degrees = (q_robot_degrees - joint_offsets_deg) / joint_signs
