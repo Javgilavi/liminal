@@ -105,6 +105,7 @@ def robot_config(ws4, tmp_path, server, token, **session):
     cfg = yaml.safe_load(ROBOT.read_text())
     cfg["ws4"]["hmi_port"] = 0
     cfg["ws4"]["session"].update({"robot": "fake", "server": server, "token_file": token, "verifier": "manual",
+                                  "skill_backends": {},  # FLUX for every skill unless a test asks for the replay
                                   "realtime": False, "vocabulary": str(tmp_path / "skills.yaml"),
                                   "runs_dir": str(tmp_path / "runs"), "trial_log": str(tmp_path / "trials.jsonl"),
                                   "max_run_s": 120, **session})
@@ -403,3 +404,4 @@ def test_unclear_lid_view_keeps_the_last_confident_verdict_for_keep_s(ws4):
     assert lid(False, 0.35, 36)["value"] == "unknown"  # 31 s since the last confident view
     assert lid(False, 0.9, 40)["value"] == "false"  # a confident closed lid always counts
     assert lid(True, 0.5, 45)["value"] == "false"  # and is what an unclear view keeps
+

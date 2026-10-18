@@ -85,24 +85,26 @@ class Ws4ChainBackend:
                 # ws4 moves the other arm too (to its `other_arm_pose`): no other node may own it meanwhile
                 owner = f"{skill.label}:ws4 {spec.other_arm_pose}"
                 await stack.enter_async_context(ctx.safety.claim(other, owner=owner))
+            # a skill the session runs as a recorded take (ws4 --skill-backend open_box=replay) is no FLUX policy
+            driver = f"{spec.driver}, not FLUX" if getattr(spec, "driver", "") else f"FLUX {spec.package}"
             ctx.world.log("ws4_step", skill=skill.label, ws4_skill=entry.ws4_skill, ws4_arm=arm.ws4_arm,
-                          package=spec.package, checkpoint=entry.checkpoint)
+                          driver=driver, package=spec.package, checkpoint=entry.checkpoint)
             result = await bridge.run_step(entry.ws4_skill, arm.ws4_arm, label=skill.label,
                                            max_attempts=entry.max_attempts or self.max_attempts,
                                            should_stop=lambda: ctx.safety.estopped)
-        ctx.world.log("ws4_result", skill=skill.label, status=result.get("status"), failure=result.get("failure"),
-                      run_dir=result.get("run_dir"), steps_done=result.get("steps_done"),
-                      interventions=result.get("interventions"))
+        ctx.world.log("ws4_result", skill=skill.label, driver=driver, status=result.get("status"),
+                      failure=result.get("failure"), run_dir=result.get("run_dir"),
+                      steps_done=result.get("steps_done"), interventions=result.get("interventions"))
         if ctx.safety.estopped:
             raise EmergencyStop("e-stop during a ws4 step")
         if result.get("status") != "succeeded":
-            return SkillResult(Status.FAILURE, skill, f"ws4 {result.get('status')}: {result.get('failure', '')}",
-                               time.monotonic() - t0)
+            return SkillResult(Status.FAILURE, skill, f"ws4 {result.get('status')} ({driver}): "
+                               f"{result.get('failure', '')}", time.monotonic() - t0)
         if ctx.inspector is not None and skill.success:
             # ws4's Haiku check passed; the tree's own perception looks again so SkillNode sees fresh evidence
             request = ctx.inspection.request((skill.success, *ctx.active_invariants),
                                              context=f"The robot finished the bounded skill {skill.name!r}.")
             await ctx.inspector.inspect_until_known(request, timeout_s=ctx.inspection.timeout_s,
                                                     retry_delay_s=ctx.inspection.retry_delay_s)
-        return SkillResult(Status.SUCCESS, skill, f"ws4 step succeeded ({result.get('run_dir')})",
+        return SkillResult(Status.SUCCESS, skill, f"ws4 step succeeded, {driver} ({result.get('run_dir')})",
                            time.monotonic() - t0)

@@ -29,6 +29,11 @@ ws4:
     right_robot_id: haller_left
     right_wrist_cam: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.3:1.0-video-index0
     hold_arms: []                  # [right] when the box arm is handed over already holding the lid open
+    # open_box runs as the scripted replay of recorded box take 59 (ws4 --skill-backend open_box=replay; logged as
+    # "scripted replay, not FLUX", trial condition scripted): the FLUX box LoRA failed 0/4 live on 18 Oct. Green, cutter
+    # and red pen stay FLUX on 8790. Last resort for the cutter: add put_yellow_cutter_in_slot: replay (take 67).
+    skill_backends:
+      open_box: replay
     task: liminal_assemble_components
     condition: post_training
     variant: liminal_bt+lora_chain
