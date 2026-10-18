@@ -21,9 +21,8 @@ in service of those three, in time order. Tick each line; the owner is who does 
 
 ## A. Repository README on main
 
-- [ ] **ws4/ is on main.** At the last fetch, `origin/main` had no `ws4/` directory (it has the team's `src/`,
-      `configs/`, `sim/`, `experiments/`, `integrations/`). Merge `ws4-handoff` into main, or every README link
-      breaks.
+- [ ] **ws4/ is on main**: merge PR #3 (https://github.com/Javgilavi/liminal/pull/3), which brings everything into
+      main; otherwise every README link breaks.
 - [ ] Copy `ws4/pitch/README_submission.md` to the repo root as `README.md` (it is written for the root), merging in
       the team's existing README sections for WS1, WS2, WS3 and WS5 (`[[TEAM:WORKSTREAMS]]`). Delete the HTML comment
       at its top.
@@ -34,7 +33,8 @@ in service of those three, in time order. Tick each line; the owner is who does 
 ## B. Slides
 
 - [ ] Hosted deck: https://claude.ai/artifact/FsptG2MfRYqkmaAqL4EDQm (19 slides). It is **private until shared**: share
-      it from the page's Share menu, or export PDF / PPTX from the page and attach that.
+      it from the page's Share menu. PDF: `~/liminal_video/out/liminal_slides.pdf`, also in `gdrive:liminal/05_video/`
+      (rendered locally from the deck source; PPTX from the page's Share > Export).
 - [ ] Every `[[...]]` on the slides replaced or the element deleted (results, orchestrator chain pill, team, cover and
       close pills).
 - [ ] The box step is called a scripted replay everywhere (slides, README, video captions), never FLUX.
@@ -50,7 +50,7 @@ in service of those three, in time order. Tick each line; the owner is who does 
 
 - [ ] Main cut 2:00 per STORYBOARD.md; 60 s cut for the final.
 - [ ] Captions match NUMBERS.md section 0; replays captioned "replayed", speed-ups captioned 2x / 4x, failures labelled.
-- [ ] Uploaded (unlisted is fine), link tested in a private window: `[[TEAM:VIDEO_URL]]`.
+- [ ] Submission video `gdrive:liminal/05_video/liminal_2min_v4.mp4`; shareable link (https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view, anyone with the link can view) tested in a private window.
 
 ## D. Final checks before submitting
 
@@ -76,7 +76,4 @@ Mirror of NUMBERS.md section 14; grep for the exact tokens.
 
 | Placeholder | What | Owner | Expected |
 |---|---|---|---|
-| `[[CLIP:HMI_CHAIN]]`, `[[CLIP:IMAGINED_VS_ACTUAL]]` | chain screen recording; optional live imagination clip | demo-rehearsal | with the chain |
-| `[[NUM:GPU_SPEND]]`, `[[NUM:CLAUDE_SPEND]]`, `[[NUM:RECORD_HOURS]]`, `[[NUM:TRAIN_HOURS]]` | cost and time split (optional) | Oscar | 13:00 |
 | `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to `[[TEAM:WS5]]`, `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]`, `[[TEAM:CREDITS]]` | team facts | Oscar / team | as early as possible |
-| `[[TEAM:VIDEO_URL]]`, `[[TEAM:SLIDES_URL]]`, `[[TEAM:DEMO_LAYOUT]]` | links, live layout | Oscar | 13:30 |
