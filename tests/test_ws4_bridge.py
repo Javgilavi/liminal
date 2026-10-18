@@ -358,3 +358,18 @@ def test_liminal_run_cli_drives_the_fake_haller(ws4, tmp_path, policy_server, mo
     assert {skill for kind, skill in calls if kind == "scene"} == {s for s, _ in CHAIN}
     assert all(len(backends[pkg].requests) > 1 for pkg in PACKAGES.values())  # warm-up plus the policy's chunks
     assert bridges and bridges[-1].session is None  # closed at the end of the run
+
+
+def test_session_settings_per_run(monkeypatch, tmp_path):
+    from liminal.ws4_bridge.session import Ws4Bridge
+
+    cfg = yaml.safe_load(ROBOT.read_text())["ws4"]
+    monkeypatch.setenv("WS4_TOKEN_CMD", "ssh -p 1 root@pod cat /workspace/flux_token")
+    monkeypatch.setenv("LIMINAL_WS4_SESSION", '{"observe": true, "hold_arms": ["right"], "operator": "oscar"}')
+    out = Ws4Bridge(cfg).session_config()
+    assert out["observe"] is True and out["hold_arms"] == ("right",) and out["operator"] == "oscar"
+    assert out["token_cmd"].endswith("cat /workspace/flux_token") and out["server"] == "http://127.0.0.1:8790"
+    assert (out["port"], out["right_arm_port"]) == ("/dev/haller_arm_right", "/dev/haller_arm_left")
+    monkeypatch.setenv("LIMINAL_WS4_SESSION", "[1]")
+    with pytest.raises(ValueError, match="JSON object"):
+        Ws4Bridge(cfg).session_config()

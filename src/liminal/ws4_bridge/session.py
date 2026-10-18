@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -54,7 +55,16 @@ class Ws4Bridge:
 
     # ------------------------------------------------------------------ lifecycle
     def session_config(self) -> dict[str, Any]:
-        cfg = {**HALLER_SESSION, **dict(self.settings.get("session") or {})}
+        """HALLER_SESSION, then the robot config's ``session:``, then ``$LIMINAL_WS4_SESSION`` (a JSON object, for the
+        settings of one run: ``{"observe": true}`` for a dry run, ``{"hold_arms": ["right"]}`` for a box arm handed
+        over holding the lid, ``{"operator": "oscar", "layout": "P3"}`` for the trial log)."""
+        try:
+            run = json.loads(os.environ.get("LIMINAL_WS4_SESSION", "") or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"LIMINAL_WS4_SESSION is not JSON: {exc}") from exc
+        if not isinstance(run, dict):
+            raise ValueError("LIMINAL_WS4_SESSION must be a JSON object of ws4 SessionConfig fields")
+        cfg = {**HALLER_SESSION, **dict(self.settings.get("session") or {}), **run}
         for key in _TUPLES:
             if cfg.get(key) is not None:
                 cfg[key] = tuple(cfg[key])
