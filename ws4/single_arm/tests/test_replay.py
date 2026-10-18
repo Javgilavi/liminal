@@ -26,15 +26,16 @@ TAKE = np.array([[0, 0, 0, 0, 0, 100.0]] + [[i * 0.6, -i * 0.4, i * 0.9, 0.0, i 
                 + [[12.0, -8.0, 18.0, 0.0, 50.0, 100.0]] * 10)
 
 
-def write_dataset(root: Path, episodes: dict[int, np.ndarray], other: np.ndarray | None = None) -> Path:
-    """LeRobot v3 layout, data columns only: 12-D actions [left_* | right_*], the take in the left_* columns."""
+def write_dataset(root: Path, episodes: dict[int, np.ndarray], other: np.ndarray | None = None,
+                  columns: str = "left") -> Path:
+    """LeRobot v3 layout, data columns only: 12-D actions [left_* | right_*], the take in ``columns``."""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
     rows = {"episode_index": [], "frame_index": [], "action": []}
     for ep, take in episodes.items():
-        pen = np.tile(other if other is not None else [3, -83.6, 81.9, 82.8, -10.2, 0.9], (len(take), 1))
-        for i, a in enumerate(np.hstack([take, pen])):
+        rest = np.tile(other if other is not None else [3, -83.6, 81.9, 82.8, -10.2, 0.9], (len(take), 1))
+        for i, a in enumerate(np.hstack([take, rest] if columns == "left" else [rest, take])):
             rows["episode_index"].append(ep)
             rows["frame_index"].append(i)
             rows["action"].append([float(v) for v in a])
@@ -157,3 +158,73 @@ def test_default_box_take_replays_inside_the_box_workspace():
     ko.other_q = (3, -83.6, 81.9, 82.8, -10.2, 0.9)
     assert not any(ko.refuse(b, a)[0] for a, b in zip(np.vstack([BOX_HOME, seq])[:-1], seq, strict=True))
     assert len(seq) / 30 < 60 and info["frames"] == 409
+
+
+# ---------------------------------------------------------------------------------------------- the cutter replay
+def test_each_skill_has_its_dataset_arm_and_default_take(tmp_path):
+    root, ep, columns = replay.take_source("cutter")
+    assert root.name == "haller_put_the_yellow_cutter_in_the_yellow_slot" and (ep, columns) == (67, "right")
+    root, ep, columns = replay.take_source("box")
+    assert root == replay.DEFAULT_ROOT and (ep, columns) == (59, "left")
+    kit = HERE / "skills" / "cutter" / "layouts"
+    assert replay.reference_frame(kit, 67) == kit / "P3_ep067_head.jpg"  # the placement reference exists in the kit
+    assert replay.reference_frame(kit, 12) is None
+
+
+def test_time_warp_takes_the_slow_step_where_asked():
+    take = np.array([[0, 0, 0, 0, 0, 100.0], [20, 0, 0, 0, 0, 100.0], [40, 0, 0, 0, 0, 100.0]])
+    seq = replay.time_warp(take, take[0], 1.0, 5.0, step_at=lambda q: 0.5 if q[0] > 15 else 1.0)
+    steps = np.abs(np.diff(np.vstack([take[0], seq])[:, 0]))
+    # start -> take[0] (one tick), then both segments at 0.5: a segment with one slow end is slow all along
+    assert steps.max() <= 0.5 + 1e-9 and len(seq) == 1 + 40 + 40
+    fast = replay.time_warp(take, take[0], 1.0, 5.0)
+    assert len(fast) == 1 + 20 + 20
+
+
+NEAR_OTHER = [-62.4, -17.1, -7.0, 73.1, -58.7, 2.1]  # 2.6 cm from the fake arm's rest (test_single_arm.py)
+REST = np.array([0.0, -95.0, 95.0, 70.0, 0.0, 2.0])  # FakeSO101's start
+
+
+def test_cutter_replay_is_warped_at_the_slow_step_so_the_guard_never_clips_it(tmp_path, monkeypatch):
+    """--replay-skill cutter on the robot-left arm (right_* columns) with the cutter's slow zone: near the other arm
+    the take is warped at 0.5 deg per tick, so the slow zone's 0.5 cap never has to clip a replayed command."""
+    from keepout import KeepOut
+
+    ko = KeepOut.for_haller("left")
+    ko.other_clearance = 0.01  # the cutter's 1 cm: only the slow zone acts, the keep-out itself does not refuse
+    ko.save(tmp_path / "near.json")
+    take = np.array([REST + [0, k, 0, 0, 0, 0] for k in range(0, 12, 2)] + [REST + [0, 10, 0, 0, 0, 0]] * 3)
+    root = write_dataset(tmp_path / "cutter", {5: take}, columns="right")
+    monkeypatch.setattr(rsa, "read_arm_joints", lambda port, rid: np.array(NEAR_OTHER))
+    common = ("--backend", "replay", "--replay-skill", "cutter", "--task-side", "left", "--replay-root", str(root),
+              "--replay-episode", "5", "--seconds", "60", "--keepout-config", str(tmp_path / "near.json"),
+              "--other-arm-port", "/dev/null", "--keepout-ticks", "100000")  # fmt: skip
+    (meta,) = _run(tmp_path / "slow", monkeypatch, *common, "--slow-zone", "0.04")
+    trace = np.load(next((tmp_path / "slow").glob("*/attempt01/trace.npz")))
+    steps = np.abs(np.diff(trace["command"][:, :5], axis=0)).max(axis=1)
+    assert meta["end_reason"].startswith("replay finished") and meta["slow_zone_ticks"] > 0
+    assert steps.max() <= 0.5 + 1e-9 and not trace["guard"].any()  # warped at 0.5: the guard never clipped it
+    assert np.allclose(trace["command"][-1], take[-1], atol=1e-6)
+    (plain,) = _run(tmp_path / "plain", monkeypatch, *common)  # no slow zone: the take at 1 deg/tick
+    trace = np.load(next((tmp_path / "plain").glob("*/attempt01/trace.npz")))
+    assert np.abs(np.diff(trace["command"][:, :5], axis=0)).max() == pytest.approx(1.0)
+    with pytest.raises(SystemExit, match="replays the right_\\* columns"):
+        _run(tmp_path / "bad", monkeypatch, *common[:5], "right", *common[6:])  # the box arm cannot run a cutter take
+
+
+def test_replay_places_and_home_checks_against_the_take_own_first_frame(tmp_path, monkeypatch, capsys):
+    cv2 = pytest.importorskip("cv2")
+    refs = tmp_path / "layouts"
+    refs.mkdir()
+    for ep in (3, 5, 9):
+        for cam in ("head", "wrist"):
+            cv2.imwrite(str(refs / f"P3_ep{ep:03d}_{cam}.jpg"), np.full((48, 64, 3), 10 * ep, np.uint8))
+    root = write_dataset(tmp_path / "box", {5: TAKE})
+    (meta,) = _run(tmp_path / "runs", monkeypatch, "--backend", "replay", "--replay-root", str(root),
+                   "--replay-episode", "5", "--seconds", "60", "--no-keepout", "--layouts", "P3", "--layout-ref",
+                   str(refs), "--home-check", str(refs))  # fmt: skip
+    out = capsys.readouterr().out
+    assert f"placement reference: {refs / 'P3_ep005_head.jpg'}" in out
+    assert meta["layout_ref"] == "P3_ep005_head"  # not the layout's first take (ep 3)
+    home = json.loads(next((tmp_path / "runs").glob("*/home_check.json")).read_text())
+    assert home["reference"] == "P3_ep005_head.jpg"

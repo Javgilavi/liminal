@@ -358,7 +358,7 @@ class Session:
         for skill in self.vocab.skills.values():  # recorded takes as scripted policies: no package, never FLUX
             if skill.backend != "replay" or not skill.is_flux:
                 continue
-            from replay import ReplayBackend, load_take  # ws4/single_arm (on sys.path since haller.build)
+            from replay import SLOW_MARGIN, ReplayBackend, load_take, reference_frame  # ws4/single_arm (haller.build)
 
             if cfg.prefetch_ticks:  # WS4_PREFETCH_TICKS may be set: prefetching would skip recorded steps
                 self.events.add("warn", f"chunk prefetch off (was {cfg.prefetch_ticks}): {skill.name} is a replay, "
@@ -370,10 +370,16 @@ class Session:
                                max_gripper_step=cfg.max_gripper_step)
             if cfg.action_steps:
                 be.contract = dataclasses.replace(be.contract, n_action_steps=int(cfg.action_steps))
+            if skill.runner.get("slow_zone"):  # the cutter: warp at the slow step near the box arm's LIVE pose
+                be.step_at = self._slow_step_at(skill, SLOW_MARGIN)
             self.backends[name] = be
             for arm in skill.arms:
                 targets.append(dataclasses.replace(per_arm_target(arm, name), name=f"{arm}:{name}"))
                 self.target_backend[f"{arm}:{name}"] = be
+            ref = reference_frame(Path(skill.kit).parent / "layouts", r["episode"]) if skill.kit else None
+            self.events.add("warn", f"{skill.name}: {skill.driver}, not FLUX; place the objects as at the take's start"
+                            + (f": {ref} (its first head frame)" if ref else " (no reference frame of that take in "
+                               "its kit)"))
 
         # One moving arm on the Haller: the other is parked and not connected, so an inter-arm check against the
         # phantom slot would be meaningless; the FK keep-out (midline zone included) guards that side instead.
@@ -837,6 +843,24 @@ class Session:
             note += f", {out:.1f} deg outside its demo range"
         self._start_note[(run.step.id, run.attempt)] = note
         self.events.add("info", f"{run.step.id}: {msg}", step=run.step.id)
+
+    def _slow_step_at(self, skill: Skill, margin: float) -> Any:
+        """q -> deg per tick for the replay's time warp: the kit's slow step within its slow zone (plus ``margin``)
+        of the other arm's live pose, else the guard's max step; on a private copy of the skill's keep-out, since the
+        warp runs on the policy worker thread."""
+        import copy
+
+        arm = skill.arms[0]
+        other = "right" if arm == "left" else "left"
+        probe = copy.copy(self.rig.skill_keepout(arm, skill))
+        zone, slow, fast = skill.runner["slow_zone"] + margin, skill.runner["slow_step"], self.cfg.max_step
+
+        def step_at(q: Any) -> float:
+            live = self.rig.arms[other].robot.last_q if other in self.rig.arms else None
+            probe.other_q = None if live is None else tuple(float(v) for v in live)
+            return slow if float(probe.other_arm_gap(np.asarray(q, float))) < zone else fast
+
+        return step_at
 
     def _ramp_refused(self, arm: str, zone: str) -> bool:
         ex = self.executor

@@ -14,10 +14,16 @@ arm's pose when the replay starts. The arm follows the recorded path itself, onl
 faster; after the last recorded action the chunks repeat it, so the arm holds there (a box take ends holding the lid
 open).
 
+Near the other arm (a skill with a slow zone: the cutter by the lid-holding box arm) the guard would clip the arm to
+``slow_step`` per tick and the arm would cut corners behind the replayed path; ``step_at(q)`` gives the warp a
+smaller step there (the runner and the orchestrator pass the slow step within the slow zone plus ``SLOW_MARGIN`` of
+the other arm's live pose), so the path stays the recorded one.
+
 Prime mode (``prime_ticks``, run_single_arm ``--prime-ticks K``): the first K ticks of the replay, then the FLUX
 backend takes over from there with the replayed history, for trying a primed FLUX box start.
 
-    python ws4/single_arm/replay.py 59    # length, start, end and duration of a take at 1 deg/tick from box home
+    python ws4/single_arm/replay.py 59                  # a box take: length, start, end, duration at 1 deg/tick
+    python ws4/single_arm/replay.py --skill cutter      # the cutter's default take
 """
 
 from __future__ import annotations
@@ -43,6 +49,28 @@ DEFAULT_ROOT = Path.home() / ".cache/huggingface/lerobot/ws4/haller_open_the_box
 # holding), and time-warped from box home it passes the box workspace with its envelope with 0 refusals in 549
 # ticks (18 s at 1 deg/tick). Checked offline 18 Oct against skills/box, green, cutter and pen_lid.
 DEFAULT_EPISODE = 59
+# Per skill (skills.py names): the default take. Cutter 67 (P3, held-out: its first head frame is
+# skills/cutter/layouts/P3_ep067_head.jpg, the placement reference): of the three takes with a reference it keeps the
+# most room to the lid-holding box arm (2.9 cm min over its path with the box arm where box take 59 ends, 3.2 cm at
+# the cutter takes' recorded hold; clearance 1 cm) and spends the fewest ticks in the 4 cm slow zone (33); it starts
+# at home with the green pen in its slot (review: "pen arm home -> home, box arm holding the lid, green pen in its
+# slot") and ends exactly at home, with 0 refusals by the cutter workspace from home (757 ticks at 1 deg/tick).
+DEFAULT_TAKES = {"box": DEFAULT_EPISODE, "cutter": 67}
+SLOW_MARGIN = 0.01  # m beyond a slow zone where the warp already slows down (measured lag, live vs recorded poses)
+
+
+def take_source(skill: str) -> tuple[Path, int, str]:
+    """(dataset root in the local cache, default take, the task arm's dataset columns) of a skills.py skill."""
+    from skills import ARMS, CACHE, SKILLS
+
+    s = SKILLS[skill]
+    return CACHE / s.dataset, DEFAULT_TAKES[skill], ARMS[s.arm].columns
+
+
+def reference_frame(ref_dir: str | Path, episode: int) -> Path | None:
+    """The take's own first head frame in a layout reference folder (``<layout>_ep<NNN>_head.jpg``), if there."""
+    hits = sorted(Path(ref_dir).glob(f"*_ep{episode:03d}_head.*"))
+    return hits[-1] if hits else None
 
 
 def label(episode: int, prime_ticks: int | None = None) -> str:
@@ -71,14 +99,19 @@ def load_take(root: str | Path, episode: int, columns: str) -> tuple[np.ndarray,
     return actions[:, arm_slice(columns)], info
 
 
-def time_warp(actions: np.ndarray, start: np.ndarray, max_step: float = 1.0,
-              max_gripper_step: float = 5.0) -> np.ndarray:  # fmt: skip
+def time_warp(actions: np.ndarray, start: np.ndarray, max_step: float = 1.0, max_gripper_step: float = 5.0,
+              step_at: Any = None) -> np.ndarray:  # fmt: skip
     """The path start -> actions[0] -> ... -> actions[-1], linear in joint space, cut into ticks of at most
-    ``max_step`` deg per arm joint and ``max_gripper_step`` on the gripper."""
+    ``max_step`` deg per arm joint (``step_at(q)`` at a point, when given: the smaller of a segment's two ends) and
+    ``max_gripper_step`` on the gripper."""
     points = np.vstack([np.asarray(start, float)[None], np.asarray(actions, float)])
+    steps = np.full(len(points), float(max_step))
+    if step_at is not None:
+        steps = np.minimum(steps, [float(step_at(q)) for q in points])
     out = []
-    for a, b in zip(points[:-1], points[1:], strict=True):
-        n = int(np.ceil(max(np.abs(b[:5] - a[:5]).max() / max_step, abs(b[5] - a[5]) / max_gripper_step, 1.0)))
+    for i, (a, b) in enumerate(zip(points[:-1], points[1:], strict=True)):
+        step = min(steps[i], steps[i + 1])
+        n = int(np.ceil(max(np.abs(b[:5] - a[:5]).max() / step, abs(b[5] - a[5]) / max_gripper_step, 1.0)))
         out.extend(a + (b - a) * k / n for k in range(1, n + 1))
     return np.asarray(out)
 
@@ -100,6 +133,7 @@ class ReplayBackend:
         self.contract = prime.contract if prime is not None else contract
         self.prime, self.prime_ticks = prime, prime_ticks
         self.label = label(self.info["episode"], prime_ticks if prime is not None else None)
+        self.step_at: Any = None  # q -> deg per tick there (the slow zone), evaluated when the take is warped
         self.requests = 0
         self.reset()
 
@@ -121,7 +155,8 @@ class ReplayBackend:
                                   0.0, {"backend": "replay", "label": self.label})  # fmt: skip
         self.requests += 1
         if self.seq is None:
-            self.seq = time_warp(self.actions, request.commands[-1], self.max_step, self.max_gripper_step)
+            self.seq = time_warp(self.actions, request.commands[-1], self.max_step, self.max_gripper_step,
+                                 self.step_at)  # fmt: skip
             self.info["ticks"] = len(self.seq)
         if self.prime is not None and self.cursor >= (self.prime_ticks or 0):
             self.handed_over = True
@@ -153,12 +188,16 @@ def main(argv: list[str] | None = None) -> None:
     import argparse
 
     p = argparse.ArgumentParser(description="summary of a take as the replay would run it")
-    p.add_argument("episode", type=int, nargs="?", default=DEFAULT_EPISODE)
-    p.add_argument("--root", default=str(DEFAULT_ROOT))
-    p.add_argument("--columns", default="left", help="dataset columns of the arm: left = the robot-right box arm")
-    p.add_argument("--start", type=float, nargs=6, default=[0, 0.8, 2.0, 0.4, 0, 99.7], help="default: box home")
+    p.add_argument("episode", type=int, nargs="?", default=None, help="default: the skill's default take")
+    p.add_argument("--skill", default="box", choices=sorted(DEFAULT_TAKES))
+    p.add_argument("--root", default=None, help="default: the skill's dataset in the local cache")
+    p.add_argument("--columns", default=None, help="dataset columns of the arm (left = the robot-right box arm)")
+    p.add_argument("--start", type=float, nargs=6, default=None, help="default: the skill arm's home")
     a = p.parse_args(argv)
-    actions, info = load_take(a.root, a.episode, a.columns)
+    root, episode, columns = take_source(a.skill)
+    start = a.start or ([0, 0.8, 2.0, 0.4, 0, 99.7] if a.skill == "box" else [0, 0, 0, 0, 0, 100])
+    actions, info = load_take(a.root or root, a.episode if a.episode is not None else episode, a.columns or columns)
+    a.start, a.episode = start, info["episode"]
     seq = time_warp(actions, np.array(a.start))
     print(f"{label(a.episode)}: {info['frames']} frames ({info['frames'] / 30:.1f} s recorded), {len(seq)} ticks at "
           f"1 deg/tick ({len(seq) / 30:.1f} s); first {np.round(actions[0], 1).tolist()}, last "

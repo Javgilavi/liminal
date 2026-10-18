@@ -79,7 +79,14 @@ same stack (1 deg/tick time warp, the box kit's keep-out with its envelope, the 
 runs once the take has ended. The step card says `REPLAY scripted replay of recorded demo 59, not FLUX`, the events
 say `SCRIPTED REPLAY OF RECORDED DEMO 59, NOT FLUX`, its attempts are logged with condition `scripted` and variant
 `scripted-replay-ep59` (never with the FLUX rows), and the chain's trial line notes and checkpoint name it; prefetch is
-forced off (it would skip recorded steps). `skill_open_box` need not be served. Add the flag to 3a or 3b; the pen skills stay FLUX.
+forced off (it would skip recorded steps).
+
+**Cutter fallback: `--skill-backend put_yellow_cutter_in_slot=replay`** (last resort: the augmented FLUX cutter grasped
+4/5 but inserted 0/5): recorded take 67 on the pen arm the same way, under the cutter kit's keep-out, start gate and
+slow zone with the box arm held, warped at the slow step within the slow zone of the box arm's live pose. Place the
+cutter as in `ws4/single_arm/skills/cutter/layouts/P3_ep067_head.jpg` (the take's first head frame; the session names
+it in the events at start; demo-rehearsal's align refs in `~/haller_demo/align_refs/cutter` include it). The take
+ends at home, so `finish: home` checks again at once. Both flags can be combined. `skill_open_box` need not be served. Add the flag to 3a or 3b; the pen skills stay FLUX.
 
 **Handover from the haller HMI (pen-skill rehearsal with `--hold-arm right`)**, as single_arm README "Handover from
 the HMI": Oscar supports the lid and both arms; `bash ~/haller_ws/scripts/quest-teleop/down.sh`; the ports must be free

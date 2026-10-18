@@ -483,6 +483,33 @@ python ws4/single_arm/run_single_arm.py --backend replay --replay-episode 59 \
   --seconds 60 --max-step 1.0 --max-relative-target 20 --lift-stall-deg 25
 ```
 
+**Cutter (last-resort fallback, same day):** the augmented FLUX cutter grasped 4/5 but inserted 0/5 (it swings the
+wrist roll instead of carrying the cutter). `--replay-skill cutter` (skills.py: the cutter dataset, the robot-left arm's
+`right_*` columns, default take 67) replays a cutter take the same way, with the cutter kit's flags (slow zone, box-arm
+gate, `--hold-other-arm`). Within the slow zone plus 1 cm of the box arm's live pose the take is warped at the slow
+step (0.5 deg/tick), so the slow zone never has to clip it. Take 67 (P3, held out) has its first head frame in the kit
+(`skills/cutter/layouts/P3_ep067_head.jpg`): with `--layout-ref` / `--home-check` on the kit's layouts the placement
+page and the home check use THAT frame, so the cutter can be placed where the take had it. Of the three takes with a
+reference it keeps the most room to the box arm (2.9 cm with the box arm where box take 59 ends, 1 cm clearance),
+spends the fewest ticks in the slow zone, starts at home with the green pen in its slot and ends exactly at home; 0
+refusals by the cutter workspace (757 ticks, 25 s at 1 deg/tick). The red pen's gate only looks at the box arm, which
+the replay never moves (allowed with the box arm at take 59's end).
+
+```bash
+python ws4/single_arm/run_single_arm.py --backend replay --replay-skill cutter \
+  --port /dev/haller_arm_right --robot-id haller_right --other-arm-port /dev/haller_arm_left --other-arm-id haller_left \
+  --other-arm-lo -2.5 -38.9 -25.9 -30.6 24.9 0 --other-arm-hi 26.9 31.5 53.4 46.9 93.9 100 --other-arm-tol 0 \
+  --other-arm-demo-poses ws4/single_arm/skills/cutter/demo_poses.npz --other-arm-gate-max-below 0.01 --hold-other-arm \
+  --scene-cam /dev/haller_cam_mast --scene-fourcc none \
+  --wrist-cam /dev/v4l/by-path/pci-0000:00:14.0-usb-0:7.2:1.0-video-index0 --wrist-fourcc none --wrist-rotate 180 \
+  --task-side left --keepout-config ws4/single_arm/skills/cutter/workspace.json --start-pose 0 0 0 0 0 100 \
+  --task "put the yellow cutter in the yellow slot" --trial-task put_cutter_in_slot \
+  --steps "reach the cutter" "grasp the cutter" "insert it in the yellow slot" --layouts P3 \
+  --layout-ref ws4/single_arm/skills/cutter/layouts --home-check ws4/single_arm/skills/cutter/layouts \
+  --seconds 90 --max-step 1.0 --max-relative-target 20 --lift-stall-deg 25 \
+  --slow-zone 0.04 --slow-step 0.5 --slow-load-sustain 0.5 --slow-load-ticks 6
+```
+
 `--prime-ticks K` with `--backend remote` replays the first K ticks (rounded up to the action horizon) and then lets
 FLUX take over with that history, for trying a primed FLUX box start; such attempts are logged with the variant
 `<variant>+primed-ep<N>-<K>`. Tests: `tests/test_replay.py` (fake arm, a synthetic parquet; take 59 against the box

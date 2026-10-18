@@ -172,12 +172,14 @@ def chain_server(tmp_path):
 
 
 def short_chain_vocab(tmp_path, timeout=3.0, replay=None):
+    """``replay``: the open_box replay entry, or {skill: entry}."""
     data = yaml.safe_load(DEFAULT_VOCABULARY.read_text())
     for name in CHAIN:
         data["skills"][name]["timeout_s"] = timeout
         data["skills"][name]["verify_every_chunks"] = 1
     if replay is not None:
-        data["skills"]["open_box"]["replay"] = replay
+        for name, entry in (replay.items() if "episode" not in replay else [("open_box", replay)]):
+            data["skills"][name]["replay"] = entry
     path = tmp_path / "skills.yaml"
     path.write_text(yaml.safe_dump(data))
     return str(path)
@@ -829,13 +831,16 @@ def test_cli_wires_the_runner_settings_and_the_handover():
 
 
 # ---------------------------------------------------------------------------------------------- box fallback: replay
-def write_box_take(root, episode, take):
-    """A LeRobot v3 parquet with one take: the box arm's actions in the left_* columns, the pen arm tucked."""
+def write_box_take(root, episode, take, columns="left"):
+    """A LeRobot v3 parquet with one take: the box arm's actions in the left_* columns, the pen arm tucked (or, with
+    ``columns="right"``, a pen-arm take with the box arm holding the lid)."""
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    pen = np.tile([3, -83.6, 81.9, 82.8, -10.2, 0.9], (len(take), 1))
-    rows = np.hstack([np.asarray(take, float), pen])
+    if columns == "left":
+        rows = np.hstack([np.asarray(take, float), np.tile([3, -83.6, 81.9, 82.8, -10.2, 0.9], (len(take), 1))])
+    else:
+        rows = np.hstack([np.tile(GREEN_HOLD, (len(take), 1)), np.asarray(take, float)])
     (root / "data" / "chunk-000").mkdir(parents=True)
     pq.write_table(pa.table({"episode_index": pa.array([episode] * len(rows), pa.int64()),
                              "frame_index": pa.array(range(len(rows)), pa.int64()),
@@ -922,3 +927,63 @@ def test_replay_backend_needs_a_replay_entry(tmp_path, chain_server):
     assert cfg.skill_backends == {"open_box": "replay"} and cfg.replay_episode == 40
     v = load_vocabulary(DEFAULT_VOCABULARY)
     assert v["open_box"].backend == "flux" and v["open_box"].replay["episode"] == 59  # FLUX unless asked
+
+
+def test_cutter_replay_in_the_chain_slow_near_the_box_arm(tmp_path, monkeypatch):
+    """--skill-backend put_yellow_cutter_in_slot=replay (the last-resort cutter fallback): its recorded take on the pen
+    arm, under the cutter kit's keep-out and slow zone with the box arm held, warped at the slow step where the box
+    arm is within the slow zone (faked at 3 cm here), so the 0.5 deg/tick cap never clips it; it ends home, its row
+    is condition scripted, and the events name the take's first head frame for placing the cutter."""
+    from orchestrator.haller import import_single_arm
+
+    _, KeepOut = import_single_arm()
+    real_gap = KeepOut.other_arm_gap
+
+    def gap(self, q):  # only the cutter's keep-out (1 cm clearance) sees the box arm 3 cm away
+        if self.other_clearance == 0.01 and self.side == 1:
+            return np.full(np.shape(q)[:-1], 0.03)
+        return real_gap(self, q)
+
+    monkeypatch.setattr(KeepOut, "other_arm_gap", gap)
+    home = PEN_HOME
+    take = np.vstack([home + [k, 0, 0, 0, 0, 0] for k in range(0, 11, 2)] + [home + [10, 0, 0, 0, 0, 0]] * 3
+                     + [home + [k, 0, 0, 0, 0, 0] for k in range(10, -1, -2)])
+    root = write_box_take(tmp_path / "cutter", 67, take, columns="right")
+    server, url, token, _ = serve(tmp_path, omit=("put_yellow_cutter_in_slot",))
+    s = chain_session(tmp_path, url, token, skill_backends={"put_yellow_cutter_in_slot": "replay"},
+                      replay={"put_yellow_cutter_in_slot": {"episode": 67, "root": str(root), "columns": "right"}})
+    try:
+        cutter_target = "left:replay_put_yellow_cutter_in_slot"
+        assert s.target_backend[cutter_target].step_at is not None
+        msgs = [e["msg"] for e in s.events.recent(200)]
+        assert any("put_yellow_cutter_in_slot: scripted replay of recorded demo 67, not FLUX; place the objects" in m
+                   and m.endswith("skills/cutter/layouts/P3_ep067_head.jpg (its first head frame)") for m in msgs)
+        s.verifier = checks = ScriptedChecks()
+        sent, clipped = [], []
+        send = s.rig.robot.send_action
+        s.rig.robot.send_action = lambda c: sent.append((s.runner._owner.get("left"), np.array(c[:6]))) or send(c)
+        step = s.runner.step
+
+        def spy_step():
+            report = step()
+            if s.runner._owner.get("left") == cutter_target and report.guard_intervened:
+                clipped.append(report.tick)
+            return report
+
+        s.runner.step = spy_step
+        result = s.execute(s.plan("open the box, put the green pen in the green slot, put the yellow cutter in the "
+                                  "yellow slot").result.plan)
+        assert result.status == "succeeded", result.failure
+        cut = np.array([c for owner, c in sent if owner == cutter_target])
+        assert len(cut) and np.abs(np.diff(cut[:, :5], axis=0)).max() <= 0.5 + 1e-9 and not clipped
+        assert s.rig.guard.slow_ticks["left"] > 0
+        assert checks.calls.count("put_yellow_cutter_in_slot") == 2  # once at the take's end, once back home
+        trials = load_trial_log().load(tmp_path / "trials.jsonl")
+        row = next(t for t in trials if t.task == "put_yellow_cutter_in_slot")
+        assert (row.condition, row.variant) == ("scripted", "scripted-replay-ep67")
+        green = next(t for t in trials if t.task == "put_green_pen_in_slot")
+        assert green.condition == "post_training"  # the pen skills stay FLUX
+    finally:
+        s.close()
+        server.shutdown()
+        server.server_close()

@@ -185,6 +185,13 @@ skills:
     precheck: open_box  # the lid must still be open, else e-stop and hold
     finish: home  # the demos end at home: the policy brings the arm out of the box, then the check again
     package: skill_yellow_cutter
+    # Last-resort fallback (the augmented FLUX cutter grasped 4/5 but inserted 0/5, 18 Oct):
+    # `--skill-backend put_yellow_cutter_in_slot=replay` replays recorded take 67 instead of FLUX, as open_box's replay,
+    # warped at the slow step within the slow zone of the box arm's live pose; place the cutter as in
+    # ws4/single_arm/skills/cutter/layouts/P3_ep067_head.jpg (the take's first head frame). Take 67: most room to the
+    # box arm of the three takes with a reference frame, starts and ends at home (single_arm/replay.py DEFAULT_TAKES).
+    replay: {episode: 67, root: ~/.cache/huggingface/lerobot/ws4/haller_put_the_yellow_cutter_in_the_yellow_slot,
+             columns: right}
     # pen-arm midline -0.21 m, 1 cm box-arm clearance with a 4 cm slow zone (0.5 deg/tick, load freeze at 50 % for
     # 0.2 s: skill.json runner_args), box-arm start gate
     keepout: skills/cutter/workspace.json
