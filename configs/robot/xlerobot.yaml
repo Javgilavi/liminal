@@ -1,19 +1,24 @@
-# Board serials observed 2026-10-17; sides inherited from the Haller profile.
-# VERIFY physical left/right (facing the robot) before first movement.
-# USB serial identifies the board; re-check physical sides after rewiring.
+# Board serials observed 2026-10-17. USB serial identifies the board; re-check physical sides after rewiring.
+# ROBOT frame (the robot's own left/right, as in every task file and policy registry: `left` = the pen arm that places
+# the components, `right` = the box helper). Per /etc/udev/rules.d/99-haller-devices.rules on the Haller laptop,
+# 5B14030445 is /dev/haller_arm_right (operator frame) = the ROBOT's LEFT arm, and 5B79018460 is /dev/haller_arm_left =
+# the ROBOT's RIGHT arm. The first version of this file had them the other way round (operator frame): with the
+# task files, the pen skills would have driven the box arm. Calibration ids keep their original file names.
+# The Haller runs through the ws4 bridge instead (configs/robot/haller_ws4.yaml, ws4/HARNESS_BRIDGE.md): that path
+# keeps the Haller safety stack and freezes with torque on at an e-stop.
 name: xlerobot
 arms:
   left:
     type: so101
-    port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79018460-if00
-    id: xlerobot_left_5B79018460
+    port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
+    id: xlerobot_right_5B14030445
     max_relative_target: 2
     max_speed: 20
     temperature_limit: 55
   right:
     type: so101
-    port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
-    id: xlerobot_right_5B14030445
+    port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B79018460-if00
+    id: xlerobot_left_5B79018460
     max_relative_target: 2
     max_speed: 20
     temperature_limit: 55

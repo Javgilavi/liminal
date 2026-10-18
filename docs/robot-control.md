@@ -33,12 +33,19 @@ current pose**, then jog a single joint. **Free-drive** releases that arm.
 
 ## This rig
 
-`configs/robot/xlerobot.yaml` records the board serials observed on 2026-10-17:
+`configs/robot/xlerobot.yaml` records the board serials observed on 2026-10-17. Arm names
+are the ROBOT's own sides, as in every task file and policy registry (`left` places the
+components, `right` holds the box). Facing the robot, the sides swap: the Haller's udev
+rules name the boards in that operator frame (`/dev/haller_arm_left` = `5B79018460`).
 
-| Expected arm, facing the robot | USB board serial |
-|---|---|
-| left | `5B79018460` |
-| right | `5B14030445` |
+| Arm in configs (robot frame) | Role | USB board serial | Haller udev name (operator frame) |
+|---|---|---|---|
+| left | pen / component arm | `5B14030445` | `/dev/haller_arm_right` |
+| right | box helper | `5B79018460` | `/dev/haller_arm_left` |
+
+The first version of this table listed the operator frame (left = `5B79018460`): with
+the task files, the component skills would have driven the box arm. On the Haller,
+prefer the ws4 bridge (`configs/robot/haller_ws4.yaml`, `ws4/HARNESS_BRIDGE.md`).
 
 Use `/dev/serial/by-id` paths, not enumeration-dependent `/dev/ttyACM*` names.
 After rewiring, verify the physical sides with torque off. Board identity alone
