@@ -751,3 +751,31 @@ Plan (orchestrator, 17 Oct about 22:30 UTC):
     BASE+ADAPTER;
   - laptop check: all 6-D, server 0.35 to 0.36 s, the alias bit-identical.
 - My lid-held EMA 10k eval was stopped to free the GPU for the reload; it can be rerun when memory allows.
+
+## Augmented skill LoRAs (orchestrator, 18 Oct 05:44 CEST)
+
+Oscar topped up and asked for LoRAs on all other tasks at 5k with improved settings. Four RTX PRO 6000 pods in EUR-IS-1 on
+real-train-is, $2.49/h each: aug-open-box-6000 (8n4roswzq34hov), aug-green-pen-6000 (vges1tszdvp6q8), aug-cutter-6000
+(c5xdc1lv1r6u68), aug-red-pen-6000 (at0opx55id41da). Settings: 5,000 microsteps, RAW adapter, image augmentation (crop +
+colour jitter), the red pen resumed from pen RAW 5k on the 126-episode merged dataset. Gates before robot time: held-out
+eval, from-rest motion check, knife-edge check. Pen RAW 5k (3/5 real inserts at horizon 16) copied to
+~/haller_rescue/pen/checkpoint_005000_raw (adapter sha256 32ef14b6865edbd1...).
+
+### Augmented per-skill runs, prepared (18 Oct morning; not launched, no compute)
+- Oscar: "run lora on the other tasks. all of them. 5k steps. ... if you can improve training settings etc lets do
+  it".
+- Arm evidence on 18 Oct: RAW 5k beat EMA 10k and RAW 10k; the lid-held failure was a wrist-view knife edge.
+- Recipe:
+  - each skill's B base, the preset unchanged except flux3 augment on (95 % crop + colour jitter);
+  - 5,000 microsteps, checkpoints every 1,000;
+  - gates before robot time: (a) RAW and EMA held-out eval; (b) the from-rest first chunk moves >= 20 deg on every
+    held-out take; (c) the same under +-2 px shifts and 0.5x brightness.
+- Tools:
+  - `skill_pod.sh hub|data|train|gates|all` (pod side, any account);
+  - `gate_check.py` (gates b and c);
+  - `skill_env.py` (split to skill.env, matches the green_pen env);
+  - `real_lora.sh` AUGMENT=1.
+- Red pen: fresh from B84 on the 126-episode v3.0 dataset with augment. The RAW 5k adapter for a resume is only on
+  real-train-is: all pods were stopped before it could be copied off.
+- Per run about 2 h 15 to 2 h 30 on an RTX PRO 6000 (about $6). 4 in parallel on one 150 GB volume fit (base install
+  about 65 GB + about 7 GB per run).

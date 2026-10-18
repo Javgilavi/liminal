@@ -80,6 +80,10 @@ probe|train)
   fi
   trap 'kill $smi $pruner 2>/dev/null' EXIT
   if [ "${TE_CPU:-0}" = 1 ]; then train=("$LIMINAL/ws4/ttt/lora_train_te_cpu.py"); else train=(-m lerobot.scripts.lerobot_train); fi
+  # AUGMENT=1: flux3 image augmentation while training (LeRobot policies/flux3: modeling_flux3.forward applies it only
+  # when self.training and cfg.augment; packing.materialize_video draws one 95 % crop + colour jitter per window,
+  # shared by both cameras and all frames).
+  AUGMENT_ARGS=(); [ "${AUGMENT:-0}" = 1 ] && AUGMENT_ARGS=(--policy.augment=true)
   ds_args=(--dataset.eval_split="$EVAL_SPLIT")
   if [ -n "${TRAIN_EPS:-}" ]; then
     read -r -a tr <<< "$TRAIN_EPS"
@@ -89,14 +93,14 @@ probe|train)
     ds_args=(--dataset.episodes="[$(IFS=,; echo "${all[*]}")]" --dataset.eval_split="$split")
   fi
   cd "$WS4_ROOT/lerobot"
-  echo "start $(date -u +%FT%TZ) steps=$steps batch=$BATCH accum=$ACCUM workers=$WORKERS ($MP_CONTEXT) pkg=$PKG data=$DATA ${ds_args[*]}"
+  echo "start $(date -u +%FT%TZ) steps=$steps batch=$BATCH accum=$ACCUM workers=$WORKERS ($MP_CONTEXT) augment=${AUGMENT:-0} pkg=$PKG data=$DATA ${ds_args[*]}"
   python "${train[@]}" --config_path=examples/flux3/lora.json \
     --policy.path="$PKG" --policy.device=cuda \
     --dataset.repo_id="$REPO" --dataset.root="$DATA" "${ds_args[@]}" \
     --batch_size="$BATCH" --accelerator.gradient_accumulation.steps="$ACCUM" \
     --num_workers="$WORKERS" --dataloader_multiprocessing_context="$MP_CONTEXT" \
     --steps="$steps" --save_freq="$SAVE" --eval_steps="$EVAL_STEPS" --max_eval_samples="$MAX_EVAL" --log_freq="$ACCUM" --ema.decay="$EMA" \
-    --output_dir="$out" 2>&1 | tee "$out.log"
+    ${AUGMENT_ARGS[@]+"${AUGMENT_ARGS[@]}"} --output_dir="$out" 2>&1 | tee "$out.log"
   echo "end $(date -u +%FT%TZ); peak GPU memory $(cut -d, -f2 "$out.gpu.csv" | sort -n | tail -1)" | tee -a "$out.log"
   ;;
 merge)
