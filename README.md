@@ -13,6 +13,7 @@ true*, and *whether the goal really happened*.
 ## Hackathon results (ERH Physical AI Hackathon, 18 October 2026)
 
 **Team Liminal:** Oscar Devos, Javier Gil, Tomas Leggaet, Simone Utili, Stanislaw Sufin. **[Submission video (2 min)](https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view)** · **[Slides (PDF)](https://drive.google.com/file/d/1tG4ehYkKH0PK-AJg1K_wNPsWDiAQaoM3/view)**
+60 s teasers by Javier Gil: [landscape](https://drive.google.com/file/d/1eyPMYofcuqxp0x0iw8-73LB_qJwRpfDJ/view) · [vertical](https://drive.google.com/file/d/1fthnCf_IRkh3jHtY1vPc4GKUaAegtTwA/view)
 
 - **Full 4-skill chain on the real Haller**, planned by Claude with a camera check after every step:
   **2 of 3 runs finished 4/4** with no human touch during the run (208.6 s and 302.2 s).
