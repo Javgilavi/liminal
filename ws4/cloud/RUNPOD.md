@@ -779,3 +779,17 @@ eval, from-rest motion check, knife-edge check. Pen RAW 5k (3/5 real inserts at 
   real-train-is: all pods were stopped before it could be copied off.
 - Per run about 2 h 15 to 2 h 30 on an RTX PRO 6000 (about $6). 4 in parallel on one 150 GB volume fit (base install
   about 65 GB + about 7 GB per run).
+
+### Augmented runs on the four aug-* pods (18 Oct morning)
+- Oscar: "no just the aug on red pen, the three others should run". A teammate does the augmented red pen, so the
+  orchestrator stopped aug-red-pen-6000. Box, green pen and cutter run with AUGMENT=1, 5k microsteps, RUN=lora_aug,
+  from each skill's B base.
+- open_box: aug-open-box-6000 (8n4roswzq34hov, -p 15524), started 03:54:02 UTC, 1.08 s/step.
+- yellow_cutter: aug-cutter-6000 (c5xdc1lv1r6u68, -p 11570), started 03:53:58 UTC; base built at 03:51 from 59
+  train takes (25,777 frames).
+- green_pen: aug-green-pen-6000 (vges1tszdvp6q8, -p 10553) never started. Its `/workspace` mount hung (du 6+ min,
+  ls and grep hang) while the same volume was fast from the box pod. My pod restart was blocked by the permission
+  check (the orchestrator's pod), so the restart is left to the orchestrator.
+  `skill_pod.sh` now takes USED_GB to skip the du.
+- Each pod runs `stop_after_gates.sh SKILL lora_aug`: it stops itself once its gates are done and the laptop has
+  copied the results (`launch_skill.sh`).

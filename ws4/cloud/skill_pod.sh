@@ -63,7 +63,8 @@ data)
 train)
   envfile
   [ -e "$D/$RUN" ] && { log "$D/$RUN exists: not starting twice"; exit 1; }
-  used=$(du -s --block-size=1G /workspace 2>/dev/null | cut -f1)
+  # USED_GB skips the scan: du over the network volume can take minutes while other pods load models.
+  used="${USED_GB:-$(du -s --block-size=1G /workspace 2>/dev/null | cut -f1)}"
   free=$(( ${QUOTA_GB:-150} - used ))
   log "volume: $used GB used of ${QUOTA_GB:-150}, $free GB free; a 5k run needs about 7 GB"
   [ $(( free - 7 )) -ge "${MIN_FREE_GB:-40}" ] || { log "NOT STARTING: would leave under ${MIN_FREE_GB:-40} GB free"; exit 1; }
