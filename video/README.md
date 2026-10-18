@@ -1,12 +1,12 @@
 # Liminal launch video
 
-A 48-second product-style showcase, built in code with [Remotion](https://www.remotion.dev/).
+A 60-second product-style showcase, built in code with [Remotion](https://www.remotion.dev/).
 Renders: [`media/launch_video/liminal_launch_16x9.mp4`](../media/launch_video/liminal_launch_16x9.mp4)
 (1920x1080) and [`liminal_launch_9x16.mp4`](../media/launch_video/liminal_launch_9x16.mp4) (1080x1920),
 30 fps, H.264 + AAC, original synthesized score.
 
-Each shot is one of: repo footage under `../media`, a render of the repo's MuJoCo twin, a line-art
-illustration, or a motion graphic that states a fact from the repo. Simulated footage always carries the
+Each shot is one of: repo footage under `../media`, a licensed photo in `../media/history`, a render of the
+repo's MuJoCo twin, a line-art illustration, or a motion graphic that states a fact from the repo. Simulated footage always carries the
 filled `SIM` tag; real footage carries `REAL`; FLUX's predicted video is tagged `IMAGINED · FLUX`.
 
 ## Edit and re-render
@@ -30,39 +30,43 @@ Set `"music": ""` to render silent, or drop any 120 BPM track in `public/` and p
 
 | File | Role |
 |---|---|
-| `config.json` | Text, colours, grade, timings, book pages, callouts, diagram |
+| `config.json` | Text, colours, grade, timings, book pages, problem beats, callouts, diagram |
 | `scripts/prepare_assets.py` | Builds `public/` from `../media` (crops, 3x Lanczos upscale, cutout, twin render, music) |
 | `scripts/render_twin.py` | The scripted dual-arm shot in the MuJoCo twin, plus per-frame 2D gripper positions for the HUD |
 | `scripts/track_red_pen.py` | Finds the red pen cap per frame in the wrist camera; the HUD box follows it |
-| `scripts/generate_music.py` | Synthesizes the original 120 BPM score, page-flip sounds included |
+| `scripts/generate_music.py` | Synthesizes the original 120 BPM score: leader beeps, projector, crackle, page flips included |
 | `scripts/stills.mjs` | Review stills: `node scripts/stills.mjs Liminal16x9 /tmp/out 7.5 14` |
-| `src/scenes/Book.tsx`, `src/components/Art.tsx` | The history book and its line-art plates |
+| `src/scenes/History.tsx`, `src/components/Film.tsx`, `Art.tsx` | The old-film history book, film effects, line-art plates |
+| `src/scenes/Problem.tsx` | The four problem beats |
 | `src/scenes/Reveal.tsx`, `Sim.tsx`, `Hero.tsx`, `Middle.tsx`, `Closing.tsx` | The remaining shots |
 | `src/components/ui.tsx` | Shared cards, tags, chips, HUD brackets, wordmark, transitions, grain |
 
-## Storyboard (v2, 48 s)
+## Storyboard (v3, 60 s)
 
 Beat grid: 120 BPM, one beat = 0.5 s, bar = 2 s. Every cut lands on a beat.
 
 | Time | Shot | Source | Tag |
 |---|---|---|---|
-| 0.0-2.0 | A closed book rises out of the dark: *Robot Arms, a short history, 1961-2026* | — | — |
-| 2.0-13.2 | Cover opens; a page turns every 1.5 s; each plate draws itself (see the history list below) | `Art.tsx` line art | illustration |
-| 12.5-14.0 | Final spread "2026 · Liminal"; the camera pans onto the plate and dives into it | `haller_rig_front_cutout.png` | REAL |
-| 14.0-16.2 | Match cut to the real rig, lit like a product shot; callouts: D455, both SO-101 arms, wrist camera, XLeRobot tower | same cutout | REAL |
-| 16.2-18.0 | Rig moves aside, LIMINAL wordmark, "Dual-arm orchestration for FLUX 3 Action" | — | — |
-| 18.0-19.0 | A scan line turns the real rig into its MuJoCo twin | `render_twin.py` | SIM |
-| 19.0-20.6 | "Some tasks need two hands." | twin render | SIM |
-| 20.6-26.0 | Left arm `open_lid`, then holds it (`while maintain lid_open`) while the right arm `pick_place`s the red marker; HUD brackets track both grippers; the task-tree panel shows `configs/tasks/lid_hold_insert.yaml` live | twin render + `track.json` | SIM |
-| 26.0-29.0 | Real robot, head + wrist cards, 4x | red-pen run layout C, 2.0-14.0 s | REAL |
-| 29.0-34.5 | Speed ramp to 2x; slot target; `red_pen_in_slot` ✓ at source 38.0 s; "3 of 5 · team-reported" | layout C, 29.0-40.0 s | REAL |
-| 34.5-36.0 | Imagined vs actual: "Imagine, then act." | `…lora5k_ep101.mp4` 4.6-6.1 s | model / REAL |
-| 36.0-40.5 | Architecture diagram draws on | `config.json` | — |
-| 40.5-43.5 | Terminal: quick start and its real output; "Runs on mock arms. No hardware." | README | — |
-| 43.5-48.0 | End card | — | — |
+| 0.0-1.5 | Film leader counting 3-2-1, one number per beat | `Film.tsx` | — |
+| 1.5-3.0 | An old leather book in a projector beam with dust: *Robot Arms, a short history* | `History.tsx` | — |
+| 3.0-15.0 | Cover opens; a page every 1.5 s, each with a push-in. Old-film treatment throughout (grain, dust, scratches, flicker, gate weave), black-and-white until 1978, colour arriving with each era | line art; real SO-101 photo on the 2024 page | illustration / REAL |
+| 13.5-15.5 | Last page: "2026 · Two arms, one long task · This page is still being written", *to be continued…*; film burn to black | — | — |
+| 15.5-17.5 | The problem, 1: "A learned policy drives one arm." | red-pen run layout C, head cam, 3x | REAL |
+| 17.5-19.5 | 2: "Someone still holds the lid." Bracket on the hand holding the box open | `haller_rig_front.jpg` | REAL |
+| 19.5-21.5 | 3: "Nothing checks that it worked." Four frames: executing, executing, waiting, replanned; "Stock FLUX on our arm, before our fix: 0 of 16" | `red_so101_flux_zero_shot_stack_cups_strip.png` | REAL |
+| 21.5-23.5 | 4: "Who moves. When. Did it work?" | — | — |
+| 23.5-27.5 | The real rig, lit like a product shot; callouts; LIMINAL wordmark | `haller_rig_front_cutout.png` | REAL |
+| 27.5-35.5 | Scan into the MuJoCo twin; "Some tasks need two hands."; `lid_hold_insert.yaml` runs with HUD and live task tree | `render_twin.py` | SIM |
+| 35.5-38.5 | Real robot, head + wrist cards, 4x | layout C, 2.0-14.0 s | REAL |
+| 38.5-44.5 | Speed ramp to 2x; slot target; `red_pen_in_slot` ✓ at source 38.0 s; "3 of 5 · team-reported" | layout C, 28.0-40.0 s | REAL |
+| 44.5-46.5 | Imagined vs actual: "Imagine, then act." | `…lora5k_ep101.mp4` 4.6-6.6 s | model / REAL |
+| 46.5-51.0 | Architecture diagram draws on | `config.json` | — |
+| 51.0-54.5 | Terminal: quick start and its real output; "Runs on mock arms. No hardware." | README | — |
+| 54.5-60.0 | End card | — | — |
 
-Music impacts: 14.0, 18.0, 26.0, 36.0, 43.5 s. Risers lead into 14.0, 18.0, 26.0 and 43.5. A page-flip
-sound plays on every turn; a soft pulse enters at the 2023 pages; drums drop for 34.5-36.0 and the end card.
+Sound: leader beeps, a projector's 24 Hz clatter and vinyl crackle under a music box for the history, a
+page-flip on every turn, a pulse from the 2023 pages; a ticking pulse with a hit on each problem beat;
+impacts at 23.5, 27.5, 35.5, 46.5 and 54.5 s; drums drop for 44.5-46.5 and the end card.
 
 ### History pages: facts to double-check before publishing
 
@@ -78,7 +82,10 @@ These come from general knowledge, not from the repo.
 | 2023 | RT-2 | Vision and language become actions. | Google DeepMind |
 | 2024 | SO-100 · SO-101 | Open-source arms anyone can print. | TheRobotStudio, Hugging Face (SO-101 followed in 2025) |
 
-The plates are stylized drawings, labelled "Illustrations, not to scale" on screen.
+The 1961-2023 plates are line drawings, captioned "after contemporary photographs". Real photos of those
+robots were not reachable from the build environment with a clear licence (Wikimedia, museum and NASA hosts
+are blocked there). To use one, add it to `../media/history/` with its credit and set the page's `photo` in
+`config.json`. The 2024 page uses TheRobotStudio's SO-101 photo (Apache-2.0).
 
 ### The twin shot
 

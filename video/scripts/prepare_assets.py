@@ -53,8 +53,19 @@ def main() -> None:
         "station.jpg": MEDIA / "real_robot/haller_xlerobot_station.jpg",
         # The team's front photo of the rig, background removed with BiRefNet (rembg birefnet-general).
         "robot_cutout.png": MEDIA / "real_robot/haller_rig_front_cutout.png",
+        "rig_front.jpg": MEDIA / "real_robot/haller_rig_front.jpg",
     }.items():
         shutil.copy(src, PUBLIC / name)
+
+    # History photos keep their own credits, see ../media/history/README.md.
+    (PUBLIC / "history").mkdir(exist_ok=True)
+    for photo in (MEDIA / "history").glob("*.jpg"):
+        shutil.copy(photo, PUBLIC / "history" / photo.name)
+
+    # Stock FLUX zero-shot strip: four 320x240 frames; drop the burnt-in status bar (shown as chips instead).
+    for i in range(4):
+        ff("-i", str(MEDIA / "real_robot/red_so101_flux_zero_shot_stack_cups_strip.png"), "-vf",
+           f"crop=320:220:{i * 320}:0,scale=960:660:flags=lanczos", str(PUBLIC / f"strip_{i}.png"))
 
     fonts = HERE / "node_modules/@fontsource"
     for weight in (400, 500, 600, 700):

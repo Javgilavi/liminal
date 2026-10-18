@@ -145,15 +145,19 @@ def impact() -> np.ndarray:
 beats = np.arange(0, DUR, BEAT)
 chords = [[57, 60, 64, 67], [53, 57, 60, 64], [48, 52, 55, 59], [55, 59, 62, 66]]  # Am7 Fmaj7 Cmaj7 G(add#11)
 roots = [45, 41, 48, 43]
-book, reveal, sim, hero, imag, diagram, end = (
-    SHOTS[k] for k in ("book", "reveal", "sim", "hero", "imagination", "diagram", "end"))
+history, problem, reveal, sim, hero, imag, diagram, end = (
+    SHOTS[k] for k in ("history", "problem", "reveal", "sim", "hero", "imagination", "diagram", "end"))
 BOOK = CFG["book"]
 flips = [BOOK["coverOpenAt"] + i * BOOK["flipEvery"] for i in range(len(BOOK["pages"]))]
+countdown_end = BOOK["countdownBeats"] * BEAT
+burn_at = BOOK["burnAt"]
 
 
 def section(t: float) -> str:
+    if t < problem["start"]:
+        return "history"
     if t < reveal["start"]:
-        return "book"
+        return "problem"
     if t < sim["start"]:
         return "reveal"
     if imag["start"] <= t < imag["end"]:
@@ -179,48 +183,80 @@ def page_flip() -> np.ndarray:
     return noise * shape * 0.16
 
 
+def leader_beep() -> np.ndarray:
+    n = int(0.12 * SR)
+    t = np.arange(n) / SR
+    return np.sin(2 * np.pi * 1000 * t) * np.clip(t / 0.003, 0, 1) * np.clip((0.12 - t) / 0.01, 0, 1) * 0.14
+
+
+def projector(length: float) -> np.ndarray:
+    """Film running through a projector: a 24 Hz shutter clatter over a low motor hum."""
+    n = int(length * SR)
+    t = np.arange(n) / SR
+    clicks = (np.sin(2 * np.pi * 24 * t) > 0.92).astype(float)
+    clatter = highpass(lowpass(RNG.standard_normal(n), 3500), 600) * (0.25 + clicks)
+    hum = 0.3 * np.sin(2 * np.pi * 55 * t) + 0.15 * np.sin(2 * np.pi * 110 * t)
+    return (clatter * 0.05 + hum * 0.02) * np.clip(t / 0.4, 0, 1)
+
+
+def crackle(length: float) -> np.ndarray:
+    n = int(length * SR)
+    pops = (RNG.random(n) > 0.9993).astype(float) * RNG.uniform(-1, 1, n)
+    return highpass(pops, 900) * 0.5 + highpass(RNG.standard_normal(n), 4000) * 0.004
+
+
+# History: leader beeps, the projector and crackle under a music box; colour (and a pulse) arrive with ALOHA.
+for i in range(BOOK["countdownBeats"]):
+    place("fx", i * BEAT, leader_beep())
+place("fx", 0.0, projector(burn_at + 0.3))
+place("fx", 0.0, crackle(burn_at + 0.6))
+for t in flips:
+    place("fx", t, page_flip(), pan=0.15)
+bar_len = 4 * BEAT
+for k, t in enumerate(beats):
+    if section(t) != "history" or t < countdown_end or t >= burn_at:
+        continue
+    chord = chords[int(t // bar_len) % 4]
+    place("arp", t, music_box(chord[[0, 2, 1, 3][k % 4]] + 24), pan=0.3 * np.sin(k))
+    if t >= flips[4]:
+        place("drums", t, kick(0.5))
+        place("drums", t + BEAT / 2, hat(gain=0.55), pan=0.2)
+
+# Problem: a low pulse and ticking that tighten into the reveal; a hit on every beat change.
 for t in beats:
-    sec = section(t)
-    if sec == "groove":
+    if section(t) == "problem":
+        place("drums", t, kick(0.7))
+        for q in (0.25, 0.5, 0.75):
+            place("drums", t + q * BEAT, hat(gain=0.3 + 0.2 * (q == 0.5)), pan=-0.2)
+        place("bass", t, bass_note(33, BEAT * 0.9) * 0.9)
+for k in range(4):
+    place("fx", problem["start"] + k * CFG["problem"]["beatSec"], impact() * 0.55)
+
+# Groove: kick, hats, clap, off-beat bass.
+for t in beats:
+    if section(t) == "groove":
         place("drums", t, kick())
         place("drums", t + BEAT / 2, hat(open_=(int(t / BEAT) % 4 == 3)), pan=0.25)
         place("drums", t + BEAT / 4, hat(gain=0.45), pan=-0.3)
         place("drums", t + 3 * BEAT / 4, hat(gain=0.45), pan=-0.3)
         if int(round(t / BEAT)) % 2 == 1:
             place("drums", t, clap(), pan=0.05)
-    elif sec == "book" and t >= flips[4]:
-        # The pulse arrives as the history reaches learned, two-handed arms.
-        place("drums", t, kick(0.55))
-        place("drums", t + BEAT / 2, hat(gain=0.6), pan=0.2)
-
-# Bass: off-beat eighths on the chord root in the grooves, a held sub under the reveal.
-for t in beats:
-    root = roots[int(t // (4 * BEAT)) % 4]
-    if section(t) == "groove":
+        root = roots[int(t // bar_len) % 4]
         place("bass", t + BEAT / 2, bass_note(root, BEAT / 2 * 0.95))
         if int(t / BEAT) % 4 == 3:
             place("bass", t + 3 * BEAT / 4, bass_note(root + 12, BEAT / 4 * 0.9))
 place("bass", reveal["start"], bass_note(33, reveal["end"] - reveal["start"]) * 0.8)
 
-# Pad: one chord per bar for the whole piece, held into the end card.
-bar_len = 4 * BEAT
+# Pad: one chord per bar, quieter under the old film, held into the end card.
 for b in range(int(np.ceil(DUR / bar_len))):
     t = b * bar_len
     length = bar_len + 0.3 if t + bar_len < end["start"] else DUR - t + 2.5
-    place("pad", t, pad_chord(chords[b % 4], length) * (0.7 if t < reveal["start"] else 1.0))
+    level = 0.55 if t < problem["start"] else 1.0
+    place("pad", t, pad_chord(chords[b % 4], length) * level)
     if t + bar_len >= end["start"]:
         break
 
-# Music box under the book: one note per beat, walking the chord tones.
-for k, t in enumerate(beats):
-    if section(t) != "book" or t < 0.5:
-        continue
-    chord = chords[int(t // bar_len) % 4]
-    place("arp", t, music_box(chord[[0, 2, 1, 3][k % 4]] + 24), pan=0.3 * np.sin(k))
-for t in flips:
-    place("fx", t, page_flip(), pan=0.15)
-
-# Arp: sixteenths through the chord from the twin to the end card, the filter opening as it goes.
+# Arp: sixteenths from the twin to the end card, the filter opening as it goes.
 step = BEAT / 4
 pattern = [0, 2, 1, 3, 2, 1, 3, 2]
 t = sim["start"]
@@ -235,7 +271,8 @@ while t < end["start"]:
     t += step
     k += 1
 
-# FX: risers into the big cuts, impacts on them.
+# FX: the film burn, risers into the big cuts, impacts on them.
+place("fx", burn_at, riser(problem["start"] - burn_at) * 0.9)
 for cut in (reveal["start"], sim["start"], hero["start"], diagram["start"], end["start"]):
     place("fx", cut, impact())
 for cut, length in ((reveal["start"], 1.5), (sim["start"], 1.0), (hero["start"], 1.5), (end["start"], 2.0)):

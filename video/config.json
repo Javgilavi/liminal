@@ -1,7 +1,7 @@
 {
   "_readme": "All text, colours and timings for the Liminal launch video. Times are seconds on the 30 fps timeline; the beat grid is 120 BPM (one beat = 0.5 s), so keep cuts on multiples of 0.5.",
   "fps": 30,
-  "durationSec": 48,
+  "durationSec": 60,
   "bpm": 120,
   "music": "music.wav",
   "colors": {
@@ -48,40 +48,59 @@
     "revealSub": "Dual-arm orchestration for FLUX 3 Action",
     "twinChip": "Digital twin · MuJoCo",
     "twinCaption": "Some tasks need two hands.",
-    "simTag": "Haller twin · scripted"
+    "simTag": "Haller twin · scripted",
+    "problemLabel": "The problem",
+    "problemOneArm": [
+      "A learned policy",
+      "drives one arm."
+    ],
+    "problemOneArmChip": "FLUX 3 Action · one skill, one arm",
+    "problemHoldsLid": "Someone still holds the lid.",
+    "problemHandLabel": "a person, holding the lid",
+    "problemNoCheck": "Nothing checks that it worked.",
+    "problemNoCheckChip": "Stock FLUX on our arm, before our fix: 0 of 16",
+    "problemQuestions": [
+      "Who moves.",
+      "When.",
+      "Did it work?"
+    ]
   },
   "shots": {
-    "book": {
+    "history": {
       "start": 0.0,
-      "end": 14.0
+      "end": 15.5
+    },
+    "problem": {
+      "start": 15.5,
+      "end": 23.5
     },
     "reveal": {
-      "start": 14.0,
-      "end": 18.0
+      "start": 23.5,
+      "end": 27.5
     },
     "sim": {
-      "start": 18.0,
-      "end": 26.0
+      "start": 27.5,
+      "end": 35.5
     },
     "hero": {
-      "start": 26.0,
-      "end": 34.5
+      "start": 35.5,
+      "end": 44.5
     },
     "imagination": {
-      "start": 34.5,
-      "end": 36.0
+      "start": 44.5,
+      "end": 46.5
     },
     "diagram": {
-      "start": 36.0,
-      "end": 40.5
+      "start": 46.5,
+      "end": 51.0
     },
     "tryIt": {
-      "start": 40.5,
-      "end": 43.5
+      "start": 51.0,
+      "end": 54.5
     },
     "end": {
-      "start": 43.5,
-      "end": 48.0
+      "start": 54.5,
+      "end": 60.0
     }
   },
   "hero": {
@@ -93,7 +112,7 @@
         "speed": 4
       },
       {
-        "from": 29.0,
+        "from": 28.0,
         "to": 40.0,
         "speed": 2
       }
@@ -102,7 +121,7 @@
     "trackUntil": 33.3,
     "slotShowFrom": 33.0,
     "releasedAt": 38.0,
-    "statFrom": 31.5,
+    "statFrom": 41.0,
     "slotBox": [
       0.49,
       0.44,
@@ -302,13 +321,14 @@
     }
   },
   "book": {
-    "_note": "History facts are general knowledge; see video/README.md for the list to double-check before publishing.",
-    "end": 14.0,
-    "coverOpenAt": 2.0,
+    "_note": "History facts are general knowledge; see video/README.md for the list to double-check. mono: 1 = black and white, 0 = colour. photo: a file in public/history (from media/history), else a line-art plate.",
+    "countdownBeats": 3,
+    "coverOpenAt": 3.0,
     "flipEvery": 1.5,
-    "flipSec": 0.65,
-    "drawSec": 1.0,
-    "diveAt": 13.2,
+    "flipSec": 0.45,
+    "drawSec": 0.8,
+    "burnAt": 14.7,
+    "end": 15.5,
     "coverTitle": [
       "Robot",
       "Arms"
@@ -316,63 +336,73 @@
     "coverSub": "A short history",
     "coverYears": "1961 — 2026",
     "runningHead": "A short history of robot arms",
-    "footnote": "Illustrations, not to scale",
+    "openPageText": "to be continued…",
     "pages": [
       {
         "year": "1961",
         "name": "Unimate",
         "line": "The first industrial robot arm.",
         "who": "Unimation · General Motors",
-        "art": "unimate"
+        "art": "unimate",
+        "mono": 1
       },
       {
         "year": "1969",
         "name": "Stanford Arm",
         "line": "Electric, and run by a computer.",
         "who": "Victor Scheinman · Stanford",
-        "art": "stanford"
+        "art": "stanford",
+        "mono": 1
       },
       {
         "year": "1978",
         "name": "PUMA",
         "line": "A programmable arm for assembly.",
         "who": "Unimation",
-        "art": "puma"
+        "art": "puma",
+        "mono": 1
       },
       {
         "year": "2012",
         "name": "Baxter",
         "line": "Two arms, safe beside people.",
         "who": "Rethink Robotics",
-        "art": "baxter"
+        "art": "baxter",
+        "mono": 0.6
       },
       {
         "year": "2023",
         "name": "ALOHA",
         "line": "Low-cost arms learn two-handed skills.",
         "who": "Stanford",
-        "art": "aloha"
+        "art": "aloha",
+        "mono": 0.35
       },
       {
         "year": "2023",
         "name": "RT-2",
         "line": "Vision and language become actions.",
         "who": "Google DeepMind",
-        "art": "rt2"
+        "art": "rt2",
+        "mono": 0.2
       },
       {
         "year": "2024",
         "name": "SO-100 · SO-101",
         "line": "Open-source arms anyone can print.",
         "who": "TheRobotStudio · Hugging Face",
-        "art": "so101"
+        "art": "so101",
+        "mono": 0,
+        "photo": "history/so101_follower_therobotstudio.jpg",
+        "credit": "Photo: TheRobotStudio / SO-ARM100, Apache-2.0"
       },
       {
         "year": "2026",
-        "name": "Liminal",
-        "line": "Two SO-101s, one behavior tree.",
-        "who": "ERH Physical AI Hackathon",
-        "art": "robot"
+        "name": "Two arms, one long task",
+        "line": "This page is still being written.",
+        "who": "",
+        "art": "open",
+        "mono": 0
       }
     ]
   },
@@ -427,5 +457,21 @@
     "captionTo": 2.6,
     "hudFrom": 2.6,
     "taskFile": "configs/tasks/lid_hold_insert.yaml"
+  },
+  "problem": {
+    "beatSec": 2.0,
+    "oneArmFrom": 2.0,
+    "handBox": [
+      0.16,
+      0.62,
+      0.27,
+      0.8
+    ],
+    "strip": [
+      "executing",
+      "executing",
+      "waiting",
+      "replanned"
+    ]
   }
 }

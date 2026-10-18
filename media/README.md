@@ -15,7 +15,11 @@ Its `00_highlights/` is mirrored here.
 
 | File | What it shows |
 |---|---|
-| `liminal_launch_16x9.mp4`, `liminal_launch_9x16.mp4` | The 48 s launch video (1920x1080 and 1080x1920, original synthesized score): history book, the real rig, its twin running `lid_hold_insert`, the real red-pen insert. Built by [`video/`](../video/README.md), which lists every shot and source timestamp; simulated shots carry a `SIM` tag. |
+| `liminal_launch_16x9.mp4`, `liminal_launch_9x16.mp4` | The 60 s launch video (1920x1080 and 1080x1920, original synthesized score): an old-film history of robot arms, the problem, the real rig, its twin running `lid_hold_insert`, the real red-pen insert. Built by [`video/`](../video/README.md), which lists every shot and source timestamp; simulated shots carry a `SIM` tag. |
+
+## `history/`
+
+Licensed photos for the launch video's history book, with credits in [`history/README.md`](history/README.md).
 
 ## `real_robot/`
 
