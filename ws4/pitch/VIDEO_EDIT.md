@@ -1,16 +1,33 @@
 # Submission video: edit list
 
-Status: **v2, Sun 18 Oct 11:00 CEST**: voice-over, original music, animated cards. The chain shots (07a, 07b) are
-placeholders until the full-chain footage lands. Numbers in captions and voice come only from
-[NUMBERS.md](NUMBERS.md).
+Status: **v3 = final candidate, Sun 18 Oct 12:32 CEST**: full-chain run, voice-over, original music, animated cards.
+Numbers in captions and voice come only from [NUMBERS.md](NUMBERS.md) (chain: section 0.1b; demo mode: 0.5).
 
 | Cut | Drive | Local (laptop, not in the repo) |
 |---|---|---|
-| Main, 2:00 | `gdrive:liminal/05_video/liminal_2min_v2.mp4` | `~/liminal_video/out/liminal_2min_v2.mp4` |
-| 60 s | `gdrive:liminal/05_video/liminal_60s_v2.mp4` | `~/liminal_video/out/liminal_60s_v2.mp4` |
-| v1 (silent, kept) | `gdrive:liminal/05_video/liminal_{2min,60s}_v1.mp4` | |
+| Main, 2:00 | `gdrive:liminal/05_video/liminal_2min_v3.mp4` | `~/liminal_video/out/liminal_2min_v3.mp4` |
+| 60 s | `gdrive:liminal/05_video/liminal_60s_v3.mp4` | `~/liminal_video/out/liminal_60s_v3.mp4` |
+| Older | `liminal_{2min,60s}_v1.mp4` (silent), `_v2.mp4` (audio, placeholder chain) | |
 
 Format: 1920x1080, 30 fps, H.264 yuv420p, AAC 192 kb/s stereo 48 kHz, about -14 LUFS integrated, peaks under -1.5 dBFS.
+
+## The chain section (run 12:05, `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4`)
+
+Operator-console recording, top 1600x900 crop. Run time r maps to recording time t = r + about 28 s.
+
+| Step | Recording in to out | What is on screen | Label |
+|---|---|---|---|
+| 1 box | 80 to 98 s | the replanned third try of the box replay opens the lid | SCRIPTED REPLAY OF A RECORDED DEMO, NOT FLUX |
+| 2 green | 99 to 157 s | green-pen LoRA slots the green pen, then the red pen on its way home | FLUX 3 ACTION + GREEN-PEN LoRA |
+| 3 cutter | 283 to 329 s | cutter LoRA, second try, inserts | FLUX 3 ACTION + CUTTER LoRA |
+| 4 red pen | 329 to 336 s | Haiku confirms the red pen already in place; run succeeded | CLAUDE HAIKU CHECK |
+
+- The box replays recorded take 72 in this run (the console says so); the card and voice say "a recorded demo".
+- The red pen was placed by the green-pen LoRA, not by the red-pen LoRA (NUMBERS 0.1b); caption and voice say so.
+- Demo mode: the final chain runs were unguarded (keep-out zones, stall and load stops and the start gate off;
+  joint limits, 1 deg per tick, the 60 % torque cap and the e-stop on). The step-4 caption says "demo mode, guards
+  off", and the safety card and voice say which guards were on in the chain and which only in the benchmark runs.
+- The cutter step's first try timed out (120 s) and is skipped in the cut; the caption says "in on the second try".
 
 ## Audio
 
@@ -30,7 +47,8 @@ Format: 1920x1080, 30 fps, H.264 yuv420p, AAC 192 kb/s stereo 48 kHz, about -14 
 - The narration says where to look ("on the right, its wrist camera"; "left, what happened; right, what FLUX
   imagined"), each point is made once, and numbers appear on screen as the voice says them.
 - Cards build up in sync with the voice (staggered fade and slide); a "0 / 16" stamp on the zero-shot shot; chapter
-  labels top-right; slow zoom on the stills.
+  labels top-right; slow zoom on the stills; the chain is shown on the operator console so plan lanes, Claude's
+  verdicts and the live imagined-vs-actual panel are all visible.
 
 ## How it is built
 
@@ -45,10 +63,11 @@ in and out points from the Drive originals and copy the caption text.
 
 - Speed: every robot shot carries REAL SPEED or Nx SPEED in its top-left label.
 - FLUX label only on FLUX runs: red pen (LoRA RAW 5k on B84), green pen (LoRA RAW 5k), cutter (augmented LoRA RAW 5k).
-  The box step appears only as "SCRIPTED REPLAY, NOT FLUX" on the chain card; no box footage is in v1.
+  Box footage appears only in chain step 1, labelled SCRIPTED REPLAY OF A RECORDED DEMO, NOT FLUX.
 - Imagination clips are labelled as a held-out take replayed offline, not a live run.
 - The safety card sits over IMG_6397, which is a failed attempt (05:36, layout A, 2 steps, load freeze); the card
   makes no success claim about it.
+- The box step is labelled SCRIPTED REPLAY, NOT FLUX on the chain card and on the chain shot itself.
 
 ## Phone clip to run mapping (start times from the phone metadata, matched to `ws4/eval/trials.jsonl`)
 
@@ -69,11 +88,11 @@ in and out points from the Drive originals and copy the caption text.
 People are visible in 04a, 04b (VR operators), the hero background (05a, 05b) and the knife-edge wrist frames (09):
 check with the team before publishing.
 
-## To do for the final (by 13:00)
+## Before submitting
 
-- Replace 07a and 07b with the full-chain run (HMI plan and lanes, the box step labelled SCRIPTED REPLAY, NOT FLUX,
-  then green, cutter, red pen, each Haiku check) and fill the chain result from NUMBERS.md (`[[NUM:CHAIN_SUCCESS]]`).
-- If the cutter step in the chain runs as the take-67 replay, label it SCRIPTED REPLAY, NOT FLUX too.
+- Done in v3: chain footage in, chain result from NUMBERS 0.1b. Remaining human checks: listen to the voice and
+  music, and OK the people visible in the VR clips, the hero background, the knife-edge frames and the console's
+  wrist cameras (spectators).
 
 ## Main cut (2:00)
 
@@ -89,13 +108,16 @@ check with the team before publishing.
 | 8 | 0:41.3 | 9.0 s | 05b_redpen_1x | `gdrive:liminal/IMG_6396.MOV + 01_real_robot_runs/20261018_052519/attempt02` | 63.0 to 72.0 s | 1x | FLUX 3 ACTION + LoRA, REAL ARM; REAL SPEED | First full FLUX inserts on the real arm: red pen, 3 of 5 in the benchmark block | - |
 | 9 | 0:50.3 | 3.0 s | 06a_green | `laptop ws4/single_arm/runs/20261018_083134/attempt01/video.mp4` | 20.0 to 32.0 s | 4x | FLUX 3 ACTION + LoRA, REAL ARM; ROBOT CAMERAS, 4x SPEED | One LoRA per skill, one shared base: green pen 1 of 2, cutter 1 of 6 inserts this morning | +0.3 s: The green pen and the cutter: same base, their own adapters. Each one inserted this morning. |
 | 10 | 0:53.3 | 3.0 s | 06b_cutter | `laptop ws4/single_arm/runs/20261018_084210/attempt01/video.mp4` | 38.0 to 50.0 s | 4x | FLUX 3 ACTION + LoRA, REAL ARM; ROBOT CAMERAS, 4x SPEED | One LoRA per skill, one shared base: green pen 1 of 2, cutter 1 of 6 inserts this morning | - |
-| 11 | 0:56.3 | 13.6 s | 07a_chain_card | `card (NUMBERS.md 0.1)` | still | 1x | - | Card: Claude plans. FLUX acts. Claude checks. Steps: 1 box arm opens and holds the lid (SCRIPTED REPLAY, NOT FLUX), 2 green pen, 3 yellow cutter, 4 red pen (FLUX 3 Action + LoRA). Footer: step 1 replays a recorded VR demo under the same safety layer. | +0.3 s: For the demo, Claude Opus plans the chain, and Claude Haiku checks every step from the head camera. No LLM output reaches a motor. Step one, the box, is a scripted replay of a recorded demo. Not FLUX. |
-| 12 | 1:09.9 | 11.0 s | 07b_cutter_live | `gdrive:liminal/20261018_092520.mp4` | 10.0 to 32.0 s | 2x | FLUX 3 ACTION + LoRA, REAL ARM; 2x SPEED | Live this morning: the cutter LoRA grasps almost every time; inserts are rarer | +0.4 s: Then FLUX puts the objects away. The cutter grasps almost every time. Full inserts are rarer. |
-| 13 | 1:20.9 | 10.0 s | 08a_imagine | `gdrive:liminal/00_highlights/imagination_lora5k_imagined_vs_actual_ep101.mp4` | 0.0 to 10.0 s | 1x | FLUX IMAGINATION, HELD-OUT TAKE REPLAYED | FLUX imagines the next 1.4 s. We decode it; its actions stay bit-identical. | +0.3 s: FLUX also predicts the next one point four seconds of video. We decode it, and the actions stay bit-identical. Left, what happened. Right, what FLUX imagined. Fine-tuning made it imagine better, too. |
-| 14 | 1:30.9 | 4.0 s | 08b_imagine_cmp | `gdrive:liminal/00_highlights/imagination_b84_vs_lora5k_ep101.png` | still | 1x | FLUX IMAGINATION, OFFLINE | Fine-tuning made it imagine better: zero-shot smears the pen by 1 s ahead, the LoRA keeps it whole | - |
-| 15 | 1:34.9 | 11.0 s | 09_knife | `gdrive:liminal/00_highlights/knife_edge_wrist_view_training_vs_now.jpg` | still | 1x | DIAGNOSIS, OFFLINE | After the robot moved, FLUX only held still. One pixel of wrist-camera shift flipped hold and reach, so we align the station and augment the images. | +0.2 s: Our hardest bug: after we moved the robot, FLUX just held still. One pixel of wrist-camera shift flipped hold and reach. So now we align the station, and augment the images. |
-| 16 | 1:45.9 | 8.0 s | 10_safety | `card over gdrive:liminal/IMG_6397.MOV (05:36 attempt, not a success)` | 20.0 to 28.0 s | 1x | - | Card: 1 deg per tick, soft limits, 60 % torque cap; keep-out and per-skill workspace; stall and load freeze; start gate; e-stop. Keep-out refused ticks in 15 of 33 benchmark attempts, ended 7, no collision reported. | +0.3 s: Learned or scripted, every command passes one safety layer: one degree per tick, keep-out zones, stall freeze, and a torque cap. |
-| 17 | 1:53.9 | 6.1 s | 11_end | `card` | still | 1x | - | Card: github.com/Javgilavi/liminal, huggingface.co/Oskrt adapters and datasets. | +0.5 s: The code, the adapters and the data are all public. Liminal. Imagine, then act. |
+| 11 | 0:56.3 | 5.0 s | 07a_chain_card | `card (NUMBERS.md 0.1, 0.1b)` | still | 1x | - | Card: Claude plans. FLUX acts. Claude checks. Steps: 1 box arm opens and holds the lid (SCRIPTED REPLAY, NOT FLUX), 2 green pen, 3 yellow cutter, 4 red pen (FLUX 3 Action + LoRA). Footer: step 1 replays a recorded VR demo; our FLUX box skill would not start from rest. | +0.3 s: For the demo, Claude Opus plans the chain, and Claude Haiku checks every step. Step one is a scripted replay of a recorded demo, not FLUX. Then the green pen LoRA slots the green pen, and the red pen on its way home. The cutter goes in on the second try. Two of three chain runs finished with no human touch. |
+| 12 | 1:01.3 | 3.0 s | 07b_chain_step1 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 80.0 to 98.0 s | 6x | STEP 1: SCRIPTED REPLAY OF A RECORDED DEMO, NOT FLUX; 6x SPEED | Box arm: scripted replay of a recorded demo, not FLUX (third try, after Claude replanned) | - |
+| 13 | 1:04.3 | 7.2 s | 07c_chain_step2 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 99.0 to 157.0 s | 8x | STEP 2: FLUX 3 ACTION + GREEN-PEN LoRA; 8x SPEED | Green-pen LoRA: the green pen goes in, then the red pen on its way home | - |
+| 14 | 1:11.5 | 5.8 s | 07d_chain_step3 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 283.0 to 329.0 s | 8x | STEP 3: FLUX 3 ACTION + CUTTER LoRA; 8x SPEED | Cutter LoRA: in on the second try | - |
+| 15 | 1:17.3 | 3.6 s | 07e_chain_step4 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 329.0 to 336.2 s | 2x | STEP 4: CLAUDE HAIKU CHECK; 2x SPEED | 2 of 3 chain runs: 4 of 4 steps, no human touch (demo mode, guards off) | - |
+| 16 | 1:20.9 | 10.0 s | 08a_imagine | `gdrive:liminal/00_highlights/imagination_lora5k_imagined_vs_actual_ep101.mp4` | 0.0 to 10.0 s | 1x | FLUX IMAGINATION, HELD-OUT TAKE REPLAYED | FLUX imagines the next 1.4 s. We decode it; its actions stay bit-identical. | +0.3 s: FLUX also predicts the next one point four seconds of video. We decode it, and the actions stay bit-identical. Left, what happened. Right, what FLUX imagined. Fine-tuning made it imagine better, too. |
+| 17 | 1:30.9 | 4.0 s | 08b_imagine_cmp | `gdrive:liminal/00_highlights/imagination_b84_vs_lora5k_ep101.png` | still | 1x | FLUX IMAGINATION, OFFLINE | Fine-tuning made it imagine better: zero-shot smears the pen by 1 s ahead, the LoRA keeps it whole | - |
+| 18 | 1:34.9 | 11.0 s | 09_knife | `gdrive:liminal/00_highlights/knife_edge_wrist_view_training_vs_now.jpg` | still | 1x | DIAGNOSIS, OFFLINE | After the robot moved, FLUX only held still. One pixel of wrist-camera shift flipped hold and reach, so we align the station and augment the images. | +0.2 s: Our hardest bug: after we moved the robot, FLUX just held still. One pixel of wrist-camera shift flipped hold and reach. So now we align the station, and augment the images. |
+| 19 | 1:45.9 | 8.8 s | 10_safety | `card over gdrive:liminal/IMG_6397.MOV (05:36 attempt, not a success)` | 20.0 to 28.8 s | 1x | - | Card: always on: joint limits, 1 deg per tick, 60 % torque cap, e-stop. Benchmark runs add keep-out zones, stall and load freeze, start gate. The filmed chain ran in demo mode without those guards. Keep-out refused ticks in 15 of 33 benchmark attempts, ended 7, no collision reported. | +0.3 s: Every command is rate-limited and torque-capped. Our benchmark runs add keep-out zones and a stall freeze. The filmed chain ran without them. |
+| 20 | 1:54.7 | 5.3 s | 11_end | `card` | still | 1x | - | Card: github.com/Javgilavi/liminal, huggingface.co/Oskrt adapters and datasets. | +0.3 s: The code, the adapters and the data are all public. Liminal. Imagine, then act. |
 
 Total: 1:60.0
 
@@ -111,9 +133,12 @@ Total: 1:60.0
 | 6 | 0:20.0 | 7.0 s | 05b_redpen_1x | `gdrive:liminal/IMG_6396.MOV + 01_real_robot_runs/20261018_052519/attempt02` | 64.5 to 71.5 s | 1x | FLUX 3 ACTION + LoRA, REAL ARM; REAL SPEED | First full FLUX inserts on the real arm: red pen, 3 of 5 in the benchmark block | - |
 | 7 | 0:27.0 | 2.0 s | 06a_green | `laptop ws4/single_arm/runs/20261018_083134/attempt01/video.mp4` | 23.0 to 31.0 s | 4x | FLUX 3 ACTION + LoRA, REAL ARM; ROBOT CAMERAS, 4x SPEED | One LoRA per skill, one shared base: green pen 1 of 2, cutter 1 of 6 inserts this morning | +0.3 s: Green pen and cutter: same base, their own adapters. |
 | 8 | 0:29.0 | 2.0 s | 06b_cutter | `laptop ws4/single_arm/runs/20261018_084210/attempt01/video.mp4` | 42.0 to 50.0 s | 4x | FLUX 3 ACTION + LoRA, REAL ARM; ROBOT CAMERAS, 4x SPEED | One LoRA per skill, one shared base: green pen 1 of 2, cutter 1 of 6 inserts this morning | - |
-| 9 | 0:31.0 | 6.0 s | 07a_chain_card | `card (NUMBERS.md 0.1)` | still | 1x | - | Card: Claude plans. FLUX acts. Claude checks. Steps: 1 box arm opens and holds the lid (SCRIPTED REPLAY, NOT FLUX), 2 green pen, 3 yellow cutter, 4 red pen (FLUX 3 Action + LoRA). Footer: step 1 replays a recorded VR demo under the same safety layer. | +0.1 s: Claude Opus plans, Claude Haiku checks each step. The box step is a scripted replay, not FLUX. |
-| 10 | 0:37.0 | 8.0 s | 07b_cutter_live | `gdrive:liminal/20261018_092520.mp4` | 10.0 to 26.0 s | 2x | FLUX 3 ACTION + LoRA, REAL ARM; 2x SPEED | Live this morning: the cutter LoRA grasps almost every time; inserts are rarer | +0.4 s: The cutter grasps almost every time. Inserts are rarer. |
-| 11 | 0:45.0 | 8.0 s | 08a_imagine | `gdrive:liminal/00_highlights/imagination_lora5k_imagined_vs_actual_ep101.mp4` | 1.0 to 9.0 s | 1x | FLUX IMAGINATION, HELD-OUT TAKE REPLAYED | FLUX imagines the next 1.4 s. We decode it; its actions stay bit-identical. | +0.3 s: FLUX also imagines the next one point four seconds. We decode it, and the actions stay bit-identical. |
-| 12 | 0:53.0 | 7.0 s | 11_end | `card` | still | 1x | - | Card: github.com/Javgilavi/liminal, huggingface.co/Oskrt adapters and datasets. | +0.5 s: Everything is public. Liminal. Imagine, then act. |
+| 9 | 0:31.0 | 3.5 s | 07a_chain_card | `card (NUMBERS.md 0.1, 0.1b)` | still | 1x | - | Card: Claude plans. FLUX acts. Claude checks. Steps: 1 box arm opens and holds the lid (SCRIPTED REPLAY, NOT FLUX), 2 green pen, 3 yellow cutter, 4 red pen (FLUX 3 Action + LoRA). Footer: step 1 replays a recorded VR demo; our FLUX box skill would not start from rest. | +0.2 s: Claude plans and checks each step. The box is a scripted replay, not FLUX. FLUX puts the pens and the cutter away. Two of three chain runs: no human touch. |
+| 10 | 0:34.5 | 2.0 s | 07b_chain_step1 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 80.0 to 98.0 s | 9x | STEP 1: SCRIPTED REPLAY OF A RECORDED DEMO, NOT FLUX; 9x SPEED | Box arm: scripted replay of a recorded demo, not FLUX (third try, after Claude replanned) | - |
+| 11 | 0:36.5 | 4.0 s | 07c_chain_step2 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 99.0 to 157.0 s | 14.5x | STEP 2: FLUX 3 ACTION + GREEN-PEN LoRA; 14.5x SPEED | Green-pen LoRA: the green pen goes in, then the red pen on its way home | - |
+| 12 | 0:40.5 | 2.5 s | 07d_chain_step3 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 283.0 to 328.0 s | 18x | STEP 3: FLUX 3 ACTION + CUTTER LoRA; 18x SPEED | Cutter LoRA: in on the second try | - |
+| 13 | 0:43.0 | 2.0 s | 07e_chain_step4 | `gdrive:liminal/06_full_chain/chain_20261018_120554_4of4/hmi.mp4` | 329.0 to 333.0 s | 2x | STEP 4: CLAUDE HAIKU CHECK; 2x SPEED | 2 of 3 chain runs: 4 of 4 steps, no human touch (demo mode, guards off) | - |
+| 14 | 0:45.0 | 8.0 s | 08a_imagine | `gdrive:liminal/00_highlights/imagination_lora5k_imagined_vs_actual_ep101.mp4` | 1.0 to 9.0 s | 1x | FLUX IMAGINATION, HELD-OUT TAKE REPLAYED | FLUX imagines the next 1.4 s. We decode it; its actions stay bit-identical. | +0.3 s: FLUX also imagines the next one point four seconds. We decode it, and the actions stay bit-identical. |
+| 15 | 0:53.0 | 7.0 s | 11_end | `card` | still | 1x | - | Card: github.com/Javgilavi/liminal, huggingface.co/Oskrt adapters and datasets. | +0.3 s: Everything is public. Liminal. Imagine, then act. |
 
 Total: 1:00.0
