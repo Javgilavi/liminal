@@ -34,8 +34,12 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
 3. **Never trust a skill's own success claim.** A skill counts as done only when its
    `success` predicate holds in `WorldState`. `SkillNode` and `run_task` re-check it. Don't
    bypass that.
-4. **LLMs propose, the tree enforces.** Planners output task-file YAML that goes
-   through `parse_task`. No LLM output ever reaches motors or marks a goal complete.
+4. **LLMs propose, deterministic controllers enforce.** Task planners output YAML
+   through `parse_task`. The explicitly enabled live hybrid gate is a separate
+   action-level exception: a validated student/edit/eef/stop decision passes through
+   bounded local IK and `SafetySupervisor.send()`. No model output goes directly to
+   motors or marks a goal complete. Hybrid motion requires verified kinematic mapping;
+   never bypass the limits, freshness checks, ownership, or existing hardware stop.
 5. **One arm, one owner.** Arm ownership is claimed by nodes (`safety.claim`). A skill
    on an arm group (`both`) claims every member. An `ArmConflict` is a planning bug.
    Fix the tree, don't catch and ignore it.

@@ -38,6 +38,20 @@ def vector(value: Any) -> list[float]:
     return out
 
 
+def clamp_gripper_boundary(actions: list[list[float]], count: int, tolerance: float | None) -> tuple[list, list]:
+    """Bound executed gripper percentages; None matches LeRobot's full range clamp."""
+    targets = [vector(action) for action in actions]
+    adjustments = []
+    gripper = SO101_JOINTS.index("gripper")
+    for index, target in enumerate(targets[:count]):
+        value = target[gripper]
+        bounded = min(100.0, max(0.0, value))
+        if value != bounded and (tolerance is None or abs(value - bounded) <= tolerance):
+            target[gripper] = bounded
+            adjustments.append({"step": index, "predicted": value, "target": bounded})
+    return targets, adjustments
+
+
 def selected_state(message: dict, side: str, *, single_arm: str | None = None) -> list[float]:
     names, values = message["state_names"], message["state"]
     if len(names) != len(values) or len(set(names)) != len(names):
@@ -58,8 +72,8 @@ def transform(values: list[float], cfg: dict, *, inverse: bool = False) -> list[
 
 def legacy_shoulder_elbow(cfg: dict) -> dict:
     """Opt into the offline-tested legacy convention without changing calibration."""
-    if cfg.get("normalization_profile") == "hf_space_native":
-        raise ValueError("HF Space normalization requires native coordinates; cannot add the legacy mapping")
+    if cfg.get("normalization_profile") in ("hf_space_native", "dataset_native"):
+        raise ValueError("Native normalization requires native coordinates; cannot add the legacy mapping")
     if vector(cfg["joint_scale"]) != [1] * 6 or vector(cfg["joint_offset"]) != [0] * 6:
         raise ValueError("legacy shoulder/elbow mapping requires an identity profile; refusing a second mapping")
     return {**cfg, "coordinate_mapping": "experimental_legacy_shoulder_elbow",
@@ -402,24 +416,63 @@ async def worker_reply(process: asyncio.subprocess.Process, timeout: float) -> d
     return reply
 
 
+async def close_worker(process: asyncio.subprocess.Process) -> None:
+    if process.stdin:
+        process.stdin.close()
+    try:
+        await asyncio.wait_for(process.wait(), 10)
+    except TimeoutError:
+        with contextlib.suppress(ProcessLookupError):
+            process.terminate()
+        try:
+            await asyncio.wait_for(process.wait(), 3)
+        except TimeoutError:
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            await asyncio.wait_for(process.wait(), 3)
+
+
 async def run(cfg: dict, output: Path, execute: bool) -> None:
+    from liminal.policy.hybrid import build_hybrid
+
+    hybrid = build_hybrid(cfg, execute=execute)
+    if hybrid is not None and not cfg.get("official_lerobot"):
+        raise ValueError("hybrid requires the official absolute-joint FLUX worker")
+
+    def hybrid_log(kind, **values):
+        with (output / "hybrid.jsonl").open("a") as stream:
+            stream.write(json.dumps({"time": time.time(), "type": kind, **values}, allow_nan=False) + "\n")
+
     side = cfg["arm"]
     if side not in ("left", "right"):
         raise ValueError("select exactly one arm")
     transform([0] * 6, cfg)  # Validate coordinate configuration before any I/O.
     normalization_profile = cfg.get("normalization_profile", "released")
-    if normalization_profile not in ("released", "hf_space_native"):
+    if normalization_profile not in ("released", "hf_space_native", "dataset_native"):
         raise ValueError("unknown normalization profile")
-    if normalization_profile == "hf_space_native":
+    if normalization_profile in ("hf_space_native", "dataset_native"):
+        label = "HF Space" if normalization_profile == "hf_space_native" else "Dataset"
         if not cfg.get("official_lerobot") or not cfg.get("checkpoint"):
-            raise ValueError("HF Space normalization requires an explicit official checkpoint package")
+            raise ValueError(f"{label} normalization requires an explicit official checkpoint package")
         if vector(cfg["joint_scale"]) != [1] * 6 or vector(cfg["joint_offset"]) != [0] * 6:
-            raise ValueError("HF Space normalization requires native coordinates")
+            raise ValueError(f"{label} normalization requires native coordinates")
     coordinates = {"name": cfg.get("coordinate_mapping", "configured"),
                    "joint_order": list(SO101_JOINTS),
                    "robot_to_model_scale": vector(cfg["joint_scale"]),
                    "robot_to_model_offset": vector(cfg["joint_offset"])}
     duration = rollout_duration(cfg)
+    hold_on_duration = cfg.get("hold_on_duration", False)
+    if not isinstance(hold_on_duration, bool):
+        raise ValueError("hold_on_duration must be a boolean")
+    gripper_tolerance = cfg.get("gripper_boundary_tolerance", 0.0)
+    if (isinstance(gripper_tolerance, bool) or not isinstance(gripper_tolerance, (int, float))
+            or not math.isfinite(gripper_tolerance) or not 0 <= gripper_tolerance <= 1):
+        raise ValueError("gripper_boundary_tolerance must be in [0, 1] percentage points")
+    gripper_clamping = cfg.get("gripper_clamping", False)
+    if not isinstance(gripper_clamping, bool):
+        raise ValueError("gripper_clamping must be a boolean")
+    if gripper_clamping:
+        gripper_tolerance = None
     tuning = inference_settings(cfg)
     obsolete = {"max_speed", "max_tracking_error", "max_excursion", "coordinated_slowdown"}.intersection(cfg)
     if obsolete:
@@ -446,9 +499,10 @@ async def run(cfg: dict, output: Path, execute: bool) -> None:
     writer = None
     process = None
     engaged = False
-    deadline = math.inf
+    rollout_timeout = None
     report: dict = {"arm": side, "prompt": cfg["prompt"], "execute": execute, "status": "starting",
-                    "duration_s": duration, "coordinate_mapping": coordinates}
+                    "duration_s": duration, "hold_on_duration": hold_on_duration, "coordinate_mapping": coordinates,
+                    "gripper_clamping": gripper_clamping, "gripper_boundary_tolerance": gripper_tolerance}
     log = (output / "worker.log").open("w")
     submitted = (output / "submitted-actions.jsonl").open("w")
     plans = (output / "plans.jsonl").open("w")
@@ -480,6 +534,10 @@ async def run(cfg: dict, output: Path, execute: bool) -> None:
                 raise RuntimeError("expected official LeRobot policy worker")
             effective["control_hz"] = effective["fps"]
             effective["seed"] = effective["inference_seed"]
+            # predict_action_chunk returns all 42 targets; this bridge chooses
+            # how many to execute, without using LeRobot's select_action queue.
+            report["checkpoint_n_action_steps"] = effective["n_action_steps"]
+            effective["n_action_steps"] = tuning["n_action_steps"]
             report["integration"] = ready["integration"]
             report["source_revision"] = ready["source_revision"]
             print("Official LeRobot policy/processors; Haller owns motors and UI E-stop.", flush=True)
@@ -551,10 +609,17 @@ async def run(cfg: dict, output: Path, execute: bool) -> None:
             for action in reply["actions"]:
                 vector(action)
             reply["robot_actions"] = [transform(action, cfg, inverse=True) for action in reply["actions"]]
+            reply["execution_actions"], adjustments = clamp_gripper_boundary(
+                reply["robot_actions"], execute_steps, gripper_tolerance)
+            if adjustments:
+                rig.diagnostic("gripper_clamp", plan=plan_index, tolerance=gripper_tolerance,
+                               adjustments=adjustments)
             plans.write(json.dumps({"time": time.time(), "inference_seconds": reply["inference_seconds"],
                                     "rpc_seconds": reply["rpc_seconds"], "execute_steps": execute_steps,
                                     "command_anchor": reply["command_anchor"], "actions": reply["actions"],
                                     "actions_frame": "model", "robot_actions": reply["robot_actions"],
+                                    "execution_actions": reply["execution_actions"],
+                                    "gripper_adjustments": adjustments,
                                     "history": [{k: f[k] for k in ("state", "command_history")}
                                                 for f in request["history"]]}) + "\n")
             plans.flush()
@@ -564,26 +629,39 @@ async def run(cfg: dict, output: Path, execute: bool) -> None:
                            execute_steps=execute_steps, command_anchor=reply["command_anchor"],
                            first_predicted=reply["actions"][0],
                            last_executed_prediction=reply["actions"][execute_steps - 1],
-                           first_robot_target=reply["robot_actions"][0],
-                           last_robot_target=reply["robot_actions"][execute_steps - 1])
+                           first_robot_target=reply["execution_actions"][0],
+                           last_robot_target=reply["execution_actions"][execute_steps - 1])
+            if hybrid is not None:
+                reply["hybrid_segment"] = await hybrid.choose(
+                    goal=cfg["prompt"], actions=reply["robot_actions"], observation=dict(rig.latest),
+                    max_steps=execute_steps, log=hybrid_log)
+                rig.check(moving=engaged)
+                hybrid.validate_fresh(reply["hybrid_segment"], rig.latest["state"])
             plan_index += 1
             return reply
 
         first = await predict()
         report.update(first_inference_seconds=first["inference_seconds"], first_rpc_seconds=first["rpc_seconds"],
-                      first_actions=first["actions"], first_robot_actions=first["robot_actions"])
+                      first_actions=first["actions"], first_robot_actions=first["robot_actions"],
+                      first_execution_actions=first["execution_actions"])
         print(f"Real-camera inference: {first['inference_seconds']:.3f}s for 42 actions; motors unchanged.", flush=True)
         if not execute:
             report["status"] = "observation_only_passed"
-            if cfg.get("official_lerobot"):
+            if cfg.get("official_lerobot") and hybrid is None:
                 from liminal.policy.official_live import check_chunk
                 cells = rig.telemetry["arms"][side]["joints"]
                 lower, upper = pose_limits(cells, initial)
                 try:
-                    check_chunk(first["robot_actions"], lower, upper, execute_steps)
+                    check_chunk(first["execution_actions"], lower, upper, execute_steps)
                 except RuntimeError as exc:
                     report["execution_blocker"] = str(exc)
                     print(str(exc), flush=True)
+            if hybrid is not None:
+                report["hybrid_decision"] = first["hybrid_segment"].decision
+                cells = rig.telemetry["arms"][side]["joints"]
+                lower, upper = pose_limits(cells, initial)
+                for i in range(first["hybrid_segment"].steps):
+                    hybrid.target(first["hybrid_segment"], i, rig.latest["state"], lower, upper)
             print("Observation-only result saved to", output, flush=True)
             return
         outside = execution_gate(cfg, initial, stats) if stats else []
@@ -613,29 +691,43 @@ async def run(cfg: dict, output: Path, execute: bool) -> None:
 
         tasks.append(asyncio.create_task(watchdog()))
         seq = 0
-        deadline = time.monotonic() + duration if duration is not None else math.inf
         print(f"Executing {execute_steps}/42 actions at {control_hz:g} Hz; "
               + ("no rollout time limit. Ctrl+C stops and releases torque." if duration is None
                  else f"rollout duration {duration:g}s."), flush=True)
         print("Targets use calibrated travel limits; Haller policy slew limiting is disabled. "
               "No startup-relative excursion or command-lead cap.", flush=True)
-        async with safety.claim(side, run_id), asyncio.timeout(duration):
+        async with safety.claim(side, run_id), asyncio.timeout(duration) as rollout_timeout:
             chunk = first
             while True:
-                if cfg.get("official_lerobot"):
+                segment = chunk.get("hybrid_segment")
+                if segment is not None:
+                    if segment.stopped:
+                        report.update(status="hybrid_stopped_task_success_unverified",
+                                      hybrid_decision=segment.decision)
+                        return
+                    hybrid.validate_fresh(segment, rig.latest["state"])
+                    # Validate the whole selected prefix before its first command.
+                    for i in range(segment.steps):
+                        hybrid.target(segment, i, rig.latest["state"], lower, upper)
+                elif cfg.get("official_lerobot"):
                     from liminal.policy.official_live import check_chunk
-                    check_chunk(chunk["robot_actions"], lower, upper, execute_steps)
+                    check_chunk(chunk["execution_actions"], lower, upper, execute_steps)
+                executed = []
                 previous_prediction = vector(chunk["command_anchor"])
                 diagnostics = ChunkDiagnostics(vector(rig.latest["state"]), time.monotonic())
-                for index, predicted in enumerate(chunk["actions"][:execute_steps]):
+                for index, predicted in enumerate(chunk["actions"][:segment.steps if segment else execute_steps]):
+                    if segment is not None and index:
+                        await rig.wait_observed(rig.command_seq)
                     tick = time.monotonic()
                     rig.check(moving=True)
                     proxy.current = vector(rig.latest["state"])
                     anchor = transform(rig.command, cfg) if rig.command is not None else previous_prediction
                     rebased = (vector(predicted) if cfg.get("official_lerobot")
                                else rebase_action(vector(predicted), previous_prediction, anchor))
-                    requested = (chunk["robot_actions"][index] if cfg.get("official_lerobot")
+                    requested = (chunk["execution_actions"][index] if cfg.get("official_lerobot")
                                  else transform(rebased, cfg, inverse=True))
+                    if segment is not None:
+                        requested = hybrid.target(segment, index, proxy.current, lower, upper)
                     target = safety.send(side, requested)
                     submitted.write(json.dumps({"seq": seq, "time": time.time(), "arm": side,
                                                 "measured": proxy.current, "predicted": predicted,
@@ -650,17 +742,47 @@ async def run(cfg: dict, output: Path, execute: bool) -> None:
                     diagnostics.record(requested, target, rig.command, time.monotonic() - sent_at,
                                        rig.snapshot()["load"])
                     rig.event("command_timing", seq=seq, ack_ms=1000 * (time.monotonic() - sent_at))
+                    executed.append(list(rig.command))
                     previous_prediction = vector(predicted)
                     seq += 1
                     await asyncio.sleep(max(0, 1 / control_hz - (time.monotonic() - tick)))
+                if segment is not None:
+                    await rig.wait_observed(rig.command_seq)
+                    rig.check(moving=True)
+                    hybrid.record(segment, executed, rig.latest["state"], hybrid_log)
                 rig.diagnostic("chunk", plan=chunk["plan_index"],
                                **diagnostics.summary(vector(rig.latest["state"]), time.monotonic()),
                                snapshot=rig.snapshot())
                 chunk = await predict()
                 submitted.flush()
     except TimeoutError:
-        if engaged and time.monotonic() >= deadline:
+        if engaged and rollout_timeout is not None and rollout_timeout.expired():
             report["status"] = "duration_reached_task_success_unverified"
+            if hold_on_duration:
+                try:
+                    # Haller releases torque on disconnect. Keep its session and
+                    # watchdog alive; the servos retain the last acknowledged goal.
+                    rig.check(moving=True)
+                    if rig.command is None or rig.pending_command is not None:
+                        raise RuntimeError("cannot hold without an acknowledged command")
+                    await rig.wait_observed(rig.command_seq)
+                    rig.check(moving=True)
+                    report.update(status="duration_reached_holding_task_success_unverified",
+                                  completion_reason="duration_reached", held_target=list(rig.command),
+                                  last_snapshot=rig.snapshot())
+                    rig.diagnostic("hold", target=rig.command, snapshot=rig.snapshot())
+                    (output / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+                    print("Rollout deadline reached. Holding the last committed pose with torque enabled. "
+                          "No more inference or movement commands. Keep this terminal open; "
+                          "Ctrl+C or Haller STOP/E-stop releases torque.", flush=True)
+                    await close_worker(process)
+                    process = None
+                    while True:
+                        rig.check(moving=True)
+                        await asyncio.sleep(0.05)
+                except BaseException as exc:
+                    report.update(status="stopped", error=str(exc) or type(exc).__name__)
+                    raise
         else:
             report["status"] = "failed"
             report["error"] = "setup or inference timed out"
@@ -693,19 +815,7 @@ async def run(cfg: dict, output: Path, execute: bool) -> None:
             await asyncio.gather(*tasks, return_exceptions=True)
             if process:
                 try:
-                    if process.stdin:
-                        process.stdin.close()
-                    try:
-                        await asyncio.wait_for(process.wait(), 10)
-                    except TimeoutError:
-                        with contextlib.suppress(ProcessLookupError):
-                            process.terminate()
-                        try:
-                            await asyncio.wait_for(process.wait(), 3)
-                        except TimeoutError:
-                            with contextlib.suppress(ProcessLookupError):
-                                process.kill()
-                            await asyncio.wait_for(process.wait(), 3)
+                    await close_worker(process)
                 except Exception as exc:
                     cleanup_errors.append(f"GPU worker cleanup: {exc}")
         finally:
@@ -728,6 +838,7 @@ def main() -> None:
     parser.add_argument("--output", default=None)
     parser.add_argument("--verbose", action="store_true", help="print startup checks and per-chunk diagnostics")
     parser.add_argument("--prompt", help="task instruction for this run")
+    parser.add_argument("--hybrid-config", help="optional action-level Claude gate YAML; disabled by default")
     parser.add_argument("--legacy-shoulder-elbow", action="store_true",
                         help="experimental software mapping: model shoulder=90-robot shoulder, elbow=robot elbow+90")
     parser.add_argument("--n-action-steps", type=int, help="actions executed per 42-action plan")
@@ -739,7 +850,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.execute != args.engage:
         parser.error("motor execution requires both --execute and --engage")
-    cfg = yaml.safe_load(Path(args.config).read_text())
+    from liminal.policy.hybrid import load_hybrid_config
+
+    cfg = load_hybrid_config(yaml.safe_load(Path(args.config).read_text()), args.hybrid_config)
     if args.legacy_shoulder_elbow:
         try:
             cfg = legacy_shoulder_elbow(cfg)

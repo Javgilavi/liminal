@@ -13,6 +13,7 @@ import yaml
 from liminal.core.types import SO101_JOINTS
 from liminal.policy.live import (
     WireArm,
+    clamp_gripper_boundary,
     execution_gate,
     legacy_shoulder_elbow,
     pose_limits,
@@ -57,6 +58,9 @@ def test_default_launchers_select_hf_normalization(tmp_path, launcher):
     assert cfg["joint_scale"] == [1] * 6
     assert cfg["joint_offset"] == [0] * 6
     assert cfg["duration_s"] == 120
+    assert cfg["hold_on_duration"] is True
+    assert cfg["inference"]["n_action_steps"] == 16
+    assert cfg["gripper_clamping"] is True
 
 
 def test_cli_defaults_to_hf_normalization(tmp_path, monkeypatch):
@@ -117,6 +121,58 @@ def test_joint_mapping_is_invertible_and_cannot_rescale_degrees():
         transform(q, cfg)
 
 
+@pytest.mark.parametrize("value, expected", [
+    (-0.12, 0), (-0.5, 0), (100.12, 100), (100.5, 100),
+    (-0.501, -0.501), (100.501, 100.501), (12, 12),
+])
+def test_gripper_boundary_correction_is_small_and_preserves_raw_predictions(value, expected):
+    original = [[1, 2, 3, 4, 5, value]] * 42
+    targets, changes = clamp_gripper_boundary(original, 16, 0.5)
+    assert original[0][-1] == value
+    assert targets[0] == [1, 2, 3, 4, 5, expected]
+    assert targets[16] == original[16]  # Unexecuted suffix stays raw.
+    assert len(changes) == (16 if value != expected else 0)
+
+
+def test_gripper_correction_keeps_arm_limits_and_nonfinite_rejections():
+    from liminal.policy.official_live import check_chunk
+
+    actions = [[0, 0, 0, 100.1, 0, -0.12]] * 42
+    targets, _ = clamp_gripper_boundary(actions, 16, 0.5)
+    with pytest.raises(RuntimeError, match="wrist_flex=100.10"):
+        check_chunk(targets, [-100] * 5 + [0], [100] * 6, 16)
+    for value in (-1, float("nan"), float("inf")):
+        actions = [[0, 0, 0, 0, 0, value]] * 42
+        if value == -1:
+            targets, _ = clamp_gripper_boundary(actions, 16, 0.5)
+            with pytest.raises(RuntimeError, match="gripper=-1.00"):
+                check_chunk(targets, [-100] * 5 + [0], [100] * 6, 16)
+        else:
+            with pytest.raises(ValueError, match="finite"):
+                clamp_gripper_boundary(actions, 16, 0.5)
+    targets, changes = clamp_gripper_boundary([[0, 0, 0, 0, 0, -0.12]] * 42, 16, 0)
+    assert targets[0][-1] == -0.12 and changes == []
+
+
+@pytest.mark.parametrize("value, expected", [(-0.57, 0), (-2, 0), (-1000, 0), (100.57, 100), (1000, 100)])
+def test_full_gripper_clamping_matches_lerobot_range(value, expected):
+    actions = [[1, 2, 3, 4, 5, value]] * 42
+    targets, adjustments = clamp_gripper_boundary(actions, 16, None)
+    assert targets[0] == [1, 2, 3, 4, 5, expected]
+    assert actions[0][-1] == value
+    assert len(adjustments) == 16
+    for invalid in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite"):
+            clamp_gripper_boundary([[0, 0, 0, 0, 0, invalid]] * 42, 16, None)
+
+
+@pytest.mark.parametrize("value", [True, -0.1, 1.1, float("nan"), "0.5"])
+def test_invalid_gripper_tolerance_rejected_before_io(tmp_path, monkeypatch, value):
+    monkeypatch.setattr("liminal.policy.live.http", lambda *args: pytest.fail("unexpected hardware request"))
+    with pytest.raises(ValueError, match="gripper_boundary_tolerance"):
+        asyncio.run(run({**profile(), "gripper_boundary_tolerance": value}, tmp_path, execute=True))
+
+
 def test_legacy_mapping_is_opt_in_and_does_not_mutate_profile():
     original = profile()
     cfg = legacy_shoulder_elbow(original)
@@ -128,8 +184,9 @@ def test_legacy_mapping_is_opt_in_and_does_not_mutate_profile():
         legacy_shoulder_elbow(cfg)
 
 
-def test_hf_normalization_cannot_be_combined_with_legacy_mapping():
-    cfg = {**profile(), "normalization_profile": "hf_space_native"}
+@pytest.mark.parametrize("normalization", ["hf_space_native", "dataset_native"])
+def test_hf_normalization_cannot_be_combined_with_legacy_mapping(normalization):
+    cfg = {**profile(), "normalization_profile": normalization}
     with pytest.raises(ValueError, match="native coordinates"):
         legacy_shoulder_elbow(cfg)
 
@@ -140,11 +197,12 @@ def test_hf_normalization_cannot_be_combined_with_legacy_mapping():
     {"checkpoint": None},
     {"official_lerobot": False},
 ])
-def test_hf_profile_rejects_incompatible_recipe_before_io(tmp_path, monkeypatch, change):
-    cfg = {**profile(), "normalization_profile": "hf_space_native", "official_lerobot": True,
+@pytest.mark.parametrize("normalization,label", [("hf_space_native", "HF Space"), ("dataset_native", "Dataset")])
+def test_hf_profile_rejects_incompatible_recipe_before_io(tmp_path, monkeypatch, change, normalization, label):
+    cfg = {**profile(), "normalization_profile": normalization, "official_lerobot": True,
            "checkpoint": "/test/hf-package", **change}
     monkeypatch.setattr("liminal.policy.live.http", lambda *args: pytest.fail("unexpected hardware request"))
-    with pytest.raises(ValueError, match="HF Space"):
+    with pytest.raises(ValueError, match=label):
         asyncio.run(run(cfg, tmp_path, execute=False))
 
 
@@ -304,8 +362,14 @@ def test_chosen_start_does_not_narrow_calibrated_travel():
 
 @pytest.mark.parametrize("scenario", [
     "duration", "inference_failure", "inference_failure_cleanup_failure", "unlimited_cancel", "old_controller",
-    "official_native", "official_mapped", "official_mapped_invalid", "official_mapped_observe",
+    "official_native", "official_native_16", "official_mapped", "official_mapped_invalid", "official_mapped_observe",
     "official_hf_native", "official_hf_wrong_normalization",
+    "duration_hold_cancel", "duration_hold_fault", "duration_hold_ui_stop", "duration_hold_disconnect",
+    "official_hold_plan_failure", "official_hold_inference_timeout", "inference_failure_hold",
+    "unacknowledged_deadline", "official_gripper_boundary", "official_gripper_large", "official_gripper_clamping",
+    "official_hybrid_student", "official_hybrid_edit", "official_hybrid_eef", "official_hybrid_stop",
+    "official_hybrid_invalid", "official_hybrid_observe", "official_hybrid_timeout",
+    "official_hybrid_cancel", "official_hybrid_stale", "official_hybrid_estop",
 ])
 def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, monkeypatch, scenario):
     from liminal.policy import live
@@ -313,15 +377,53 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
     official = scenario.startswith("official_")
     mapped = scenario.startswith("official_mapped")
     cfg = {**profile(), "duration_s": None if scenario == "unlimited_cancel" or official else 0.01,
-           "prompt": "stack the cups"}
+           "prompt": "stack the cups",
+           "hold_on_duration": "_hold" in scenario or scenario == "unacknowledged_deadline"}
     if official:
         cfg["official_lerobot"] = True
+    hybrid_mode = scenario.removeprefix("official_hybrid_") if scenario.startswith("official_hybrid_") else None
+    hybrid_calls = []
+    if hybrid_mode:
+        pytest.importorskip("numpy")
+        from test_hybrid import decision
+
+        from liminal.policy.hybrid import HybridConfig
+
+        cfg["hybrid"] = vars(HybridConfig(enabled=True, kinematics_verified=True, timeout_s=.1))
+
+        class FakeReasoner:
+            async def decide(self, payload, images, schema):
+                hybrid_calls.append(payload)
+                if hybrid_mode == "timeout":
+                    await asyncio.Event().wait()
+                if hybrid_mode == "cancel":
+                    raise asyncio.CancelledError
+                if hybrid_mode == "stale":
+                    rig_instance.latest["state"] = [5]*6
+                if hybrid_mode == "estop":
+                    rig_instance.telemetry["arms"]["right"]["mode"] = "stop"
+                mode = hybrid_mode if hybrid_mode in ("student", "edit", "eef", "stop") else "student"
+                result = decision(payload, mode if len(hybrid_calls) == 1 else "stop")
+                if hybrid_mode == "invalid":
+                    result["mode"] = "invented"
+                return result
+
+        monkeypatch.setattr("liminal.policy.hybrid.ClaudeReasoner", lambda config: FakeReasoner())
+    if scenario == "official_native_16":
+        cfg["inference"] = {"n_action_steps": 16}
+    if scenario.startswith("official_gripper_"):
+        cfg.update(inference={"n_action_steps": 16}, gripper_boundary_tolerance=0.5)
+    if scenario == "official_gripper_clamping":
+        cfg["gripper_clamping"] = True
     if scenario.startswith("official_hf_"):
         cfg.update(normalization_profile="hf_space_native", checkpoint="/test/hf-package")
     if mapped:
         cfg = legacy_shoulder_elbow(cfg)
     calls = []
     sent = []
+    rig_instance = None
+    runner_task = None
+    commands_at_hold = []
 
     def fake_http(route, body=None):
         calls.append((route, body))
@@ -333,10 +435,12 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
         await asyncio.Event().wait()
 
     async def fake_observations(self, reader):
+        nonlocal rig_instance
+        rig_instance = self
         self.latest = {"state": [0, -40, 50, 20, 5, 10] if mapped else [0] * 6,
                        "scene": "eA==", "wrist": "eA=="}
         self.last_observation = self.last_telemetry = self.last_wrist = time.monotonic()
-        cells = {j: {"min": -100, "max": 100} for j in SO101_JOINTS}
+        cells = {j: {"min": 0 if j == "gripper" else -100, "max": 100} for j in SO101_JOINTS}
         self.telemetry = {"arms": {"right": {"mode": "manual", "torque": True, "joints": cells}}}
         initial_model = transform(self.latest["state"], cfg)
         self.history.extend([{**self.latest, "state": initial_model, "command_history": initial_model}] * 8)
@@ -363,7 +467,10 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
             self.messages = iter(messages)
 
         async def readline(self):
-            return (json.dumps(next(self.messages)) + "\n").encode()
+            message = next(self.messages)
+            if message is None:
+                raise TimeoutError("mock inference timed out")
+            return (json.dumps(message) + "\n").encode()
 
     class Process:
         stdin = Writer()
@@ -380,6 +487,7 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
             if official:
                 ready.update(integration="lerobot.Flux3Policy + saved pre/post processors", source_revision="mock")
                 ready["inference"].update(fps=30, inference_seed=42)
+                ready["inference"]["n_action_steps"] = 32  # Saved select_action queue setting.
                 result["actions"] = [[i / 10] * 6 for i in range(42)]
                 if mapped:
                     result["actions"] = [[i / 10, 130 + i / 10, 140 + i / 10, 20, 5, 10] for i in range(42)]
@@ -387,14 +495,38 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
                     result["actions"][31][2] = -20  # Model-valid number, but robot elbow = -110.
                 if scenario == "official_hf_native":
                     ready["normalization_profile"] = "hf_space_native"
-            self.stdout = Reader([ready, result, {"type": "error", "detail": "mock rollout complete"}])
+                if scenario.startswith("official_gripper_"):
+                    for index in (2, 8, 15):
+                        result["actions"][index][-1] = -0.12 if scenario == "official_gripper_boundary" else -0.51
+                    if scenario == "official_gripper_clamping":
+                        result["actions"][8][-1] = 100.57
+            end = (None if scenario == "official_hold_inference_timeout"
+                   else {"type": "error", "detail": "mock rollout complete"})
+            self.stdout = Reader([ready, result, result if hybrid_mode else end])
 
         async def wait(self):
             if scenario == "inference_failure_cleanup_failure":
                 raise RuntimeError("worker cleanup failed")
+            if scenario.startswith("duration_hold_") and not commands_at_hold:
+                report = json.loads((tmp_path / "report.json").read_text())
+                assert report["status"] == "duration_reached_holding_task_success_unverified"
+                assert report["held_target"] == rig_instance.command
+                assert not any(body is not None for _, body in calls)
+                commands_at_hold.extend(m for m in sent if m.get("type") == "policy_action")
+                assert commands_at_hold
+                if scenario == "duration_hold_fault":
+                    rig_instance.error = "possible stall during hold"
+                elif scenario == "duration_hold_ui_stop":
+                    rig_instance.telemetry["arms"]["right"]["mode"] = "stop"
+                elif scenario == "duration_hold_disconnect":
+                    rig_instance.error = "observations failed: Haller policy connection closed"
+                else:
+                    asyncio.get_running_loop().call_later(0.02, runner_task.cancel)
             return 0
 
     async def worker(*args):
+        nonlocal runner_task
+        runner_task = asyncio.current_task()
         return Process()
 
     async def connection(*args, **kwargs):
@@ -406,6 +538,8 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
     async def fake_send_command(self, writer, seq, target):
         writer.write((json.dumps({"type": "policy_action", "seq": seq,
                                  "action": {"right": dict(zip(SO101_JOINTS, target, strict=True))}}) + "\n").encode())
+        if scenario == "unacknowledged_deadline":
+            await asyncio.Event().wait()
         self.command = list(target)
         self.command_seq = self.observed_command_seq = seq
         if official:
@@ -420,6 +554,30 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
     monkeypatch.setattr(live.LiveRig, "telemetry_loop", park)
     monkeypatch.setattr(live.LiveRig, "cameras", park)
     monkeypatch.setattr(live.LiveRig, "observations", fake_observations)
+    if hybrid_mode:
+        failures = {"invalid": ValueError, "stale": ValueError, "timeout": TimeoutError,
+                    "cancel": asyncio.CancelledError, "estop": RuntimeError}
+        if hybrid_mode in failures:
+            with pytest.raises(failures[hybrid_mode]):
+                asyncio.run(live.run(cfg, tmp_path, execute=True))
+        else:
+            asyncio.run(live.run(cfg, tmp_path, execute=hybrid_mode != "observe"))
+        actions = [m for m in sent if m.get("type") == "policy_action"]
+        expected_count = 0 if hybrid_mode in failures or hybrid_mode in ("stop", "observe") else 2
+        assert len(actions) == expected_count
+        assert len(hybrid_calls) == (2 if expected_count else 1)
+        if hybrid_mode == "student":
+            assert list(actions[0]["action"]["right"].values()) == [0]*6
+            assert list(actions[1]["action"]["right"].values()) == pytest.approx([.1]*6)
+        if expected_count:
+            assert hybrid_calls[1]["episode_history"][0]["executed_joints"] == [
+                list(a["action"]["right"].values()) for a in actions]
+        assert all("left" not in route for route, _ in calls)
+        assert not any(body and body.get("mode") != "stop" for _, body in calls)
+        report = json.loads((tmp_path / "report.json").read_text())
+        if expected_count or hybrid_mode == "stop":
+            assert report["status"] == "hybrid_stopped_task_success_unverified"
+        return
     if scenario == "official_hf_wrong_normalization":
         with pytest.raises(RuntimeError, match="different normalization statistics"):
             asyncio.run(live.run(cfg, tmp_path, execute=True))
@@ -431,21 +589,47 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
         assert "elbow_flex=-110" in report["execution_blocker"]
         assert not any(m.get("type") == "policy_action" for m in sent)
         assert not any(body is not None for _, body in calls)
-    elif scenario == "official_mapped_invalid":
-        with pytest.raises(RuntimeError, match="elbow_flex=-110"):
+    elif scenario in ("official_mapped_invalid", "official_gripper_large"):
+        error = "elbow_flex=-110" if mapped else "gripper=-0.51"
+        with pytest.raises(RuntimeError, match=error):
             asyncio.run(live.run(cfg, tmp_path, execute=True))
         assert not any(m.get("type") == "policy_action" for m in sent)
+        assert [(r, b) for r, b in calls if b is not None] == [("/arm/right/mode", {"mode": "stop"})]
+    elif scenario == "official_hold_inference_timeout":
+        with pytest.raises(TimeoutError):
+            asyncio.run(live.run(cfg, tmp_path, execute=True))
+        report = json.loads((tmp_path / "report.json").read_text())
+        assert report["status"] == "failed"
+        assert "completion_reason" not in report
         assert [(r, b) for r, b in calls if b is not None] == [("/arm/right/mode", {"mode": "stop"})]
     elif official:
         with pytest.raises(RuntimeError, match="mock rollout complete"):
             asyncio.run(live.run(cfg, tmp_path, execute=True))
         actions = [m for m in sent if m.get("type") == "policy_action"]
-        # Exactly the first 32 original targets, followed by another prediction:
-        # no interpolation, rebasing, duplication or execution of the final ten.
-        expected = ([[i / 10, -40 - i / 10, 50 + i / 10, 20, 5, 10] for i in range(32)]
-                    if mapped else [[i / 10] * 6 for i in range(32)])
+        # Execute only the chosen prefix, then request another prediction.
+        steps = inference_settings(cfg)["n_action_steps"]
+        expected = ([[i / 10, -40 - i / 10, 50 + i / 10, 20, 5, 10] for i in range(steps)]
+                    if mapped else [[i / 10] * 6 for i in range(steps)])
+        if scenario in ("official_gripper_boundary", "official_gripper_clamping"):
+            for index in (2, 8, 15):
+                expected[index][-1] = 0
+            if scenario == "official_gripper_clamping":
+                expected[8][-1] = 100
         for message, target in zip(actions, expected, strict=True):
             assert list(message["action"]["right"].values()) == pytest.approx(target)
+        if scenario == "official_native_16":
+            report = json.loads((tmp_path / "report.json").read_text())
+            assert report["inference"]["n_action_steps"] == 16
+            assert report["checkpoint_n_action_steps"] == 32
+        if scenario in ("official_gripper_boundary", "official_gripper_clamping"):
+            plan = json.loads((tmp_path / "plans.jsonl").read_text().splitlines()[0])
+            raw = -0.12 if scenario == "official_gripper_boundary" else -0.51
+            assert plan["robot_actions"][2][-1] == raw
+            assert plan["actions"][2][-1] == raw
+            assert plan["execution_actions"][2][-1] == 0
+            assert len(plan["gripper_adjustments"]) == 3
+            report = json.loads((tmp_path / "report.json").read_text())
+            assert report["last_snapshot"]["committed"][-1] == 0
         assert [(r, b) for r, b in calls if b is not None] == [("/arm/right/mode", {"mode": "stop"})]
     elif scenario.startswith("inference_failure") or scenario == "old_controller":
         error = "feedback update" if scenario == "old_controller" else "GPU failed"
@@ -453,16 +637,34 @@ def test_full_mocked_lifecycle_preserves_other_arm_and_never_engages(tmp_path, m
             asyncio.run(live.run(cfg, tmp_path, execute=True))
         assert not any(body is not None for _, body in calls)
         assert not any(m.get("type") == "policy_action" for m in sent)
+    elif scenario == "unacknowledged_deadline":
+        with pytest.raises(RuntimeError, match="cannot hold without an acknowledged command"):
+            asyncio.run(live.run(cfg, tmp_path, execute=True))
+        report = json.loads((tmp_path / "report.json").read_text())
+        assert report["status"] == "stopped"
+        assert "completion_reason" not in report
+        assert [(r, b) for r, b in calls if b is not None] == [("/arm/right/mode", {"mode": "stop"})]
     else:
-        if scenario == "unlimited_cancel":
+        if scenario in ("unlimited_cancel", "duration_hold_cancel"):
             with pytest.raises(asyncio.CancelledError):
+                asyncio.run(live.run(cfg, tmp_path, execute=True))
+        elif scenario.startswith("duration_hold_"):
+            error = {"duration_hold_fault": "stall during hold", "duration_hold_ui_stop": "refusing to re-engage",
+                     "duration_hold_disconnect": "policy connection closed"}[scenario]
+            with pytest.raises(RuntimeError, match=error):
                 asyncio.run(live.run(cfg, tmp_path, execute=True))
         else:
             asyncio.run(live.run(cfg, tmp_path, execute=True))
         actions = [m for m in sent if m.get("type") == "policy_action"]
         assert actions and all(set(m["action"]) == {"right"} for m in actions)
         assert all(list(m["action"]["right"].values()) == [40] * 6 for m in actions)
-        assert [(r, b) for r, b in calls if b is not None] == [("/arm/right/mode", {"mode": "stop"})]
+        mutations = [(r, b) for r, b in calls if b is not None]
+        assert mutations and all(m == ("/arm/right/mode", {"mode": "stop"}) for m in mutations)
+        if scenario.startswith("duration_hold_"):
+            assert actions == commands_at_hold  # No new motion while holding.
+            report = json.loads((tmp_path / "report.json").read_text())
+            assert report["completion_reason"] == "duration_reached"
+            assert report["status"] == "stopped"
     assert not any("left" in route for route, _ in calls)
     if scenario not in ("old_controller", "official_hf_wrong_normalization"):
         saved = json.loads((tmp_path / "input-0000.json").read_text())

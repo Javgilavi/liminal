@@ -3,8 +3,10 @@ arm: right
 expected_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
 prompt: Grasp the white cup.
 duration_s: 120.0
+hold_on_duration: true     # keep the terminal/session alive and hold the last goal
+gripper_clamping: true     # match LeRobot's 0–100% gripper range clamp
 inference:
-  n_action_steps: 32        # execute this many of each 42 predicted actions
+  n_action_steps: 16        # execute this many of each 42 predicted actions
   num_inference_steps: 4    # Euler sampling steps
   guidance_scale: 3.0
   guidance_scale_action: null  # inherit guidance_scale

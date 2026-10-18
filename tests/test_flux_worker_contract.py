@@ -53,12 +53,13 @@ def test_inconsistent_output_statistics_are_refused(tmp_path):
         WORKER.processor_contract(pre, post, str(tmp_path))
 
 
-def test_hf_profile_provenance_must_match_actual_tensors(tmp_path):
-    metadata = {"profile": "hf_space_native", "normalization": {}}
+@pytest.mark.parametrize("profile", ["hf_space_native", "dataset_native"])
+def test_native_profile_provenance_must_match_actual_tensors(tmp_path, profile):
+    metadata = {"profile": profile, "normalization": {}}
     path = tmp_path / "normalization_source.json"
     path.write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="differs"):
         WORKER.processor_contract(*pipelines(), str(tmp_path))
     metadata["normalization"] = {s: {"q01": [-1] * 6, "q99": [1] * 6} for s in ("state", "action")}
     path.write_text(json.dumps(metadata))
-    assert WORKER.processor_contract(*pipelines(), str(tmp_path))["normalization_profile"] == "hf_space_native"
+    assert WORKER.processor_contract(*pipelines(), str(tmp_path))["normalization_profile"] == profile

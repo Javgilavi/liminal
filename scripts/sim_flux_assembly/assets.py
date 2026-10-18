@@ -145,7 +145,7 @@ def build(root: Path):
             rgba="0.23 0.25 0.28 1",
             friction="1 0.01 0.001",
         )
-    fixture = ET.SubElement(world, "body", name="fixture", pos="0.23 0.125 0")
+    fixture = ET.SubElement(world, "body", name="fixture", pos="0.20 0.08 0")
     ET.SubElement(
         fixture,
         "geom",

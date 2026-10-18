@@ -34,8 +34,8 @@ def processor_contract(pre, post, checkpoint: str) -> dict:
     path = Path(checkpoint) / "normalization_source.json"
     source = json.loads(path.read_text()) if path.exists() else {}
     profile = source.get("profile", "released")
-    if profile == "hf_space_native" and source.get("normalization") != statistics:
-        raise ValueError("HF Space normalization provenance differs from loaded processor tensors")
+    if profile in ("hf_space_native", "dataset_native") and source.get("normalization") != statistics:
+        raise ValueError("Native normalization provenance differs from loaded processor tensors")
     return {"normalization_profile": profile, "state_statistics": statistics["state"],
             "action_statistics": statistics["action"], "normalization_source": source}
 
@@ -43,7 +43,8 @@ def processor_contract(pre, post, checkpoint: str) -> dict:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", default="/liminal/models/so101")
-    parser.add_argument("--normalization-profile", choices=("released", "hf_space_native"), default="released")
+    parser.add_argument("--normalization-profile", choices=("released", "hf_space_native", "dataset_native"),
+                        default="released")
     args = parser.parse_args()
     wire = sys.stdout
     with contextlib.redirect_stdout(sys.stderr):

@@ -57,3 +57,47 @@ def test_option_a2_builds_one_instance_per_arm():
     assert left is not right
     assert (left.cfg.device, right.cfg.device) == ("cuda:0", "cuda:1")
     assert ctx.skills.backend_for(Skill("left", "pick_place")) is left
+
+
+def test_cancelled_prediction_keeps_single_flight_and_discards_stale_actions():
+    import threading
+
+    class BlockingFlux(FakeFlux):
+        def __init__(self):
+            super().__init__(_cfg())
+            self.entered = threading.Event()
+            self.release = threading.Event()
+            self.calls = 0
+
+        def predict(self, history, instruction, target):
+            self.calls += 1
+            if self.calls == 1:
+                self.entered.set()
+                assert self.release.wait(5), "test did not release prediction"
+                return [[9.0] * 6]
+            return [[1.0] * 6]
+
+    async def run():
+        backend = BlockingFlux()
+        ctx = build_context("configs/robot/mock_dual.yaml", policy_backend=backend)
+        first = asyncio.create_task(backend.execute(Skill("right", "pick_place", prompt="old"), ctx))
+        try:
+            assert await asyncio.to_thread(backend.entered.wait, 5)
+            first.cancel()
+            try:
+                await first
+            except asyncio.CancelledError:
+                pass
+            assert backend._infer_lock.locked()
+            assert ctx.arms["right"].history == []
+            backend.reset("right")
+            second = asyncio.create_task(backend.execute(Skill("right", "pick_place", prompt="new"), ctx))
+            # The lock itself is the invariant: it cannot be released by cancellation.
+            assert backend.calls == 1
+            backend.release.set()
+            assert (await asyncio.wait_for(second, 5)).status is Status.SUCCESS
+            assert backend.calls == 2
+            assert ctx.arms["right"].state == [1.0] * 6
+        finally:
+            backend.release.set()
+    asyncio.run(run())

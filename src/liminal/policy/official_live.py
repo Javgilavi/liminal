@@ -43,9 +43,13 @@ def check_chunk(actions, lower, upper, count):
 async def run(cfg, output, execute):
     import cv2
 
+    from liminal.policy.hybrid import build_hybrid
+
+    hybrid = build_hybrid(cfg, execute=execute)
     arm = OfficialSO101(cfg)
     history = deque(maxlen=8)
     state = {"error": None, "last": 0.0, "command": None}
+    observation_changed = asyncio.Event()
     process = None
     sampler = None
     report = {"execute": execute, "arm": cfg["arm"], "prompt": cfg["prompt"], "status": "starting"}
@@ -62,6 +66,14 @@ async def run(cfg, output, execute):
             raise RuntimeError(state["error"])
         if time.monotonic() - state["last"] > 0.5:
             raise RuntimeError("robot/camera observation is stale")
+
+    async def wait_after(timestamp):
+        async with asyncio.timeout(0.5):
+            while state["last"] <= timestamp:
+                check()
+                observation_changed.clear()
+                await observation_changed.wait()
+        check()
 
     async def sample():
         high_since = None
@@ -81,6 +93,7 @@ async def run(cfg, output, execute):
                     frame[role] = base64.b64encode(encoded).decode()
                 history.append(frame)
                 state["last"] = time.monotonic()
+                observation_changed.set()
                 event("observation", measured=measured, command=state["command"], loads=loads)
                 if arm.engaged:
                     positions = dict(zip(SO101_JOINTS[:-1], measured[:-1], strict=True))
@@ -97,6 +110,7 @@ async def run(cfg, output, execute):
             raise
         except Exception as exc:
             state["error"] = str(exc)
+            observation_changed.set()
             try:
                 arm.stop()
             except Exception as stop_error:
@@ -139,29 +153,58 @@ async def run(cfg, output, execute):
                 result = await worker_reply(process, 15)
                 check()
                 (output / f"plan-{index:04d}.json").write_text(json.dumps(result) + "\n")
-                if result.get("type") != "actions":
+                if result.get("type") != "actions" or len(result.get("actions", [])) != 42:
                     raise RuntimeError("worker returned no actions")
                 print(f"Plan {index}: {result['inference_seconds']:.3f}s, {count}/42 actions", flush=True)
+                segment = None
+                if hybrid is not None:
+                    segment = await hybrid.choose(goal=cfg["prompt"], actions=result["actions"],
+                                                  observation=dict(history[-1]), max_steps=count, log=event)
+                    check()
+                    hybrid.validate_fresh(segment, arm.current)
+                    for i in range(segment.steps):
+                        hybrid.target(segment, i, arm.current, lower, upper)
+                    report["hybrid_decision"] = segment.decision
                 if not execute:
                     report["status"] = "observation_only_passed_task_success_unverified"
                     try:
-                        check_chunk(result["actions"], lower, upper, count)
+                        if segment is None:
+                            check_chunk(result["actions"], lower, upper, count)
                     except RuntimeError as exc:
                         report["execution_blocker"] = str(exc)
                         print(str(exc), flush=True)
                     return
-                check_chunk(result["actions"], lower, upper, count)
+                if segment is not None and segment.stopped:
+                    report["status"] = "hybrid_stopped_task_success_unverified"
+                    return
+                if segment is None:
+                    check_chunk(result["actions"], lower, upper, count)
                 if not arm.engaged:
                     state["command"] = arm.read_state()
                     arm.engage()
-                    print("EXECUTING unchanged LeRobot targets; no Haller speed limiter. "
+                    print(("EXECUTING hybrid-selected targets. " if hybrid else
+                           "EXECUTING unchanged LeRobot targets; no Haller speed limiter. ") +
                           "Ctrl+C releases torque; Haller UI E-stop is NOT active.", flush=True)
-                for target in result["actions"][:count]:
+                executed = []
+                acknowledged_at = None
+                for step, target in enumerate(result["actions"][:segment.steps if segment else count]):
+                    if segment is not None and acknowledged_at is not None:
+                        await wait_after(acknowledged_at)
                     started = time.monotonic()
                     check()
+                    if segment is not None:
+                        # The synchronous driver returns after send; re-read actual joints
+                        # for every local IK update rather than integrating imagined motion.
+                        measured = vector(arm.read_state())
+                        target = hybrid.target(segment, step, measured, lower, upper)
                     state["command"] = supervisor.send(arm.name, vector(target))
+                    acknowledged_at = time.monotonic()
+                    executed.append(list(state["command"]))
                     event("command", plan=index, target=state["command"], measured=arm.current)
                     await asyncio.sleep(max(0, 1 / 30 - (time.monotonic() - started)))
+                if segment is not None:
+                    await wait_after(acknowledged_at)
+                    hybrid.record(segment, executed, vector(arm.read_state()), event)
                 index += 1
     except BaseException as exc:
         report.update(status="stopped", error=str(exc) or type(exc).__name__)
@@ -197,8 +240,11 @@ def main():
     parser.add_argument("--config", default="configs/policy/official_right.yaml")
     parser.add_argument("--execute", action="store_true", help="engage and execute after preflight/inference")
     parser.add_argument("--prompt")
+    parser.add_argument("--hybrid-config", help="optional action-level Claude gate YAML; disabled by default")
     args = parser.parse_args()
-    cfg = yaml.safe_load(Path(args.config).read_text())
+    from liminal.policy.hybrid import load_hybrid_config
+
+    cfg = load_hybrid_config(yaml.safe_load(Path(args.config).read_text()), args.hybrid_config)
     if cfg["arm"] != "right":
         parser.error("this commissioned profile is for software right only")
     if args.prompt:

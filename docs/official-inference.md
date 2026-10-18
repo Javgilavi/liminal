@@ -104,14 +104,25 @@ clear STOP. Then:
 ```
 
 `--engage` acknowledges that UI action; this runner never enables torque or
-clears STOP automatically. The default trial deadline is 120 seconds. Ctrl+C,
-a fault or the deadline requests stop and torque release, so support the arm
-against sagging. The prior elbow/wrist resistance remains unresolved.
+clears STOP automatically. The default trial deadline is 120 seconds. At the
+deadline, `hold_on_duration: true` ends inference and leaves torque enabled at
+the last committed target. The terminal stays open to monitor the arm and keep
+Haller's policy connection alive; closing that connection releases torque.
+The GPU worker exits during the hold. Ctrl+C, Haller STOP/E-stop, or a fault
+still stops and releases torque, so support the arm before stopping it.
+Set `hold_on_duration: false` to release torque at the deadline instead.
+The prior elbow/wrist resistance remains unresolved.
 
-The official path executes the first 32 of 42 predictions at 30 Hz, then holds
+The default official path executes the first 16 of 42 predictions at 30 Hz, then holds
 while synchronous inference runs. It applies no delta rebasing, interpolation or
-policy speed limiting. The entire executed horizon must fit calibrated travel;
-an invalid chunk is rejected unchanged. If Haller changes a valid target,
+policy speed limiting. The default profile sets `gripper_clamping: true` to
+clamp finite gripper predictions to 0–100%, matching LeRobot's gripper driver.
+Every arm-joint violation still rejects the entire executed chunk, and nonfinite
+predictions always stop execution.
+Raw predictions, `execution_actions`, and `gripper_adjustments` are saved in
+`plans.jsonl`; each correction also prints `[debug:gripper_clamp]` in verbose mode.
+Committed targets, including the corrected gripper value, feed subsequent command history.
+Set `gripper_clamping: false` for strict gripper validation. If Haller changes a valid target,
 execution stops. Load, stall, stale-input and failed-acknowledgement checks remain.
 These are local execution checks around the official policy API.
 
@@ -165,3 +176,148 @@ python scripts/summarize_real_runs.py \
 A completed duration, finite prediction or acknowledged command does not establish
 manipulation success. This first validation has no independent real-task success
 labels. See [results and limitations](validation/single-arm-v1.md).
+
+## Red-pen LoRA deployment
+
+`configs/policy/pen_lora_right.yaml` selects the merged red-pen adapter at Hub
+revision `492e06e50f94fdb26286bf88b90e8faf657c4bb2` (EMA step 4,000). It uses
+that adapter's saved B84 state/action quantiles, native joint coordinates,
+guidance 1.0 for both modalities and 32 executed actions per 42-step chunk.
+The commissioned software `right` arm is the physical left/task arm, with
+wrist A rotated 180 degrees. The prompt is exactly
+`put the red pen in its slot in the cardboard box`.
+
+The GPU package is `/liminal/models/so101-haller-pen-lora-492e06e5`, separate
+from the released and HF Space packages. `scripts/prepare_lora_checkpoint.py`
+merges the downloaded adapter on CPU, copies its processors and records the
+adapter revision, checksum and actual tensor quantiles. The dedicated remote
+worker is `/liminal/scripts/flux_lerobot_worker_pen.py`. Both ends validate
+`dataset_native` normalization and require identity coordinates.
+
+With Haller running, first predict without motion:
+
+```bash
+./scripts/infer_robot.sh --config configs/policy/pen_lora_right.yaml --verbose
+```
+
+For a trial, arrange the training scene and start from the demonstrated home
+pose `[0, 0, 0, 0, 0, 100]` (degrees; gripper percent, 100 open). Select MANUAL
+for software right in Haller, then run:
+
+```bash
+./scripts/infer_robot.sh --config configs/policy/pen_lora_right.yaml \
+  --execute --engage --verbose
+```
+
+The same 120-second deadline, hold behavior, Haller ownership and execution
+checks described above apply. Model loading or synthetic prediction checks do
+not establish success on the red-pen task.
+
+### Try the Hugging Face normalization with the pen LoRA
+
+`pen_lora_hf_space_right.yaml` selects the same merged LoRA weights with the
+state/action quantiles from Space commit
+`09edebb006d793cb215ce8c0fccfc9eacd71dfc6`, replacing B84 in all three saved
+processors. This is an experimental change from the normalization used during
+fine-tuning. Other inference and execution settings match `pen_lora_right.yaml`.
+The separate GPU package is
+`/liminal/models/so101-haller-pen-lora-492e06e5-hf-fix-09edebb`.
+
+```bash
+./scripts/infer_robot.sh --config configs/policy/pen_lora_hf_space_right.yaml \
+  --execute --engage --verbose
+```
+
+Omit `--execute --engage` for observation-only inference. The original
+`pen_lora_right.yaml` still selects B84. A concurrent GPU training job may leave
+insufficient memory to load inference; finish or explicitly stop that job before
+running a trial.
+
+## Optional action-level Claude hybrid controller
+
+The previous task-tree LLM recovery prototype has been removed. The live runners
+now support the FLUX report's action-level decision cycle, disabled by default.
+It uses Claude instead of the report's Astra and the SO-101 instead of the Panda;
+it is not a reproduction of their measured success rate.
+
+Sources: [FLUX 3 Action, Hybrid policies](https://bfl.ai/models/flux-3-action#hybrid-policies),
+[reference RoboLab action contract](https://github.com/anonymous-report-421/GPT-as-Policy/blob/main/hybrid_rollout/robolab/skill/context/eef_control.md),
+[reference outcome/intent gate](https://github.com/anonymous-report-421/GPT-as-Policy/blob/main/hybrid_rollout/robolab/skill/gate_prompt.md).
+
+At every FLUX chunk boundary, Claude receives the task, current scene and wrist
+JPEGs, measured joints, full robot-only FK proposal, prior decision/execution history,
+and previous pre-execution RGB for outcome comparison. It returns one structured
+`student`, `edit`, `eef`, or `stop` decision:
+
+- `student`: execute an unchanged prefix of 1–15 predicted absolute joint targets.
+  The unused suffix is discarded. The normal profile's smaller horizon still wins.
+- `edit`: apply root-frame translation and rotation-vector deltas to the first
+  1–5 FK poses, scaling the offsets by `(i+1)/steps`. Rotation left-multiplies the
+  proposal orientation; the gripper override applies to every selected pose.
+- `eef`: track one fixed root-frame pose for 1–5 controls. Position is meters and
+  quaternion order is wxyz. Both correction modes recompute a local DLS joint
+  update from measured joints after every actual command acknowledgment.
+- `stop`: end the rollout through normal cleanup. The report explicitly says task
+  success is unverified. Claude's progress assessment never writes success facts.
+
+The correction gate requires observed execution failure or misaligned next intent,
+not uncertainty alone. Between all segments, including corrections, FLUX predicts
+again. Its original task instruction and real committed-command history are retained.
+No named recovery skills, scripted task restart, arbitrary Python, or LLM joint
+arrays are accepted. Every executed target still goes through `SafetySupervisor.send()`.
+
+The local IK uses the checked-in `sim/single_arm/so101.xml` body/joint chain and
+`gripperframe` site without loading meshes or a simulator. It uses damped least
+squares with damping 0.05, translation/rotation error caps of 0.02 m / 0.1 rad,
+and default joint increments of 0.05 rad. Corrections are limited to 0.05 m / 0.35 rad;
+calibrated travel and gripper limits remain enforced. The SO-101's five arm joints
+cannot realize arbitrary six-dimensional poses. Local IK is not collision planning,
+and an acknowledged command is not evidence of arrival or a successful grasp.
+The existing hardware rate remains 30 Hz; the reference Panda experiment used 15 Hz.
+
+Install `pip install -e '.[hybrid]'`, set `ANTHROPIC_API_KEY` in the environment,
+and copy `configs/hybrid/claude_so101.yaml` to a local configuration. Set
+`enabled: true` to test the multimodal gate without executing motion:
+
+```bash
+scripts/infer_robot.sh --config configs/policy/pen_lora_right.yaml \
+  --hybrid-config /path/to/hybrid.yaml
+```
+
+This observation-only run uses the actual camera/GPU/API paths but sends no motor
+commands. The default file has both `enabled: false` and `kinematics_verified: false`.
+Before physical execution, verify the root frame, TCP site, joint signs/offsets,
+and gripper endpoints against the calibrated robot, then set
+`kinematics_verified: true`. The formula is
+`q_model_deg = (q_robot_deg - joint_offsets_deg) / joint_signs`.
+The supplied native identity mapping is a VERIFY assumption, not hardware calibration.
+The frame description is sent to Claude; describe verified camera/root relationships
+there when available. No camera extrinsics are invented by the implementation.
+
+For physical execution, use the existing explicit engagement workflow and append
+`--hybrid-config /path/to/hybrid.yaml` to the live command with `--execute --engage`.
+The direct-driver `scripts/infer_robot_official.sh` also accepts `--hybrid-config`;
+its existing Haller-off and `--execute` requirements are unchanged. The Haller path
+requires the official absolute-joint worker, as used by the shipped pen profiles.
+
+API calls are asynchronous with no SDK retries and a finite per-decision timeout.
+Telemetry and stop monitoring continue while reasoning. A timeout, malformed tool
+call, stale request ID, non-finite value, ungrounded takeover, exceeded bound, or
+robot drift during reasoning stops execution rather than silently delegating back
+to a bad VLA. The unchanged student prefix is checked against calibrated travel
+before any command; gripper clamping from the ordinary runner does not rewrite the
+hybrid student proposal. The LLM may choose a valid shorter prefix or a correction.
+
+Haller logs complete `hybrid_request`, `hybrid_decision`, `hybrid_executed` and
+`hybrid_error` records in `hybrid.jsonl`; the direct runner uses `events.jsonl`.
+Requests include RGB and numerical context, decisions include provider token usage,
+and execution records contain actual committed commands and final measured joints.
+These logs can be large and include camera images. The task-wide rollout deadline
+still applies; it can expire during reasoning. No real API or motor tests are run
+by pytest; lifecycle tests use fake providers, workers, and transport with real FK/IK.
+
+Independent mathematical validation: the FK implementation matched MuJoCo 3.16.0
+on 100 seeded poses using the same MJCF with visual assets removed (maximum
+position error 2.22e-16 m; rotation-matrix element error 1.22e-15). The optional
+`test_fk_matches_mujoco_robot_only_oracle_when_available` reproduces that check.
+This validates model math, not the model-to-physical-robot calibration.

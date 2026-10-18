@@ -33,6 +33,8 @@ class Teacher:
         self.segments = []
 
     def ik(self, target, opening, orientation_weight=0.08):
+        from scipy.optimize import least_squares
+
         np, scene, mj = self.np, self.scene, self.mujoco
         q = scene.data.qpos[scene.arm.qadr].copy()
         q[-1] = scene.arm.to_sim([0, 0, 0, 0, 0, opening])[-1]
@@ -47,15 +49,46 @@ class Teacher:
                 orientation_weight * (rotation @ self.axis - [0, 0, 1]),
             ]
 
-        for _ in range(80):
-            r = residual(q)
-            jac = np.column_stack([(residual(q + np.eye(6)[i] * 1e-5) - r) / 1e-5 for i in range(5)])
-            step = np.linalg.solve(jac.T @ jac + np.eye(5) * 2e-5, -jac.T @ r)
-            q[:5] += np.clip(step, -0.12, 0.12)
-            q[:5] = np.clip(q[:5], scene.arm.ranges[:5, 0] + 0.01, scene.arm.ranges[:5, 1] - 0.01)
-            if np.linalg.norm(r) < 2e-4:
-                break
+        lower, upper = scene.arm.ranges[:5, 0] + 0.01, scene.arm.ranges[:5, 1] - 0.01
+
+        def solve(start):
+            return least_squares(
+                lambda joints: residual(np.r_[joints, q[-1]]),
+                np.clip(start, lower, upper),
+                bounds=(lower, upper),
+                max_nfev=90,
+                ftol=1e-8,
+                xtol=1e-8,
+                gtol=1e-8,
+            )
+
+        best = solve(q[:5])
+        if np.linalg.norm(best.fun) > 0.002:
+            for roll in [-90, 0, 90]:
+                candidate = solve(np.deg2rad([-25, -10, 25, 75, roll]))
+                if np.linalg.norm(candidate.fun) < np.linalg.norm(best.fun):
+                    best = candidate
+        q[:5] = best.x
         return scene.arm.to_policy(q)
+
+    def move_part(self, part, phase, xyz, ticks, skill=None):
+        np, scene = self.np, self.scene
+        start = scene.data.body(part).xpos.copy()
+        target = np.asarray(xyz)
+        for tick in range(ticks + 35):
+            # The teacher observes the part pose. This compensates grasp slip and
+            # actuator deflection; the learned policy later receives only cameras/state.
+            rotation = scene.data.xmat[self.gripper].reshape(3, 3)
+            self.anchor = rotation.T @ (scene.data.body(part).xpos - scene.data.xpos[self.gripper])
+            self.axis = rotation.T @ scene.data.body(part).xmat.reshape(3, 3)[:, 2]
+            u = min(1.0, (tick + 1) / ticks)
+            desired = start + (u * u * (3 - 2 * u)) * (target - start)
+            command = self.ik(desired, 0)
+            self.record_step(skill or f"seat_{part}", phase, command)
+            error = np.linalg.norm(scene.data.body(part).xpos - target)
+            if u >= 1 and error < 0.0015 and scene.state[part]["tilt"] < 0.10:
+                return True
+        return False
 
     def record_step(self, skill, phase, command):
         scene = self.scene
@@ -121,9 +154,8 @@ class Teacher:
             "axis": rotation.T @ scene.data.body(part).xmat.reshape(3, 3)[:, 2],
         }
         self.axis = self.grip_offsets[part]["axis"]
-        opening = 0
-        lift_z = float(scene.rng.uniform(0.105, 0.120))
-        self.move(skill, "lift", np.r_[xy, lift_z], opening, speed=0.8, until=lambda: scene.facts[SUCCESS[skill]])
+        lift_z = float(scene.rng.uniform(0.070, 0.077))
+        self.move_part(part, "lift", np.r_[scene.data.body(part).xpos[:2].copy(), lift_z], 60, skill=skill)
         if not scene.facts[SUCCESS[skill]]:
             self.hold(skill, "lift_settle", 25, until=lambda: scene.facts[SUCCESS[skill]])
         return bool(scene.facts[SUCCESS[skill]])
@@ -136,11 +168,10 @@ class Teacher:
         rotation = scene.data.xmat[self.gripper].reshape(3, 3)
         self.anchor = rotation.T @ (scene.data.body(part).xpos - scene.data.xpos[self.gripper])
         self.axis = rotation.T @ scene.data.body(part).xmat.reshape(3, 3)[:, 2]
-        opening = 0
         # Keep the bore vertical above the shaft tip before lowering it.
-        above = np.r_[xy, 0.085]
-        self.move(skill, "carry", above, opening, speed=0.9)
-        self.move(skill, "insert", np.r_[xy, bottom + 0.0005], opening, speed=0.45, max_ticks=140)
+        above = np.r_[xy, 0.070]
+        self.move_part(part, "carry", above, 110)
+        self.move_part(part, "insert", np.r_[xy, bottom + 0.0005], 90)
         self.hold(skill, "insert_settle", 8)
         self.anchor = self.jaw_anchor.copy()
         self.axis = np.array([0.0, 0.0, 1.0])

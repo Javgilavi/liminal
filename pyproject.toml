@@ -17,6 +17,7 @@ flux = ["torch", "transformers", "peft", "huggingface_hub"]  # VERIFY against BF
 sim = ["mujoco>=3"]
 perception = ["opencv-python-headless>=4.9,<5", "numpy"]
 llm = ["anthropic", "google-genai"]
+hybrid = ["anthropic", "numpy>=1.24"]
 ui = ["fastapi>=0.115,<1", "uvicorn>=0.32,<1"]
 dev = ["pytest>=8", "ruff", "httpx>=0.27", "fastapi>=0.115,<1"]
 

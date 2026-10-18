@@ -8,27 +8,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sim_flux_lora"))
 
 from common import FrameArm, Supervisor, images  # noqa: E402
+from harness import PROMPTS, SKILLS  # noqa: E402
 
 FPS = 20
 SUBSTEPS = 25
-PROMPTS = {
-    "pick_gear": "Pick up the blue gear and hold it upright above the tray.",
-    "seat_gear": "Lower the blue gear over the metal shaft, release it onto the base, and move the gripper clear.",
-    "pick_collar": "Pick up the brass spacer collar and hold it upright above the tray.",
-    "seat_collar": "Lower the brass spacer collar onto the shaft above the blue gear, release it, and move clear.",
-}
-SUCCESS = {
-    "pick_gear": "gear_held",
-    "seat_gear": "gear_seated",
-    "pick_collar": "collar_held",
-    "seat_collar": "assembly_complete",
-}
-PRECONDITIONS = {
-    "pick_gear": (),
-    "seat_gear": ("gear_held",),
-    "pick_collar": ("gear_seated",),
-    "seat_collar": ("gear_seated", "collar_held"),
-}
+SUCCESS = {name: predicate for name, predicate, _ in SKILLS}
+PRECONDITIONS = {name: preconditions for name, _, preconditions in SKILLS}
 
 
 class AssemblyScene:
@@ -49,7 +34,7 @@ class AssemblyScene:
         q[:5] += np.deg2rad(self.rng.uniform(-0.5, 0.5, 5))
         self.data.qpos[self.arm.qadr] = q
         self.data.ctrl[self.arm.aids] = q
-        fixture = np.array([0.23, 0.125]) + self.rng.uniform(-0.003, 0.003, 2)
+        fixture = np.array([0.20, 0.08]) + self.rng.uniform(-0.003, 0.003, 2)
         self.model.body_pos[self.model.body("fixture").id, :2] = fixture
         placements = {}
         for name, home in [("gear", [0.23, -0.045]), ("collar", [0.23, -0.13])]:
@@ -125,7 +110,9 @@ class AssemblyScene:
             supported = (
                 self.model.body("fixture").id in contacts if name == "gear" else self.part_ids["gear"] in contacts
             )
-            held = bilateral and lift > 0.04 and speed < 0.04 and tilt < 0.35
+            # The shaft top is at 60 mm. Start the seating skill only after
+            # the part clears it, matching the demonstrated pickup endpoints.
+            held = bilateral and lift > 0.04 and body.xpos[2] > 0.065 and speed < 0.04 and tilt < 0.35
             seated = (
                 xy_error < 0.003
                 and abs(body.xpos[2] - bottom) < 0.0035

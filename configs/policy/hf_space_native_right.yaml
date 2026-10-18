@@ -4,8 +4,10 @@ arm: right
 expected_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
 prompt: Pick up the red pen.
 duration_s: 120.0
+hold_on_duration: true
+gripper_clamping: true
 inference:
-  n_action_steps: 32
+  n_action_steps: 16
   num_inference_steps: 4
   guidance_scale: 3.0
   guidance_scale_action: null

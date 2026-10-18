@@ -120,11 +120,29 @@ class FluxPolicyBackend:
         period = 1.0 / self.cfg.control_hz
 
         while True:
-            history.append(self._observe(skill.arm, ctx))
-            async with self._infer_lock:
-                t_inf = time.monotonic()
-                chunk = await asyncio.to_thread(self.predict, list(history), skill.prompt, skill.arm)
-                self.latencies_s.append(time.monotonic() - t_inf)
+            await self._infer_lock.acquire()
+            t_inf = time.monotonic()
+            # Cancellation cannot stop a thread. Keep the model locked until it really
+            # exits, but discard its output immediately when the skill is cancelled.
+            try:
+                # Another target or a cancelled inference may have held the lock;
+                # observe only now so resumption uses the current robot pose.
+                history.append(self._observe(skill.arm, ctx))
+                prediction = asyncio.create_task(
+                    asyncio.to_thread(self.predict, list(history), skill.prompt, skill.arm)
+                )
+            except BaseException:
+                self._infer_lock.release()
+                raise
+
+            def finished(future):
+                self._infer_lock.release()
+                if not future.cancelled():
+                    future.exception()  # retrieve errors even when the caller was cancelled
+
+            prediction.add_done_callback(finished)
+            chunk = await asyncio.shield(prediction)
+            self.latencies_s.append(time.monotonic() - t_inf)
             for action in chunk[: self.cfg.execute_steps]:
                 self._send(skill.arm, action, ctx)
                 await asyncio.sleep(period)

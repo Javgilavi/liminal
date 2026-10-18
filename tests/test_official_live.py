@@ -82,3 +82,108 @@ def test_engagement_parks_current_encoder_goals_before_stock_configure():
     handle.engage()
     assert order == ["park", "configure"]
     assert handle.engaged
+
+
+@pytest.mark.parametrize("mode", ["student", "edit", "eef", "stop"])
+def test_direct_runner_hybrid_full_cycle_uses_post_ack_measurements(tmp_path, monkeypatch, mode):
+    import asyncio
+    import json
+    import sys
+
+    pytest.importorskip("numpy")
+    from test_hybrid import decision
+
+    from liminal.policy import official_live
+    from liminal.policy.hybrid import HybridConfig
+
+    sent, reasoner_calls = [], []
+
+    class FakeArm:
+        name = "right"
+        num_joints = 6
+        engaged = False
+        current = [0, 0, 0, 0, 0, 50]
+        pending = None
+
+        def __init__(self, cfg):
+            pass
+
+        def connect_read_only(self):
+            pass
+
+        def limits(self):
+            return [-100]*5+[0], [100]*6
+
+        def observe(self):
+            if self.pending is not None:
+                self.current = list(self.pending)
+            image = SimpleNamespace(std=lambda: 10)
+            return {"scene": image, "wrist": image}, dict.fromkeys(SO101_JOINTS, 0)
+
+        def read_state(self):
+            return list(self.current)
+
+        def engage(self):
+            self.engaged = True
+
+        def send_action(self, target):
+            assert self.engaged
+            sent.append(list(target))
+            self.pending = list(target)
+
+        def stop(self):
+            self.engaged = False
+
+        def close(self):
+            self.stop()
+
+    class Reasoner:
+        async def decide(self, payload, images, schema):
+            reasoner_calls.append(payload)
+            return decision(payload, mode if len(reasoner_calls) == 1 else "stop")
+
+    class Writer:
+        def write(self, value):
+            pass
+
+        async def drain(self):
+            pass
+
+        def close(self):
+            pass
+
+    class Process:
+        stdin = Writer()
+        async def wait(self):
+            return 0
+
+    messages = iter([
+        {"type": "ready", "integration": "lerobot.Flux3Policy", "inference": {"n_action_steps": 32, "fps": 30}},
+        *[{"type": "actions", "actions": [[i/10]*5+[50] for i in range(42)], "inference_seconds": .1}]*2,
+    ])
+
+    async def reply(*args):
+        return next(messages)
+
+    async def spawn(*args, **kwargs):
+        return Process()
+
+    monkeypatch.setitem(sys.modules, "cv2", SimpleNamespace(
+        COLOR_RGB2BGR=0, cvtColor=lambda img, mode: img, imencode=lambda ext, img: (True, b"jpeg")))
+    monkeypatch.setattr(official_live, "OfficialSO101", FakeArm)
+    monkeypatch.setattr(official_live, "worker_reply", reply)
+    monkeypatch.setattr(official_live.asyncio, "create_subprocess_exec", spawn)
+    monkeypatch.setattr("liminal.policy.hybrid.ClaudeReasoner", lambda cfg: Reasoner())
+    cfg = {"arm": "right", "prompt": "put pen in slot", "python": "python", "worker": "worker",
+           "vm": "fake", "zone": "fake", "project": "fake",
+           "hybrid": vars(HybridConfig(enabled=True, kinematics_verified=True))}
+    asyncio.run(official_live.run(cfg, tmp_path, True))
+    assert len(sent) == (0 if mode == "stop" else 2)
+    if mode == "student":
+        assert sent == [[0]*5+[50], [.1]*5+[50]]
+    if mode == "eef":
+        assert [a[5] for a in sent] == [60, 70]  # second IK step uses the actual first result
+    if sent:
+        assert reasoner_calls[1]["episode_history"][0]["after"] == sent[-1]
+    report = json.loads((tmp_path / "report.json").read_text())
+    assert report["status"] == "hybrid_stopped_task_success_unverified"
