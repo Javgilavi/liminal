@@ -18,12 +18,12 @@
     <meta property="og:image" content="assets/real-vs-sim.jpg" />
     <title>Liminal — Two arms, explicit dependencies</title>
     <link rel="icon" href="assets/favicon.svg" />
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="project.css" />
+    <link rel="stylesheet" href="style.css?v=20261018-tabs" />
+    <link rel="stylesheet" href="project.css?v=20261018-tabs" />
     <script type="importmap">
       { "imports": { "three": "./assets/vendor/three.module.js" } }
     </script>
-    <script type="module" src="project.js"></script>
+    <script type="module" src="project.js?v=20261018-tabs"></script>
   </head>
   <body>
     <a class="skip" href="#overview">Skip to project</a>
@@ -120,12 +120,12 @@
         ><span>Recorded simulation · no robot connection needed</span>
       </div>
       <nav class="chapter-nav" aria-label="Page chapters">
-        <a href="#overview">The idea</a><a href="#physical">Real robot</a
+        <a href="#overview">Overview</a><a href="#physical">Real robot</a
         ><a href="#method">The architecture</a
         ><a href="#dependencies">Task dependencies</a
         ><a href="#demonstrations">Demonstrations</a
         ><a href="#experiments">Results</a><a href="#twin">Digital twin</a
-        ><a href="#evidence">Evidence & limits</a>
+        ><a href="#evidence">Status</a>
       </nav>
       <section class="section" id="overview">
         <div class="section-heading">
@@ -180,24 +180,37 @@
         </div>
         <div class="physical-feature">
           <div>
-            <div class="physical-tabs" aria-label="Physical robot video">
-              <button data-physical="0" class="active">Layout C / 48 s</button
-              ><button data-physical="1">Layout A / 94 s</button
-              ><button data-physical="2">Layout B / 91 s</button
-              ><button data-physical="3">Morning A / 69 s</button
-              ><button data-physical="4">Morning C / 36 s</button>
+            <div
+              class="physical-tabs"
+              role="tablist"
+              aria-label="Physical robot video"
+            >
+              <button data-physical="0" class="active">
+                <span>Layout C</span><span class="tab-meta">48 s</span></button
+              ><button data-physical="1">
+                <span>Layout A</span><span class="tab-meta">94 s</span></button
+              ><button data-physical="2">
+                <span>Layout B</span><span class="tab-meta">91 s</span></button
+              ><button data-physical="3">
+                <span>Morning A</span><span class="tab-meta">69 s</span></button
+              ><button data-physical="4">
+                <span>Morning C</span><span class="tab-meta">36 s</span>
+              </button>
             </div>
-            <video
-              id="physical-video"
-              controls
-              playsinline
-              preload="metadata"
-              src="assets/real-insert-C.mp4"
-              poster="assets/real-insert-poster.jpg"
-            ></video>
-            <p id="physical-caption">
-              RAW 5k adapter · layout C · real head and wrist camera recordings.
-            </p>
+            <div id="physical-panel" role="tabpanel" tabindex="0">
+              <video
+                id="physical-video"
+                controls
+                playsinline
+                preload="metadata"
+                src="assets/real-insert-C.mp4"
+                poster="assets/preview-real-insert-C.jpg"
+              ></video>
+              <p id="physical-caption">
+                RAW 5k adapter · layout C · real head and wrist camera
+                recordings.
+              </p>
+            </div>
           </div>
           <aside>
             <span class="physical-type">Selected successful runs</span>
@@ -322,12 +335,28 @@
               support</label
             >
           </div>
-          <div class="task-stages" id="task-stages">
-            <button data-step="0" class="active">Open lid</button
-            ><button data-step="1">Establish hold</button
-            ><button data-step="2">Place object</button
-            ><button data-step="3">Verify inside</button
-            ><button data-step="4">Release support</button>
+          <div
+            class="task-stages"
+            id="task-stages"
+            role="group"
+            aria-label="Task stage"
+          >
+            <button data-step="0" class="active">
+              <span class="stage-number" aria-hidden="true">1</span
+              ><span>Open lid</span></button
+            ><button data-step="1">
+              <span class="stage-number" aria-hidden="true">2</span
+              ><span>Hold lid</span></button
+            ><button data-step="2">
+              <span class="stage-number" aria-hidden="true">3</span
+              ><span>Insert object</span></button
+            ><button data-step="3">
+              <span class="stage-number" aria-hidden="true">4</span
+              ><span>Verify inside</span></button
+            ><button data-step="4">
+              <span class="stage-number" aria-hidden="true">5</span
+              ><span>Release lid</span>
+            </button>
           </div>
           <input
             type="range"
@@ -443,6 +472,7 @@
             <span class="media-tag">Zero-shot FLUX</span
             ><video
               id="compare-base"
+              poster="assets/preview-zero-shot-red.jpg"
               src="assets/zero-shot-red.mp4"
               controls
               playsinline
@@ -454,6 +484,7 @@
             <span class="media-tag adapted">Final task LoRA</span
             ><video
               id="compare-lora"
+              poster="assets/preview-lora-red.jpg"
               src="assets/lora-red.mp4"
               controls
               playsinline
@@ -480,16 +511,26 @@
         </p>
         <div class="gallery-heading">
           <h3>Prediction and perception.</h3>
-          <div class="gallery-buttons">
-            <button data-slide="0" class="active">Real-camera prediction</button
-            ><button data-slide="1">FLUX in simulation</button
-            ><button data-slide="2">Recorded-video analysis</button
-            ><button data-slide="3">Simulated future</button>
+          <div
+            class="gallery-buttons"
+            role="tablist"
+            aria-label="Policy diagnostic"
+          >
+            <button data-slide="0" class="active">Real prediction</button
+            ><button data-slide="1">FLUX simulation</button
+            ><button data-slide="2">Scene analysis</button
+            ><button data-slide="3">Sim prediction</button>
           </div>
         </div>
-        <div class="gallery-stage">
+        <div
+          class="gallery-stage"
+          id="gallery-panel"
+          role="tabpanel"
+          tabindex="0"
+        >
           <video
             id="gallery-video"
+            poster="assets/preview-real-prediction.jpg"
             controls
             playsinline
             preload="metadata"
@@ -526,11 +567,11 @@
         </div>
         <div class="results-tabs" role="tablist" aria-label="Result domain">
           <button role="tab" aria-selected="true" data-result="simulation">
-            Matched simulation</button
+            Simulation</button
           ><button role="tab" aria-selected="false" data-result="hardware">
-            Physical integration</button
+            Real robot</button
           ><button role="tab" aria-selected="false" data-result="twin">
-            Twin demonstrations
+            Twin dataset
           </button>
         </div>
         <div id="results-simulation" class="results-panel">

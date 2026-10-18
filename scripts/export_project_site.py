@@ -21,6 +21,17 @@ PAGES = {
     "evidence/notes.html",
 }
 ASSETS = {
+    "preview-zero-shot-red.jpg",
+    "preview-lora-red.jpg",
+    "preview-real-prediction.jpg",
+    "preview-flux-session.jpg",
+    "preview-perception-session.jpg",
+    "preview-predicted-future.jpg",
+    "preview-real-insert-A.jpg",
+    "preview-real-insert-B.jpg",
+    "preview-real-insert-C.jpg",
+    "preview-real-morning-A.jpg",
+    "preview-real-morning-C.jpg",
     "real-insert-A.mp4",
     "real-insert-B.mp4",
     "real-insert-C.mp4",
