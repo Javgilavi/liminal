@@ -1,4 +1,10 @@
-"""Research/demo companion for an existing Haller controller. No motor connection on startup."""
+"""Research/demo companion for an existing Haller controller. No motor connection on startup.
+
+With ``orchestrator`` (the ws4 orchestrator HMI, e.g. http://127.0.0.1:8080) the companion bridges the paired live
+lab to it instead of Haller: measured joints of both arms from its ``/api/twin/state`` drive the MuJoCo mirror, its
+cameras replace Haller's snapshots, and **Run trial** asks it to plan the instruction (Claude) and, with execution
+selected, approves the plan so the orchestrator runs it on both arms. The orchestrator owns the arms and its own
+guards; the companion never opens a device."""
 
 import asyncio
 import contextlib
@@ -15,6 +21,7 @@ def create_research_app(
     profile: str | None = None,
     controller: str = "http://127.0.0.1:8000",
     site_url: str | None = None,
+    orchestrator: str | None = None,
 ):
     from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +51,17 @@ def create_research_app(
         public_origin = f"https://{site_address.netloc}"
         site_url = site_url.rstrip("/") + "/"
     controller = controller.rstrip("/")
+    orch = orchestrator.rstrip("/") if orchestrator else None
+    if orch:
+        o = urlsplit(orch)
+        if o.scheme != "http" or o.hostname not in ("127.0.0.1", "localhost", "::1") or o.username:
+            raise ValueError("orchestrator must be the local orchestrator HMI, e.g. http://127.0.0.1:8080")
+        if profile:
+            raise ValueError("--orchestrator runs the orchestrator's own skills: do not pass --profile")
+    # orchestrator robot side -> Haller / scene arm name (Haller names the robot's LEFT arm "right")
+    haller_name = {"left": "right", "right": "left"}
+    orch_cameras = {"top": "head", "wrist_a": "left_wrist", "wrist_b": "right_wrist"}
+    orch_state = {"run": "idle", "planning": False, "estopped": False}
     address = urlsplit(controller)
     if address.scheme not in ("http", "https") or not address.hostname or address.username:
         raise ValueError("controller must be an HTTP origin without credentials")
@@ -64,6 +82,37 @@ def create_research_app(
         if controller != "http://127.0.0.1:8000":
             raise ValueError("current official runner requires Haller at http://127.0.0.1:8000")
 
+    def orch_get(path, timeout=2.0):
+        import urllib.request
+
+        with urllib.request.urlopen(orch + path, timeout=timeout) as response:
+            return response.read()
+
+    def orch_post(path, body):
+        import urllib.error
+        import urllib.request
+
+        request = urllib.request.Request(
+            orch + path, data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json", "X-HMI": "1"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.loads(response.read() or b"{}")
+        except urllib.error.HTTPError as exc:
+            try:
+                return exc.code, json.loads(exc.read() or b"{}")
+            except ValueError:
+                return exc.code, {}
+
+    def orch_job():
+        run = orch_state["run"]
+        busy = {"running", "estopped", "awaiting_replan", "paused"}
+        done = {"succeeded": "finished", "failed": "error", "aborted": "stopped"}
+        current = "starting" if orch_state["planning"] else "running" if run in busy else done.get(run, "idle")
+        error = job["error"] or (f"Orchestrator run {run}" if run == "failed" else None)
+        return {"state": current, "task": job["task"], "error": error, "output": f"orchestrator HMI {orch}"}
+
     def snapshot():
         age = None if state["received_at"] is None else time.monotonic() - state["received_at"]
         if age is not None:
@@ -76,14 +125,19 @@ def create_research_app(
             "arms": state["arms"],
             "poses": mirror.poses(),
             "error": state["error"],
-            "job": {k: v for k, v in job.items()},
-            "profile_configured": cfg is not None,
-            "active_arm": cfg.get("arm") if cfg else None,
-            "checkpoint_label": Path(str(cfg.get("checkpoint", "configured profile"))).name if cfg else None,
+            "job": orch_job() if orch else {k: v for k, v in job.items()},
+            "profile_configured": cfg is not None or bool(orch),
+            "active_arm": "right" if orch else cfg.get("arm") if cfg else None,
+            "checkpoint_label": (
+                "Haller orchestrator: both arms, one FLUX LoRA per skill" if orch
+                else Path(str(cfg.get("checkpoint", "configured profile"))).name if cfg else None
+            ),
             "object_tracking": False,
             "source": "measured_joints",
-            "controller": controller,
+            "controller": orch or controller,
             "camera_labels": {
+                "top": "Head camera", "wrist_a": "Pen arm wrist (robot left)", "wrist_b": "Box arm wrist (robot right)",
+            } if orch else {
                 "top": "Scene / top",
                 "wrist_a": "Wrist A",
                 "wrist_b": "Wrist B",
@@ -94,7 +148,46 @@ def create_research_app(
             },
         }
 
+    async def observe_orchestrator():
+        while not stopped.is_set():
+            try:
+                message = json.loads(await asyncio.to_thread(orch_get, "/api/twin/state", 1.0))
+                arms = {
+                    haller_name[side]: {
+                        "positions": [float(v) for v in values], "torque": True,
+                        "mode": (message.get("modes") or {}).get(side, "unknown"),
+                    }
+                    for side, values in (message.get("joints") or {}).items()
+                    if side in haller_name and values and len(values) == 6
+                }
+                if not arms:
+                    raise ValueError("The orchestrator has no measured arm yet")
+                now = time.monotonic()
+                if state["received_at"] is not None:
+                    interval = now - state["received_at"]
+                    if 0 < interval < 1:
+                        state["rate_hz"] = state["rate_hz"] * 0.8 + 0.2 / interval
+                mirror.apply({name: arm["positions"] for name, arm in arms.items()})
+                orch_state.update(
+                    run=message.get("run", "idle"), planning=bool(message.get("planning")),
+                    estopped=bool(message.get("estopped")),
+                )
+                source_age = max(0.0, time.time() - float(message.get("t", time.time())))
+                state.update(arms=arms, received_at=now, source_age=source_age, error=None)
+                await asyncio.sleep(1 / 30)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                state["error"] = (
+                    str(exc) if isinstance(exc, ValueError)
+                    else f"Waiting for the orchestrator HMI at {orch}: {type(exc).__name__}"
+                )
+                state["rate_hz"] = 0.0
+                await asyncio.sleep(1)
+
     async def observe():
+        if orch:
+            return await observe_orchestrator()
         try:
             from websockets.asyncio.client import connect
         except ImportError:
@@ -202,8 +295,8 @@ def create_research_app(
             "The pairing session expires when the companion restarts.</p>"
             f'<a href="{link}" rel="noreferrer">Open the paired full-screen lab ↗</a>'
             f"<p><strong>Robot connection:</strong> {escape(status)}<br>"
-            f'<a href="{escape(controller, quote=True)}" target="_blank" rel="noreferrer">'
-            "Open Haller controller ↗</a></p>"
+            f'<a href="{escape(orch or controller, quote=True)}" target="_blank" rel="noreferrer">'
+            f"Open {'the orchestrator HMI' if orch else 'Haller controller'} ↗</a></p>"
             "<p>You can pair now while the robot is offline. The joint mirror and cameras reconnect "
             "automatically when Haller starts. No policy profile is needed to view them.</p>"
             "<p>Keep this link private. Hardware actions still require explicit engagement in Haller.</p>",
@@ -253,6 +346,12 @@ def create_research_app(
             raise HTTPException(404, "Unknown camera")
         if not snapshot()["connected"]:
             raise HTTPException(503, "Real camera unavailable while controller is disconnected")
+        if orch:
+            try:
+                data = await asyncio.to_thread(orch_get, f"/api/frame/{orch_cameras[name]}.jpg", 2.0)
+            except Exception as exc:
+                raise HTTPException(503, "Orchestrator camera unavailable") from exc
+            return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
         try:
             import urllib.request
 
@@ -277,9 +376,49 @@ def create_research_app(
         engage_acknowledged: bool = False
         duration_s: float = Field(default=20, ge=1, le=120)
 
+    async def run_orchestrator(req):
+        prompt = req.prompt.strip()
+        current = snapshot()
+        if not current["connected"]:
+            raise HTTPException(409, "Fresh joints from the orchestrator are required")
+        if current["job"]["state"] in ("starting", "running"):
+            raise HTTPException(409, "The orchestrator is already planning or running")
+        if req.execute and not req.engage_acknowledged:
+            raise HTTPException(409, "Acknowledge that the arms will move before execution")
+        code, body = await asyncio.to_thread(orch_post, "/api/plan", {"goal": prompt})
+        if code != 202:
+            raise HTTPException(409, f"Orchestrator refused the plan: {body.get('error', code)}")
+        job.update(task=prompt, error=None)
+        proposal, deadline = None, time.monotonic() + 90
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.5)
+            st = json.loads(await asyncio.to_thread(orch_get, "/api/state", 3.0))
+            p = st.get("proposal")
+            if not st.get("planning") and p and p.get("goal") == prompt:
+                proposal = p
+                break
+        if proposal is None:
+            raise HTTPException(504, "The orchestrator returned no plan within 90 s")
+        if not proposal.get("ok"):
+            job["error"] = "Plan rejected: " + "; ".join(proposal.get("errors") or ["no valid plan"])
+            raise HTTPException(409, job["error"])
+        if not req.execute:
+            return {"started": False, "execute": False,
+                    "output": f"plan v{proposal['version']} is ready in the orchestrator HMI; "
+                              "select execution to run it"}
+        code, body = await asyncio.to_thread(orch_post, "/api/approve", {"version": proposal["version"]})
+        if code != 200:
+            raise HTTPException(409, f"Orchestrator did not start: {body.get('message') or body.get('error') or code}")
+        return {"started": True, "execute": True, "output": f"orchestrator run of plan v{proposal['version']} ({orch})"}
+
     @app.post("/api/run")
     async def run(req: RunRequest):
         nonlocal task
+        if orch:
+            if not req.prompt.strip():
+                raise HTTPException(422, "An instruction is required")
+            async with lock:
+                return await run_orchestrator(req)
         async with lock:
             if not req.prompt.strip():
                 raise HTTPException(422, "An instruction is required")
@@ -325,6 +464,10 @@ def create_research_app(
 
     @app.post("/api/stop")
     async def stop():
+        if orch:
+            await asyncio.to_thread(orch_post, "/api/estop", {})
+            return {"stopped": True,
+                    "scope": "e-stop latched in the orchestrator: both arms hold; Release or Abort there"}
         await cancel()  # existing runner's finally path requests Haller stop and torque release
         return {"stopped": True, "scope": "trial launched by this companion"}
 

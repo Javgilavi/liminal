@@ -227,6 +227,11 @@
   #imaginesec .cams img { aspect-ratio: 2 / 1; }
   #imcap { font-size: 12px; color: var(--muted); margin-top: 8px; }
 
+  /* digital twin: the MuJoCo scene posed at the measured joints (site/viewer.js) */
+  .twin { width: 100%; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: #edf1e7;
+          border: 1px solid var(--line); }
+  .twin canvas { width: 100% !important; height: 100% !important; display: block; }
+
   /* events */
   #eventsec { display: flex; flex-direction: column; }
   #log { height: 300px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; font: 12px/1.55 var(--mono);
@@ -348,6 +353,10 @@
     </section>
   </div>
   <div class="col col-side">
+    <section id="twinsec" style="display:none">
+      <h2><span class="dot" style="background:var(--green)"></span>Digital twin <span id="twinmeta" class="muted small sub clip"></span></h2>
+      <div id="twin" class="twin" title="MuJoCo twin at the arms' measured joints; drag to orbit, scroll to zoom"></div>
+    </section>
     <section id="imaginesec" style="display:none">
       <h2><span class="dot" style="background:var(--yellow)"></span>Imagined vs actual</h2>
       <div class="cams">
@@ -603,6 +612,45 @@ function cams() {
   setTimeout(cams, 250);
 }
 poll(); cams();
+</script>
+<script type="importmap">{"imports": {"three": "/twin/assets/vendor/three.module.js"}}</script>
+<script type="module">
+// Digital twin: the live lab's viewer (site/viewer.js) on the MuJoCo scene, posed every 50 ms at the arms' measured
+// joints (/api/twin/state). Hidden when the server has no twin (mujoco or the scene missing).
+import { TwinView, drawViews } from "/twin/viewer.js";
+const sec = document.getElementById("twinsec"), el = document.getElementById("twin"), meta = document.getElementById("twinmeta");
+let view = null;
+async function twinStart() {
+  try {
+    const r = await fetch("/api/twin/scene", { cache: "no-store" });
+    if (!r.ok) throw new Error(`scene ${r.status}`);
+    const data = await r.json();
+    sec.style.display = "";
+    view = new TwinView(el, data);
+    // start from behind and above the robot, like the head camera (scene: +y behind the tower, table toward -y)
+    view.camera.position.set(0, 0.62, 0.8);
+    view.controls.target.set(0, -0.14, 0.08);
+    view.controls.update();
+    twinPoll();
+    const frame = () => { drawViews(); requestAnimationFrame(frame); };
+    frame();
+  } catch (e) {
+    console.warn("digital twin unavailable", e);
+    sec.style.display = "none";
+    setTimeout(twinStart, 5000);
+  }
+}
+async function twinPoll() {
+  try {
+    const s = await (await fetch("/api/twin/state", { cache: "no-store" })).json();
+    if (s.poses) view.setPoses(s.poses);
+    meta.textContent = Object.entries(s.modes || {}).map(([arm, m]) => `${arm} ${m}`).join(" · ") + (s.estopped ? " · E-STOP" : "");
+  } catch (e) {
+    meta.textContent = "no joint data";
+  }
+  setTimeout(twinPoll, 50);
+}
+twinStart();
 </script>
 </body>
 </html>

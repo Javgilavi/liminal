@@ -17,6 +17,12 @@ from ..plan import plan_json_schema
 
 PAGE = Path(__file__).resolve().parent / "index.html"
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "[::1]")
+# The live lab's Three.js twin viewer (main's site/), served as is: viewer.js imports "three" (the page's import map)
+# and ./assets/vendor/OrbitControls.js, both under /twin/.
+SITE = Path(__file__).resolve().parents[3] / "site"
+TWIN_FILES = {"/twin/viewer.js": SITE / "viewer.js",
+              **{f"/twin/assets/vendor/{name}": SITE / "assets" / "vendor" / name
+                 for name in ("three.module.js", "three.core.js", "OrbitControls.js")}}
 
 
 def make_server(session: Any, host: str = "127.0.0.1", port: int = 8080) -> ThreadingHTTPServer:
@@ -54,6 +60,30 @@ def make_server(session: Any, host: str = "127.0.0.1", port: int = 8080) -> Thre
                 if frame is None:
                     return self._json(404, {"error": "no frame"})
                 return self._send(200, frame, "image/jpeg")
+            if path == "/api/twin/state":
+                try:
+                    return self._json(200, session.twin_state())
+                except Exception as exc:  # mujoco or the scene missing: the page hides the twin
+                    return self._json(503, {"error": f"twin unavailable: {type(exc).__name__}: {exc}"})
+            if path == "/api/twin/scene":
+                try:
+                    body = json.dumps(session.twin_scene()).encode()
+                except Exception as exc:
+                    return self._json(503, {"error": f"twin unavailable: {type(exc).__name__}: {exc}"})
+                if "gzip" in (self.headers.get("Accept-Encoding") or ""):  # 16 MB of meshes -> about 5 MB
+                    import gzip
+
+                    body = gzip.compress(body, compresslevel=5)
+                    self.send_response(200)
+                    for k, v in (("Content-Type", "application/json"), ("Content-Encoding", "gzip"),
+                                 ("Content-Length", str(len(body))), ("Cache-Control", "no-store")):
+                        self.send_header(k, v)
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return None
+                return self._send(200, body, "application/json")
+            if path in TWIN_FILES:
+                return self._send(200, TWIN_FILES[path].read_bytes(), "text/javascript; charset=utf-8")
             self._json(404, {"error": "not found"})
 
         def do_POST(self) -> None:  # noqa: N802

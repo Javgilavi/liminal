@@ -578,6 +578,46 @@ class Session:
         with self._lock:
             return self._frames.get(name)
 
+    # ------------------------------------------------------------------ digital twin
+    def measured_joints(self) -> dict[str, list[float] | None]:
+        """Robot side -> its last measured joints (LeRobot degrees, gripper %). On the Haller: each arm's own
+        reading, refreshed every control tick during a run and every 0.2 s while idle; otherwise the last
+        observation."""
+        if self.rig is not None:
+            return {arm: None if x.robot.last_q is None else [float(v) for v in x.robot.last_q]
+                    for arm, x in self.rig.arms.items()}
+        with self._lock:
+            obs = self._last_obs
+        state = None if obs is None else obs.get("observation.state")
+        if state is None:
+            return {}
+        state = np.asarray(state, dtype=float)
+        return {arm: state[6 * i: 6 * i + 6].tolist() for i, arm in enumerate(ARMS) if state.size >= 6 * i + 6}
+
+    def arm_modes(self) -> dict[str, str]:
+        """Robot side -> policy | ramp | holding | idle, from the runner target that drives the arm."""
+        owners = getattr(getattr(self, "runner", None), "_owner", {}) or {}
+        holding = self.rig.holding if self.rig is not None else set()
+        return {arm: (("ramp" if owners[arm].endswith(":prim") else "policy") if owners.get(arm) else
+                      "holding" if arm in holding else "idle") for arm in ARMS}
+
+    def twin_state(self) -> dict[str, Any]:
+        """The twin posed at the arms' measured joints right now, for the HMI and the live lab bridge."""
+        if getattr(self, "_twin", None) is None:
+            from .twin import Twin
+
+            self._twin = Twin()
+        joints = self.measured_joints()
+        self._twin.apply(joints)
+        return {"t": time.time(), "poses": self._twin.poses(), "joints": joints, "modes": self.arm_modes(),
+                "estopped": bool(self.runner.guard.estopped), "planning": bool(self.planning),
+                "run": self.executor.state if self.executor is not None else "idle"}
+
+    def twin_scene(self) -> dict[str, Any]:
+        if getattr(self, "_twin", None) is None:
+            self.twin_state()
+        return self._twin.geometry()
+
     def head_image(self) -> np.ndarray | None:
         with self._lock:
             obs = self._last_obs
