@@ -1,6 +1,45 @@
 import { TwinView, loadScene, drawViews } from "./viewer.js";
 const $ = (s) => document.querySelector(s),
   $$ = (s) => [...document.querySelectorAll(s)];
+// Video tabs activate on Enter/Space; arrow keys can browse without reloading media.
+function bindTabs(list, panelFor, activate, automatic = false) {
+  const buttons = [...list.querySelectorAll("button")];
+  list.setAttribute("role", "tablist");
+  function select(index) {
+    index = (index + buttons.length) % buttons.length;
+    buttons.forEach((button, i) => {
+      button.setAttribute("aria-selected", String(i === index));
+      button.classList.toggle("active", i === index);
+      button.tabIndex = i === index ? 0 : -1;
+    });
+    panelFor(index).setAttribute("aria-labelledby", buttons[index].id);
+    activate(index);
+  }
+  buttons.forEach((button, i) => {
+    button.id = `${list.classList[0]}-tab-${i}`;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-controls", panelFor(i).id);
+    const panel = panelFor(i);
+    panel.setAttribute("role", "tabpanel");
+    panel.tabIndex = 0;
+    panel.setAttribute("aria-labelledby", button.id);
+    button.onclick = () => select(i);
+    button.onkeydown = (event) => {
+      let next;
+      if (event.key === "ArrowRight") next = (i + 1) % buttons.length;
+      if (event.key === "ArrowLeft")
+        next = (i + buttons.length - 1) % buttons.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = buttons.length - 1;
+      if (next === undefined) return;
+      event.preventDefault();
+      buttons[next].focus({ preventScroll: true });
+      if (automatic) select(next);
+    };
+  });
+  select(0);
+  return { select };
+}
 let hero, replay, data;
 loadScene()
   .then((scene) => {
@@ -170,6 +209,8 @@ function taskStage() {
   $$(".task-stages button").forEach((b) => {
     b.classList.toggle("active", +b.dataset.step === i);
     b.setAttribute("aria-pressed", String(+b.dataset.step === i));
+    if (+b.dataset.step === i) b.setAttribute("aria-current", "step");
+    else b.removeAttribute("aria-current");
   });
 }
 $("#task-progress").oninput = taskStage;
@@ -241,22 +282,24 @@ let slide = 0;
 function showSlide(i) {
   slide = (i + slides.length) % slides.length;
   const [file, type, title, description] = slides[slide];
-  $("#gallery-video").pause();
-  $("#gallery-video").src = `assets/${file}`;
+  const video = $("#gallery-video");
+  video.poster = `assets/preview-${file.replace(".mp4", ".jpg")}`;
+  if (video.getAttribute("src") !== `assets/${file}`) {
+    video.pause();
+    video.src = `assets/${file}`;
+  }
   $("#gallery-type").textContent = type;
   $("#gallery-title").textContent = title;
   $("#gallery-description").textContent = description;
   $("#gallery-count").textContent = `${slide + 1} / ${slides.length}`;
-  $$(".gallery-buttons button").forEach((b) => {
-    b.classList.toggle("active", +b.dataset.slide === slide);
-    b.setAttribute("aria-pressed", String(+b.dataset.slide === slide));
-  });
 }
-$$(".gallery-buttons button").forEach(
-  (b) => (b.onclick = () => showSlide(+b.dataset.slide)),
+const galleryTabs = bindTabs(
+  $(".gallery-buttons"),
+  () => $("#gallery-panel"),
+  showSlide,
 );
-$("#gallery-prev").onclick = () => showSlide(slide - 1);
-$("#gallery-next").onclick = () => showSlide(slide + 1);
+$("#gallery-prev").onclick = () => galleryTabs.select(slide - 1);
+$("#gallery-next").onclick = () => galleryTabs.select(slide + 1);
 let results;
 fetch("./evidence/results.json")
   .then((r) => r.json())
@@ -288,35 +331,16 @@ function renderResults() {
   );
 }
 $("#result-metric").onchange = renderResults;
-const tabs = $$(".results-tabs button");
-function activateTab(b) {
-  tabs.forEach((x) => {
-    x.setAttribute("aria-selected", String(x === b));
-    x.tabIndex = x === b ? 0 : -1;
-    $(`#results-${x.dataset.result}`).hidden = x !== b;
-  });
-}
-tabs.forEach((b, i) => {
-  b.id = `tab-${b.dataset.result}`;
-  b.setAttribute("aria-controls", `results-${b.dataset.result}`);
-  const panel = $(`#results-${b.dataset.result}`);
-  panel.setAttribute("role", "tabpanel");
-  panel.setAttribute("aria-labelledby", b.id);
-  b.onclick = () => activateTab(b);
-  b.onkeydown = (e) => {
-    let index;
-    if (e.key === "ArrowRight") index = (i + 1) % tabs.length;
-    if (e.key === "ArrowLeft") index = (i + tabs.length - 1) % tabs.length;
-    if (e.key === "Home") index = 0;
-    if (e.key === "End") index = tabs.length - 1;
-    if (index !== undefined) {
-      e.preventDefault();
-      activateTab(tabs[index]);
-      tabs[index].focus();
-    }
-  };
-});
-activateTab(tabs[0]);
+const resultButtons = $$(".results-tabs button");
+bindTabs(
+  $(".results-tabs"),
+  (index) => $(`#results-${resultButtons[index].dataset.result}`),
+  (index) =>
+    resultButtons.forEach((button, i) => {
+      $(`#results-${button.dataset.result}`).hidden = i !== index;
+    }),
+  true,
+);
 $("#scene-divider").oninput = (e) =>
   $("#scene-comparison").style.setProperty("--split", `${e.target.value}%`);
 
@@ -342,17 +366,17 @@ const physicalClips = [
     "07:40 session · layout C · real head and wrist camera recordings.",
   ],
 ];
-$$("[data-physical]").forEach(
-  (b) =>
-    (b.onclick = () => {
-      const [file, caption] = physicalClips[+b.dataset.physical];
-      $("#physical-video").pause();
-      $("#physical-video").removeAttribute("poster");
-      $("#physical-video").src = `assets/${file}`;
-      $("#physical-caption").textContent = caption;
-      $$("[data-physical]").forEach((x) => {
-        x.classList.toggle("active", x === b);
-        x.setAttribute("aria-pressed", String(x === b));
-      });
-    }),
+bindTabs(
+  $(".physical-tabs"),
+  () => $("#physical-panel"),
+  (index) => {
+    const [file, caption] = physicalClips[index];
+    const video = $("#physical-video");
+    video.poster = `assets/preview-${file.replace(".mp4", ".jpg")}`;
+    if (video.getAttribute("src") !== `assets/${file}`) {
+      video.pause();
+      video.src = `assets/${file}`;
+    }
+    $("#physical-caption").textContent = caption;
+  },
 );
