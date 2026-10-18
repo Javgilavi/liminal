@@ -2,19 +2,81 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import PACKAGE_DIR
+from . import PACKAGE_DIR, WS4
 
 DEFAULT_VOCABULARY = PACKAGE_DIR / "skills.yaml"  # the final demo: 4-skill chain on the Haller, both arms
 PEN_VOCABULARY = PACKAGE_DIR / "skills_haller_pen.yaml"  # the red pen alone, robot-left arm only (2026-10-17)
 SIM_VOCABULARY = PACKAGE_DIR / "skills_sim_pack_box.yaml"  # the sim pack-box stand-in
+SINGLE_ARM = WS4 / "single_arm"
 ARMS = ("left", "right")
 KINDS = ("flux", "primitive", "operator")  # operator: the arm waits while a person does it, then confirms
 PRIMITIVES = ("hold", "home", "tuck", "open_gripper", "close_gripper")
 VERIFIER_MODELS = ("claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5")
+FINISHES = ("", "home", "hold")
+
+
+def resolve_keepout(path: str | Path) -> Path:
+    """A skill's ``keepout:``: absolute, else relative to ws4/single_arm (``skills/<kit>/workspace.json``), else a
+    bare file name in ws4/single_arm/calibration (the pen-only vocabulary)."""
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    return SINGLE_ARM / p if (SINGLE_ARM / p).exists() else SINGLE_ARM / "calibration" / p
+
+
+def _runner_parser() -> argparse.ArgumentParser:
+    """The run_single_arm flags a skill kit may record in skill.json ``runner_args`` (same names and defaults as its
+    CLI). Anything else fails the vocabulary: a safety setting the orchestrator would silently drop must not run."""
+    p = argparse.ArgumentParser(add_help=False, exit_on_error=False)
+    p.add_argument("--slow-zone", type=float, default=None)
+    p.add_argument("--slow-step", type=float, default=0.5)
+    p.add_argument("--slow-load-sustain", type=float, default=0.5)
+    p.add_argument("--slow-load-ticks", type=int, default=6)
+    return p
+
+
+def parse_runner_args(args: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    try:
+        ns, unknown = _runner_parser().parse_known_args(list(args))
+    except argparse.ArgumentError as exc:
+        raise ValueError(str(exc)) from exc
+    if unknown:
+        raise ValueError(f"runner_args the orchestrator does not apply: {unknown}")
+    return vars(ns) if ns.slow_zone is not None else {}
+
+
+def load_kit(keepout: str, prompt: str) -> tuple[dict[str, Any], tuple[str, ...], dict | None, str, list[str]]:
+    """The single_arm skill kit behind a ``keepout:`` (skill.json next to its workspace.json, build_skill.py): its
+    runner flags, its box-arm start gate (gate.py, demo poses resolved) and its verbatim task. Returns (runner,
+    runner_args, start_gate, kit path, errors)."""
+    path = resolve_keepout(keepout)
+    if not path.exists():
+        return {}, (), None, "", [f"keepout {keepout!r} not found ({path})"]
+    info_path = path.parent / "skill.json"
+    if not info_path.exists():
+        return {}, (), None, "", []
+    info = json.loads(info_path.read_text())
+    errors = []
+    if (WS4.parent / info.get("workspace", "")).resolve() != path.resolve():
+        errors.append(f"{info_path} is the kit of {info.get('workspace')!r}, not of {keepout!r}")
+    if prompt and info.get("task") != prompt:  # FLUX conditions on the exact caption of the skill's dataset
+        errors.append(f"prompt {prompt!r} is not the kit's task {info.get('task')!r} ({info_path})")
+    args = tuple(str(a) for a in info.get("runner_args") or ())
+    try:
+        runner = parse_runner_args(args)
+    except ValueError as exc:
+        runner = {}
+        errors.append(f"{info_path}: {exc}")
+    gate = info.get("other_arm_gate")
+    if gate:
+        gate = {**gate, "demo_poses": str(WS4.parent / gate["demo_poses"])}
+    return runner, args, gate, str(info_path), errors
 
 
 @dataclass(frozen=True)
@@ -42,8 +104,16 @@ class Skill:
     # Haiku described a pen in its slot correctly and still answered done=false (green pen, 2026-10-18).
     verify_states: tuple[str, ...] = ()
     park_after: bool = False  # after a verified success: open the gripper, ramp to home, check again, then done
-    finish: str = ""  # "home": after the check passed the POLICY runs on until the arm is home, then the check again
+    # "home": after the check passed the POLICY runs on until the arm is home, then the check again. "hold": the arm
+    # freezes where the check passed and keeps holding (the box arm and the lid): no step may drive it again in this
+    # run, and its torque stays on when the session closes (run_single_arm --hold-other-arm).
+    finish: str = ""
     keepout: str = ""  # keep-out config with this skill's demonstrated envelope (else the arm's station zones only)
+    # From the kit's skill.json next to ``keepout`` (ws4/single_arm/skills/<kit>/, build_skill.py):
+    runner: dict = field(default_factory=dict)  # parsed runner_args (cutter: slow zone)
+    runner_args: tuple[str, ...] = ()  # as recorded, for the logs
+    start_gate: dict | None = None  # other_arm_gate (gate.py): the other arm's pose is checked before the step
+    kit: str = ""  # path of that skill.json
     keywords: tuple[str, ...] = ()
     sim: dict | None = None
     sim_check: dict | None = None
@@ -170,8 +240,13 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             errors.append(f"{name}: a flux skill needs its exact FLUX prompt")
         if kind == "primitive" and name not in PRIMITIVES:
             errors.append(f"{name}: unknown primitive (have {PRIMITIVES})")
-        if spec.get("finish") not in (None, "", "home"):
-            errors.append(f"{name}: finish must be home or absent")
+        if (spec.get("finish") or "") not in FINISHES:
+            errors.append(f"{name}: finish must be home, hold or absent")
+        runner, runner_args, start_gate, kit = {}, (), None, ""
+        if spec.get("keepout"):
+            runner, runner_args, start_gate, kit, kit_errors = load_kit(
+                str(spec["keepout"]), str(spec.get("prompt") or "") if kind == "flux" else "")
+            errors += [f"{name}: {e}" for e in kit_errors]
         if kind == "operator" and not str(spec.get("instruction") or "").strip():
             errors.append(f"{name}: an operator skill needs an instruction for the operator")
         for key in ("start_pose", "other_arm_pose"):
@@ -208,6 +283,10 @@ def load_vocabulary(path: str | Path | None = None) -> Vocabulary:
             park_after=bool(spec.get("park_after", False)),
             finish=str(spec.get("finish") or ""),
             keepout=str(spec.get("keepout") or ""),
+            runner=runner,
+            runner_args=runner_args,
+            start_gate=start_gate,
+            kit=kit,
             keywords=tuple(str(k).lower() for k in spec.get("keywords") or ()),
             sim=spec.get("sim"),
             sim_check=spec.get("sim_check"),

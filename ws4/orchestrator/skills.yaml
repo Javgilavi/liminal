@@ -7,16 +7,22 @@
 # both are connected by one process (orchestrator/haller.py), each arm's keep-out sees the other arm's live pose.
 #
 # The FLUX prompts are the exact strings of the recorded datasets (ws4-vr2 confirms them; the box one may change):
-# FLUX conditions on the exact caption, so never edit them here without the dataset and the served package. One LoRA
-# per skill is served on 8790 (package names from ws4-datasets): set them per skill below (`package:`) or on the command
-# line (`--skill-package open_box=<pkg>`). The planner only picks skills from this file and never writes a prompt.
+# FLUX conditions on the exact caption, so never edit them here without the dataset and the served package: a skill
+# with a kit (`keepout: skills/<kit>/workspace.json`) must use the kit's verbatim task (skill.json, checked at load). One
+# LoRA per skill is served on 8790 under a fixed name (`package:` below; ws4-datasets maps each name to a checkpoint in
+# /workspace/serve/demo_packages.txt on the volume); `--skill-package open_box=<pkg>` overrides one for a test. The
+# planner only picks skills from this file and never writes a prompt.
 #
 # Fields: see skills_sim_pack_box.yaml. Extra: `start_pose: home` ramps the arm to its home pose first (release, then
 # move, through the ramp guard); `finish: home` lets the POLICY bring the arm back home after the check passed (the
 # demos end at home; a scripted ramp from inside the box could hit it), then checks again; without it the step ends on
-# the check and the arm holds where it is; `park_after` (unused here) would ramp home instead; `keepout` names the
-# keep-out config with that skill's demonstrated envelope (ws4/single_arm/calibration); without it the policy runs under
-# the arm's station zones only. `verify_scene` / `verify_hint`: the success check's prompt (verify_eval.py tunes them).
+# the check and the arm holds where it is; `finish: hold` (open_box) freezes the arm there for the rest of the run: no
+# step may drive it again and its torque stays on at close (the lid closes if it lets go); `park_after` (unused here)
+# would ramp home instead. `keepout` names the skill's kit in ws4/single_arm (build_skill.py): its workspace.json (the
+# station zones with the skill's recorded overrides plus its demonstrated envelope), and next to it skill.json, whose
+# `runner_args` (cutter: slow zone) and `other_arm_gate` (pen-arm skills: gate.py start gate with the live box-arm pose)
+# the orchestrator applies as run_single_arm / eval_skill.sh do; without `keepout` the policy runs under the arm's
+# station zones only. `verify_scene` / `verify_hint`: the success check's prompt (verify_eval.py tunes them).
 version: 3
 
 station:
@@ -66,7 +72,9 @@ station:
     sentence saying where the object in question is.
 
 defaults:
-  timeout_s: 45
+  # 120 s per attempt, as in the red-pen benchmark behind the first real inserts (inserts after 48 to 94 s at action
+  # horizon 16, single_arm/benchmarks/red_pen_2026-10-18.md); 45 s would have cut 2 of the 3
+  timeout_s: 120
   verify_every_chunks: 2
   verifier_model: claude-haiku-5-5
   confidence: 0.7
@@ -76,7 +84,7 @@ defaults:
 skills:
   open_box:
     kind: flux
-    prompt: "open the box by pulling its handle"  # VERIFY: ws4-vr2's final string
+    prompt: "open the box by pulling its handle"  # the kit's task (skills/box/skill.json)
     arms: [right]
     description: "Robot right arm: open the closed white box by pulling the coloured handle on its lid."
     success_check: "The lid of the box is open."
@@ -99,12 +107,16 @@ skills:
     start_pose: home
     other_arm_pose: tucked  # the pen arm, as in the box demos
     # no park_after: the box arm must keep holding the lid open (the lid closes if it lets go, Oscar 2026-10-18); when
-    # the check passes the policy stops and the runner holds the arm's last command
+    # the check passes the policy stops and the runner holds the arm's last command, and from then on nothing drives it
+    finish: hold
+    package: skill_open_box
+    # box takes 7-74, right-arm midline +0.17 m (box only), approved overrides recorded in skills/box/skill.json
+    keepout: skills/box/workspace.json
     keywords: ["open the box", "open the lid", "open it", "pull its handle", "pull the handle"]
 
   put_green_pen_in_slot:
     kind: flux
-    prompt: "put the green pen in the green slot"  # VERIFY: ws4-vr2's final string
+    prompt: "put the green pen in the green slot"  # the kit's task (skills/green/skill.json)
     arms: [left]
     description: "Robot left arm: pick up the green pen and put it upright into the green slot in the box."
     success_check: "The green pen is standing in the green slot in the box."
@@ -132,6 +144,9 @@ skills:
     start_pose: home
     precheck: open_box  # the lid must still be open, else e-stop and hold
     finish: home  # the demos end at home: the policy brings the arm out of the box, then the check again
+    package: skill_green_pen
+    # pen-arm midline -0.23 m, takes 3/15/23/41/47 out of the envelope, 2 cm trim near the box arm; box-arm start gate
+    keepout: skills/green/workspace.json
     keywords: ["green pen", "green slot", "green marker"]
 
   put_yellow_cutter_in_slot:
@@ -161,6 +176,10 @@ skills:
     start_pose: home
     precheck: open_box  # the lid must still be open, else e-stop and hold
     finish: home  # the demos end at home: the policy brings the arm out of the box, then the check again
+    package: skill_yellow_cutter
+    # pen-arm midline -0.21 m, 1 cm box-arm clearance with a 4 cm slow zone (0.5 deg/tick, load freeze at 50 % for
+    # 0.2 s: skill.json runner_args), box-arm start gate
+    keepout: skills/cutter/workspace.json
     keywords: ["yellow cutter", "yellow slot", "cutter", "knife"]
 
   put_pen_in_slot:
@@ -192,7 +211,10 @@ skills:
     precheck: open_box  # the lid must still be open, else e-stop and hold
     # the last skill: it ends on the check and the arm holds at the slot (its takes end there; a scripted ramp out of
     # the box could hit it, parent 2026-10-18)
-    keepout: haller_right_workspace_final.json  # envelope of the 84 good pen takes (ws4/single_arm, so101-zeroshot)
+    package: skill_red_pen
+    # the lid-held red-pen takes (box at its final position): pen-arm midline -0.15 m, torso margin 1.4 cm, box-arm
+    # start gate (skills/pen_lid; skills/pen is the old scene, box arm tucked)
+    keepout: skills/pen_lid/workspace.json
     keywords: ["put the pen in", "put the red pen in", "pen in the box", "pen in its slot", "put it back", "put it in",
                "insert"]
 

@@ -48,6 +48,16 @@ SIM_TRIAL_LOG = RUNS_DIR / "trials_sim.jsonl"
 MOCK_TRIAL_LOG = RUNS_DIR / "trials_mock.jsonl"  # haller with the fake arm or in observe mode: never graded
 GRADED_TRIAL_LOG = WS4 / "eval" / "trials.jsonl"
 CAMERAS = {"head": IMG_HEAD, "left_wrist": IMG_LEFT_WRIST, "right_wrist": IMG_RIGHT_WRIST}
+# run_single_arm settings behind the first real-arm inserts (FLUX red pen RAW 5k, 3/5, 18 Oct, single_arm README
+# "Red-pen benchmark"): 16 of each chunk's commands before replanning, shoulder-lift stall at 25 deg. The Haller
+# defaults; --action-steps / --lift-stall-deg or WS4_ACTION_STEPS / WS4_LIFT_STALL_DEG override them, as in the runner.
+HALLER_ACTION_STEPS = 16
+HALLER_LIFT_STALL_DEG = 25.0
+
+
+def _env_number(name: str, cast: Any) -> Any:
+    value = os.environ.get(name, "").strip()
+    return cast(value) if value else None
 
 
 def load_trial_log():
@@ -114,7 +124,7 @@ class SessionConfig:
     right_fake_calibration: str = ""
     max_relative_target: float = 20.0
     torque_limit: float = 60.0
-    max_step: float = 2.0
+    max_step: float = 1.0  # deg/tick on the arm joints: eval_skill.sh --max-step 1.0 (every real-arm run, 18 Oct)
     max_gripper_step: float = 5.0
     limit_margin: float = 5.0  # policy soft limits: deg inside the calibrated range
     ramp_margin: float = 1.0  # scripted ramps: deg inside the calibrated range (run_single_arm --ramp-margin)
@@ -135,6 +145,14 @@ class SessionConfig:
     other_arm_port: str = "/dev/haller_arm_left"
     other_arm_id: str = "haller_left"
     token_cmd: str = ""  # e.g. "ssh -p PORT root@HOST cat /workspace/flux_token"; output never shown
+    # None: WS4_ACTION_STEPS / WS4_LIFT_STALL_DEG / WS4_PREFETCH_TICKS, else the Haller defaults above (prefetch off)
+    action_steps: int | None = None  # commands executed per FLUX chunk before replanning (package: 32)
+    lift_stall_deg: float | None = None  # shoulder-lift stall threshold (other joints: stall_deg)
+    prefetch_ticks: int | None = None  # request the next chunk when this many commands are left (0 = off)
+    # Arms handed over holding at launch (run_single_arm --hold-other-arm, single_arm README "Handover from the HMI"):
+    # held where they are (goal = present pose, then torque on, as connect_so101 does), never driven, torque on at
+    # close.
+    hold_arms: tuple[str, ...] = ()
     # Execution
     gate: bool = True
     realtime: bool = True
@@ -192,6 +210,19 @@ class Session:
         for name, pkg in cfg.skill_packages.items():  # one LoRA per skill on the policy server
             self.vocab.skills[name] = dataclasses.replace(self.vocab.skills[name], package=pkg)
         self.rig = None  # HallerRig on env=haller
+        haller = cfg.env == "haller"
+        if cfg.action_steps is None:
+            cfg.action_steps = _env_number("WS4_ACTION_STEPS", int) or (HALLER_ACTION_STEPS if haller else None)
+        if cfg.lift_stall_deg is None:
+            cfg.lift_stall_deg = _env_number("WS4_LIFT_STALL_DEG", float) or (HALLER_LIFT_STALL_DEG if haller else None)
+        if cfg.prefetch_ticks is None:
+            cfg.prefetch_ticks = _env_number("WS4_PREFETCH_TICKS", int) or 0
+        unknown_arms = sorted(set(cfg.hold_arms) - set(ARMS))
+        if unknown_arms:
+            raise ValueError(f"hold_arms names unknown arms {unknown_arms}")
+        self._gate_note: dict[tuple[str, int], str] = {}  # (step, attempt) -> start gate verdict, for the trial notes
+        # the start poses are set up by the operator; kept across runs (Executor.known_pose)
+        self.known_pose = dict.fromkeys(ARMS, True)
         self.runs_dir = Path(cfg.runs_dir) if cfg.runs_dir else RUNS_DIR
         self.events = EventLog(echo=cfg.echo_events)
         self.meter = CostMeter(cfg.budget_usd)
@@ -247,9 +278,11 @@ class Session:
 
             self.rig = haller.build(cfg, self.vocab.station)
             base_robot = self.rig.robot
-            for m in self.rig.monitors:  # ramps: first keep-out refusal stops; no load freeze (as run_single_arm)
+            for m in self.rig.monitors:  # ramps: the first keep-out refusal goes joint by joint once, then stops
                 if hasattr(m, "ramping"):
                     m.ramping = self._arm_ramping
+                if hasattr(m, "on_ramp_refusal"):
+                    m.on_ramp_refusal = self._ramp_refused
                 if hasattr(m, "owner"):
                     m.owner = lambda arm: getattr(self, "runner", None) and self.runner._owner.get(arm)
                 if hasattr(m, "active"):
@@ -272,7 +305,8 @@ class Session:
             home = self.vocab.station.home_for(arm)
             prim = PrimitiveBackend(home=None if home is None else np.array(home),
                                     joint_step=cfg.home_speed if self.rig is not None else 2.0,
-                                    release_first=self.rig is not None, poses=self.vocab.station.poses_for(arm))
+                                    release_first=self.rig is not None, poses=self.vocab.station.poses_for(arm),
+                                    arrive_tol=self.rig.sar.ARRIVE_TOL if self.rig is not None else 3.0)
             name = f"prim_{arm}"
             self.backends[name] = prim
             targets.append(dataclasses.replace(per_arm_target(arm, name), name=f"{arm}:prim"))
@@ -293,6 +327,10 @@ class Session:
                     for a in s.arms if a in arms}
             for pkg in sorted({p for _, p in uses}):
                 self.backends[pkg] = self._policy_backend(pkg)
+                if cfg.action_steps:
+                    # as run_single_arm --action-steps: the runner reads the horizon from the backend's contract
+                    self.backends[pkg].contract = dataclasses.replace(self.backends[pkg].contract,
+                                                                      n_action_steps=int(cfg.action_steps))
             for arm, pkg in sorted(uses):
                 t = f"{arm}:{pkg}"
                 targets.append(dataclasses.replace(per_arm_target(arm, pkg), name=t))
@@ -314,9 +352,12 @@ class Session:
                 path = HF_LEROBOT_CALIBRATION / "robots" / "so_follower" / f"{cfg.robot_id}_{arm}.json"
                 guard.config = guard.config.with_arm_limits(arm, *limits_from_lerobot_calibration(path))
         async_inf = cfg.async_inference if cfg.async_inference is not None else cfg.policy == "remote"
+        if cfg.prefetch_ticks and not async_inf:
+            raise ValueError("prefetch_ticks needs async inference (the remote policy, or async_inference=True)")
         self.runner = GatedDualArmRunner(robot, targets, self.backends, guard, async_inference=async_inf,
                                          gate=self.gate, on_event=lambda lvl, msg, data: self.events.add(lvl, msg,
-                                                                                                        **data))
+                                                                                                        **data),
+                                         prefetch_ticks=int(cfg.prefetch_ticks or 0))
         if cfg.imagine and cfg.policy == "remote":
             from .imagination_panel import ImaginationPanel
 
@@ -335,6 +376,13 @@ class Session:
         self._encode_frames(self._last_obs)
         self.events.add("info", f"session ready: env={cfg.env} policy={cfg.policy} planner={cfg.planner} "
                         f"verifier={self.verifier.name} gate={'on' if self.gate else 'off'}")
+        if self.rig is not None:
+            self.events.add("info", "runner settings: " + self.runner_settings())
+            for arm in self.rig.hold_arms:  # connect_so101 set its goal to its present pose, then torque on
+                q = np.round(self.rig.arms[arm].robot.joints(), 1).tolist()
+                how = "observe: torque unchanged" if self.rig.observe else "goal = its own pose, torque on"
+                self.events.add("warn", f"{arm} arm handed over holding (--hold-arm): held at {q} ({how}); no step "
+                                "drives it, and its torque stays on when the session closes")
         if cfg.planner == "claude" or self.verifier.name != "sim_truth":
             installed = sdk_version()
             self.events.add("info" if installed == SDK_VERSION else "warn",
@@ -361,7 +409,14 @@ class Session:
             if out.returncode != 0 or not out.stdout.strip():
                 raise SystemExit(f"--token-cmd failed (exit {out.returncode}): {out.stderr.strip()[:200]}")
             token = out.stdout.strip()
-        return RemoteBackend(cfg.server, package, token=token, timeout_s=90.0, imagine=cfg.imagine)
+        try:
+            return RemoteBackend(cfg.server, package, token=token, timeout_s=90.0, imagine=cfg.imagine)
+        except RuntimeError as exc:
+            if "404" not in str(exc):
+                raise
+            raise SystemExit(f"package {package!r} is not served on {cfg.server} (404): the demo names are "
+                             "skill_open_box, skill_green_pen, skill_yellow_cutter and skill_red_pen; ws4-datasets "
+                             "maps them to checkpoints in /workspace/serve/demo_packages.txt") from exc
 
     def _make_verifier(self) -> Any:
         kind = self.cfg.verifier
@@ -635,6 +690,11 @@ class Session:
             on_estop=self.rig.hold if self.rig is not None else None,
             before_attempt=self._before_attempt if self.rig is not None else None,
             ramp_mode=self.rig.set_ramp if self.rig is not None else None,
+            start_gate=self._start_gate if self.rig is not None else None,
+            hold_arms=self.rig.hold_arms if self.rig is not None else (),
+            on_hold=self.rig.mark_holding if self.rig is not None else None,
+            ramp_order=self.rig.ramp_order if self.rig is not None else None,
+            known_pose=self.known_pose,
         )
         result = self.executor.run(plan)
         self._encode_frames(self.base_robot.get_observation())
@@ -702,6 +762,33 @@ class Session:
         self.events.add(level, f"{run.step.id}: {pose.message}")
         return pose.block or None
 
+    def _start_gate(self, run: Any) -> str | None:
+        """The box-arm start gate of the step's kit (pen-arm chain skills), before every attempt and before anything
+        moves; a refusal ends the chain (Executor._refuse_start) with this message in the HMI's event log."""
+        refused, verdict = self.rig.start_gate(run.skill)
+        if verdict or refused:
+            self._gate_note[(run.step.id, run.attempt)] = "REFUSED" if refused else "ok"
+        if verdict and not refused:
+            self.events.add("info", f"{run.step.id}: {verdict}")
+        if refused:
+            return (f"{refused}. Re-place the box arm holding the lid as in the skill's takes (python "
+                    "ws4/single_arm/gate.py report q1 .. q6 gives the verdict per skill), then start a new run")
+        return None
+
+    def _ramp_refused(self, arm: str, zone: str) -> bool:
+        ex = self.executor
+        return ex is not None and ex.ramp_fallback(arm, zone)
+
+    def runner_settings(self) -> str:
+        """The run_single_arm settings in force, for the event log and every attempt's trial notes."""
+        cfg = self.cfg
+        out = [f"action horizon {cfg.action_steps or 'package'}", f"lift stall {cfg.lift_stall_deg or cfg.stall_deg}"
+               f" deg (others {cfg.stall_deg})", f"prefetch {cfg.prefetch_ticks or 'off'}",
+               f"{cfg.max_step} deg/tick", f"torque limit {cfg.torque_limit:.0f}%"]
+        if self.rig is not None and self.rig.hold_arms:
+            out.append(f"held from launch: {', '.join(self.rig.hold_arms)}")
+        return ", ".join(out)
+
     def _log_attempt(self, run: Any, ok: bool, reason: str) -> None:
         """One trial_log line per FLUX attempt (task = the skill), so each skill's success rate is graded too."""
         cfg = self.cfg
@@ -712,13 +799,17 @@ class Session:
                  f"{self.run_dir.name if self.run_dir else '-'}; prompt {run.skill.prompt!r}; "
                  f"{(self.executor.t if self.executor else 0) - run.t_start:.1f} s, {run.chunks} chunks; "
                  f"verifier={self.verifier.name}; other_arm={other}"
+                 + (f"; start gate {self._gate_note[(run.step.id, run.attempt)]}"
+                    if (run.step.id, run.attempt) in self._gate_note else "")
+                 + (f"; {self.runner_settings()}" if self.rig is not None else "")
+                 + (f"; kit runner_args {' '.join(run.skill.runner_args)}" if run.skill.runner_args else "")
                  + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"
                     if verdict else ""))
         trial = tl.Trial(
             task=run.skill.name, condition=cfg.condition, variant=self._variant(), checkpoint=self._checkpoint(),
             steps_total=1, steps_done=1 if ok else 0, success=ok and run.attempt_interventions == 0,
             interventions=run.attempt_interventions, layout=self.layout_name(), failure="" if ok else reason[:120],
-            notes=notes[:600], operator=cfg.operator,
+            notes=notes[:900], operator=cfg.operator,
         )
         tl.append(self.trial_log_path(), trial)
         self.events.add("info", f"attempt logged: {trial.task} #{trial.attempt} {'verified' if ok else 'failed'}")

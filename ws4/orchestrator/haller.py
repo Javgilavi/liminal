@@ -19,6 +19,12 @@ The orchestrator reuses the single-arm runner's robot side instead of its attemp
   shutdown of its ``main``.
 The per-tick stall, keep-out and load-freeze stops are rebuilt in ``monitors.py`` with the same defaults, and scripted
 ramps get the runner's ramp guard (``build_guard(ramp=True)`` limits, ``KeepOut.without_envelope``).
+
+What eval_skill.sh adds per skill comes from the skill's kit (ws4/single_arm/skills/<kit>/, ``keepout:`` in the
+vocabulary): its workspace.json while its policy runs, the slow zone of its skill.json ``runner_args``
+(``ArmsKeepOutGuard.slow``), and its ``other_arm_gate`` as ``start_gate`` (gate.check with the other arm's live pose).
+An arm that holds the lid (``finish: hold``, ``--hold-arm``) keeps its torque at close, as run_single_arm's
+OtherArmHolder; a ramp the keep-out refuses goes joint by joint (``ramp_order`` = run_single_arm.joint_order).
 """
 
 from __future__ import annotations
@@ -33,11 +39,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from flux.contract import ARM_DIM, IMG_HEAD, OBS_STATE, WRIST_KEY, arm_slice
+from flux.contract import ARM_DIM, ARM_JOINTS, IMG_HEAD, OBS_STATE, WRIST_KEY, arm_slice
 from flux.safety import SafetyConfig, SafetyGuard
 
 from . import WS4
 from .monitors import KeepOutMonitor, LoadMonitor, StallMonitor
+from .skills import resolve_keepout
 
 SINGLE_ARM = WS4 / "single_arm"
 CALIBRATION = SINGLE_ARM / "calibration"
@@ -111,16 +118,27 @@ class ArmsKeepOutGuard(SafetyGuard):
         self.zones = dict.fromkeys(keepouts, "")
         self.counts: dict[str, int] = {}
         self.last_zone = ""
+        # Slow zone per arm, run_single_arm's KeepOutGuard rule (set while a skill with --slow-zone in its kit's
+        # runner_args runs its policy, the cutter): within slow_zone m of the other arm (measured, capsule surfaces) the
+        # arm joints move at most slow_step deg per tick from the previous command, and LoadMonitor freezes earlier.
+        self.slow: dict[str, dict] = {}
+        self.in_slow_zone = dict.fromkeys(keepouts, False)
+        self.slow_ticks = dict.fromkeys(keepouts, 0)
 
     @property
     def keepout(self) -> Any:  # single-arm view, as run_single_arm's KeepOutGuard
         return next(iter(self.keepouts.values()))
 
+    def slow_load(self, arm: str) -> tuple[float, int] | None:
+        """(sustain fraction, ticks) of the load freeze while ``arm`` is in its slow zone, else None."""
+        slow = self.slow.get(arm)
+        return (slow["slow_load_sustain"], slow["slow_load_ticks"]) if slow and self.in_slow_zone.get(arm) else None
+
     def filter(self, command: np.ndarray, previous: np.ndarray):
         out, report = super().filter(command, previous)
         self.last_zone = ""
         for arm, ko in self.keepouts.items():
-            self.zones[arm] = ""
+            self.zones[arm], self.in_slow_zone[arm] = "", False
             q = self.measured[arm]()
             if ko is None or q is None:
                 continue
@@ -131,14 +149,27 @@ class ArmsKeepOutGuard(SafetyGuard):
             else:
                 ko.other_q = self.fixed_other_q.get(arm)
             s = arm_slice(arm)
+            joints = slice(s.start, s.start + ARM_DIM - 1)
             refuse, zone = ko.refuse(out[s], q)
             if refuse:
                 out = out.copy()
-                out[s.start: s.start + ARM_DIM - 1] = np.asarray(q)[: ARM_DIM - 1]
+                out[joints] = np.asarray(q)[: ARM_DIM - 1]
                 report.clamped = np.asarray(report.clamped).copy()
-                report.clamped[s.start: s.start + ARM_DIM - 1] = True
+                report.clamped[joints] = True
                 self.counts[zone] = self.counts.get(zone, 0) + 1
                 self.zones[arm] = self.last_zone = zone
+            slow = self.slow.get(arm)
+            if slow and float(ko.other_arm_gap(np.asarray(q, dtype=float))) < slow["slow_zone"]:
+                self.in_slow_zone[arm] = True
+                self.slow_ticks[arm] += 1
+                if previous is not None:
+                    step = slow["slow_step"]
+                    capped = np.clip(out[joints], previous[joints] - step, previous[joints] + step)
+                    if not np.allclose(capped, out[joints]):
+                        report.clamped = np.asarray(report.clamped).copy()
+                        report.clamped[joints] |= ~np.isclose(capped, out[joints])
+                        out = out.copy()
+                        out[joints] = capped
         return out, report
 
 
@@ -198,6 +229,12 @@ class HallerRig:
     _pose_t: float | None = None  # when the parked arm's pose was last read successfully
     _ramping: dict[str, bool] = field(default_factory=dict)
     _skill_keepouts: dict[str, Any] = field(default_factory=dict)  # config path -> KeepOut, loaded once
+    # Arms that hold something with torque on and keep holding when the session closes (run_single_arm
+    # --hold-other-arm): ``hold_arms`` were handed over holding at launch (--hold-arm; never driven in this session);
+    # ``holding`` also has every arm whose last step ended with ``finish: hold`` (the box arm and the lid).
+    hold_arms: tuple[str, ...] = ()
+    holding: set[str] = field(default_factory=set)
+    ramp_step: float = 1.0  # deg per simulated step of the joint-by-joint ramp search (= the ramp speed per tick)
 
     # -------------------------------------------------------------------- single-arm views (pen-only vocabulary)
     @property
@@ -223,8 +260,10 @@ class HallerRig:
         path = getattr(skill, "keepout", "") if skill is not None and arm in getattr(skill, "arms", ()) else ""
         if not path:
             return self.arms[arm].station_keepout
-        full = Path(path) if Path(path).is_absolute() else CALIBRATION / path
+        full = resolve_keepout(path)  # the skill's kit: ws4/single_arm/skills/<kit>/workspace.json
         if str(full) not in self._skill_keepouts:
+            if not full.exists():  # KeepOut.load would fall back to the red arm's defaults
+                raise FileNotFoundError(f"keep-out {full} of skill {getattr(skill, 'name', '?')} does not exist")
             self._skill_keepouts[str(full)] = self.keepout_cls.load(full)
         return self._skill_keepouts[str(full)]
 
@@ -232,14 +271,75 @@ class HallerRig:
         """Scripted ramps (to the start pose, parking, the ``home`` step) run under what run_single_arm gives its
         ramps: the ramp joint limits (the folded rest lies outside the policy's soft limits) and the keep-out without
         the demonstrated envelope (it bounds what the POLICY may command; unfolding from the folded rest leaves it for
-        a moment). Otherwise: the policy limits and the skill's keep-out."""
+        a moment). Otherwise: the policy limits and the skill's keep-out, with the slow zone of its kit's runner_args
+        (run_single_arm applies it to policy commands only, not to its ramps). Either way the arm is driven again, so
+        it no longer counts as holding."""
         if arm not in self.arms:
             return
         ko = self.skill_keepout(arm, skill)
         self.guard.keepouts[arm] = ko.without_envelope() if on and hasattr(ko, "without_envelope") else ko
+        own = skill is not None and arm in getattr(skill, "arms", ())
+        self.guard.slow[arm] = dict(getattr(skill, "runner", None) or {}) if own and not on else {}
         self._ramping[arm] = on
-        self.guard.config = merge_limits({a: (x.ramp_limits if self._ramping.get(a) else x.policy_limits)
-                                          for a, x in self.arms.items()})
+        self.guard.config = self.limits()
+        if arm not in self.hold_arms:
+            self.holding.discard(arm)
+
+    def limits(self) -> SafetyConfig:
+        """Ramp limits for a ramping arm and for an arm handed over holding (they include its launch pose, so the
+        hold command passes unchanged), else the policy limits."""
+        return merge_limits({a: (x.ramp_limits if self._ramping.get(a) or a in self.hold_arms else x.policy_limits)
+                             for a, x in self.arms.items()})
+
+    def mark_holding(self, arm: str) -> None:
+        """``finish: hold`` passed on this arm: it keeps holding (torque on) until a later run drives it again."""
+        self.holding.add(arm)
+
+    def ramp_order(self, arm: str, here: np.ndarray, goal: np.ndarray) -> list[int] | None:
+        """run_single_arm.move_to's fallback after a keep-out refusal on a ramp: the first order of the arm joints,
+        moved one at a time from ``here`` to ``goal``, that the keep-out in force (the ramp copy, with the other arm's
+        live capsules) accepts at every simulated step; None if there is none."""
+        return self.sar.joint_order(self.guard.keepouts[arm], np.asarray(here, float), np.asarray(goal, float),
+                                    step=self.ramp_step)
+
+    # -------------------------------------------------------------------- start gate (pen-arm chain skills)
+    def start_gate(self, skill: Any) -> tuple[str, str]:
+        """(refusal, verdict) before a skill whose kit records ``other_arm_gate`` (green, cutter, pen_lid), with the
+        other arm's LIVE pose, as eval_skill.sh runs run_single_arm.parked_ok: the loose joint range (box-skill end
+        poses and the skill's recorded hold, already widened by 5 deg: tolerance 0) and then gate.check (refuse when
+        an envelope voxel lies inside the box arm, or more than ``max_below`` of the skill's demo poses would come
+        closer than its other-arm clearance). ``refusal`` empty: the skill may start."""
+        gate_info = getattr(skill, "start_gate", None)
+        if not gate_info:
+            return "", ""
+        arm = skill.arms[0]
+        other = "right" if arm == "left" else "left"
+        if other in self.arms:
+            q = np.asarray(self.arms[other].robot.joints(), dtype=float)  # fresh read: where the box arm holds now
+        else:
+            fixed = self.guard.fixed_other_q.get(arm)
+            if fixed is None:
+                return f"start gate: the {other} arm's pose is unknown", ""
+            q = np.asarray(fixed, dtype=float)
+        pose = np.round(q[:5], 1).tolist()
+        lo, hi = np.asarray(gate_info["joint_lo"], float)[:5], np.asarray(gate_info["joint_hi"], float)[:5]
+        err = np.maximum(lo - q[:5], q[:5] - hi)  # > 0: outside the range by that much (run_single_arm rule)
+        if err.max() > 0.0:
+            j = int(np.argmax(err))
+            return (f"start gate REFUSED {skill.name}: the {other} arm holds at {pose}, {ARM_JOINTS[j]} "
+                    f"{err[j]:.1f} deg outside the range {np.round(lo, 1).tolist()} .. {np.round(hi, 1).tolist()} "
+                    "(box-skill end poses and this skill's recorded hold, +5 deg)"), ""
+        import gate  # ws4/single_arm/gate.py (on sys.path since import_single_arm)
+
+        ok, d = gate.check(self.skill_keepout(arm, skill), q, gate.load_poses(gate_info["demo_poses"]),
+                           float(gate_info["max_below"]))
+        verdict = (f"demo min gap {d['demo_min_gap']:.3f} m, {d['demo_below'] * 100:.1f} % of demo poses under "
+                   f"{d['clearance']} m (max {float(gate_info['max_below']) * 100:.0f} %), envelope voxels inside the "
+                   f"{other} arm {d['envelope_voxels_inside']}")
+        if not ok:
+            return (f"start gate REFUSED {skill.name}: the {other} arm holds at {pose}, not compatible with this "
+                    f"skill's demonstrated motion ({verdict})"), verdict
+        return "", f"start gate ok for {skill.name} with the {other} arm at {pose}: {verdict}"
 
     # -------------------------------------------------------------------- the parked arm (pen-only vocabulary)
     def refresh_other_arm(self) -> OtherArmPose:
@@ -293,6 +393,16 @@ class HallerRig:
         arm = target.name.split(":")[0]
         self.sar.warm_up(backend, self.arms.get(arm, self.primary).robot, target, prompts)
 
+    def torque_off_at_close(self, arm: Arm) -> bool:
+        """run_single_arm.main's rule: torque off only if it was off at launch and the arm is back at its launch pose.
+        Never for an arm that holds something (``holding``, --hold-arm): a box arm handed over holding the lid sits at
+        its launch pose with torque off at launch, and switching it off would drop the lid and the arm onto the box
+        (run_single_arm's OtherArmHolder releases with torque on for the same reason)."""
+        if self.observe or arm.name in self.holding or arm.name in self.hold_arms:
+            return False
+        at_rest = np.allclose(arm.robot.joints()[:5], arm.rest[:5], atol=8.0)
+        return at_rest and not getattr(arm.so101, "ws4_launch_torque", False)
+
     def close(self) -> str:
         """Same rule as run_single_arm.main, per arm: switch torque off only if it was off at launch and the arm is
         back at its launch pose; otherwise keep holding (dropping an extended arm onto the box is worse)."""
@@ -300,18 +410,19 @@ class HallerRig:
             return "fake arm" + ("s" if self.both else "")
         out = []
         for arm in self.arms.values():
-            at_rest = np.allclose(arm.robot.joints()[:5], arm.rest[:5], atol=8.0)
             if self.observe:
                 self.sar.disconnect_so101(arm.so101, torque_off=False)
                 out.append(f"{arm.name}: observe, torque unchanged")
-            elif at_rest and not getattr(arm.so101, "ws4_launch_torque", False):
+            elif self.torque_off_at_close(arm):
                 self.sar.disconnect_so101(arm.so101)
                 out.append(f"{arm.name}: at its launch pose, torque off")
             else:
                 for camera in arm.so101.cameras.values():
                     camera.disconnect()
                 arm.so101.bus.disconnect(disable_torque=False)
-                out.append(f"{arm.name}: still holds with torque on; support it before switching the power off")
+                what = "keeps holding (finish: hold or --hold-arm)" if arm.name in self.holding | set(
+                    self.hold_arms) else "still holds"
+                out.append(f"{arm.name}: {what} with torque on; support it before switching the power off")
         return "; ".join(out)
 
 
@@ -384,12 +495,22 @@ def build(cfg: Any, station: Any = None) -> HallerRig:
                              {a: (lambda r=x.robot: r.last_q) for a, x in arms.items()})
     load_cap = 10.0 * (cfg.torque_limit if real else 100.0)  # Present_Load units at the torque cap (run_attempt)
     monitors: list = []
+    lift_stall = getattr(cfg, "lift_stall_deg", None)  # resolved by the session (CLI, WS4_LIFT_STALL_DEG, haller 25)
     for a, x in arms.items():
-        monitors += [StallMonitor(a, cfg.stall_deg, cfg.stall_ticks),
+        monitors += [StallMonitor(a, cfg.stall_deg, cfg.stall_ticks, lift_stall_deg=lift_stall),
                      KeepOutMonitor(guard, cfg.keepout_ticks, slot=a, window=cfg.keepout_window),
-                     LoadMonitor(x.robot.arm_load, load_cap, cfg.load_sustain, cfg.load_peak, cfg.load_ticks, slot=a)]
-    return HallerRig(sar, arms, robot_iface, guard, monitors, real, cfg.observe, cfg.other_arm_port, cfg.other_arm_id,
-                     cfg.read_other_arm, cfg.other_arm_max_age_s, keepout_cls=keepout_cls)
+                     LoadMonitor(x.robot.arm_load, load_cap, cfg.load_sustain, cfg.load_peak, cfg.load_ticks, slot=a,
+                                 slow=lambda a=a: guard.slow_load(a))]
+    hold_arms = tuple(a for a in getattr(cfg, "hold_arms", ()) or () if a in arms)
+    for a in hold_arms:
+        # as run_single_arm's OtherArmHolder: its only command is its own pose, so no keep-out acts on it (one would
+        # make the goal follow a sagging arm); the other arm's keep-out still sees it live as capsules
+        guard.keepouts[a] = None
+    rig = HallerRig(sar, arms, robot_iface, guard, monitors, real, cfg.observe, cfg.other_arm_port, cfg.other_arm_id,
+                    cfg.read_other_arm, cfg.other_arm_max_age_s, keepout_cls=keepout_cls, hold_arms=hold_arms,
+                    holding=set(hold_arms), ramp_step=cfg.home_speed)
+    guard.config = rig.limits()
+    return rig
 
 
 def guard_namespace(cfg: Any, home_pose: Any = None, hw: dict | None = None) -> argparse.Namespace:

@@ -11,7 +11,9 @@ running steps:
 - hold: no target, the arm keeps its last command; done when every ``hold_until`` step is done.
 
 A failed attempt is retried up to ``max_attempts``; a failed step pauses everything and asks the planner to replan
-from the current state (a human approves the new plan), or fails the run when no replans are left.
+from the current state (a human approves the new plan), or fails the run when no replans are left. A step refused
+before anything moved (``start_gate``: the box arm holds the lid where the skill's demos never had it; or a step on an
+arm that holds, ``finish: hold`` / ``hold_arms``) ends the run instead: neither a retry nor a replan can change that.
 
 Time is the active control time: it does not advance while e-stopped, paused or waiting for a replan, so timeouts
 only count time the arm was allowed to move. ``clock="ticks"`` (sim) counts 1/fps per tick; ``"wall"`` measures it.
@@ -27,7 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from flux.contract import ARMS, OBS_STATE, arm_slice
+from flux.contract import ARM_JOINTS, ARMS, OBS_STATE, arm_slice
 
 from .events import EventLog
 from .plan import Plan, Step, concurrent_pairs, levels
@@ -80,6 +82,8 @@ class StepRun:
     t_return: float = 0.0
     return_checked: bool = False
     ramp_confirmed: bool = False  # the operator resumed after being asked to confirm a ramp from an unknown pose
+    ramp_task: str = ""  # the pose the scripted ramp in progress goes to (the prim target's task)
+    ramp_fallback: bool = False  # this ramp already went joint by joint after a keep-out refusal
 
     def to_json(self, now: float) -> dict[str, Any]:
         s = self.step
@@ -136,6 +140,11 @@ class Executor:
         on_estop: Callable[[str], None] | None = None,
         before_attempt: Callable[[StepRun], str | None] | None = None,
         ramp_mode: Callable[[str, bool, Skill], None] | None = None,
+        start_gate: Callable[[StepRun], str | None] | None = None,
+        hold_arms: tuple[str, ...] = (),
+        on_hold: Callable[[str], None] | None = None,
+        ramp_order: Callable[[str, np.ndarray, np.ndarray], list[int] | None] | None = None,
+        known_pose: dict[str, bool] | None = None,
     ):
         self.runner = runner
         self.robot = robot
@@ -154,7 +163,9 @@ class Executor:
         # A ramp from where a policy left an arm (it may be inside the box) farther than far_deg from its target needs
         # the operator's go (e-stop, then Resume); ramps between known poses do not.
         self.far_deg, self.home_tol_deg, self.return_timeout_s = far_deg, home_tol_deg, return_timeout_s
-        self.known_pose = dict.fromkeys(ARMS, True)  # the start poses are set up by the operator
+        # arm -> its pose is a known one (False once a policy moved it); pass the session's dict so it carries over to
+        # the next run: an arm a policy left inside the box stays unknown, and its next ramp asks the operator first
+        self.known_pose = known_pose if known_pose is not None else dict.fromkeys(ARMS, True)
         self._state12: np.ndarray | None = None
         self.max_run_s = max_run_s
         self.home_target = home_target  # arm -> primitive target that can run "home" (start_pose: home skills)
@@ -166,6 +177,12 @@ class Executor:
         # (arm, True, skill) while that arm ramps (ramp limits, station-only keep-out); (arm, False, skill) when the
         # skill's policy runs or the arm is idle again (policy limits, the skill's keep-out)
         self.ramp_mode = ramp_mode
+        # checked after before_attempt, before anything moves: a returned reason ends the run (both arms hold)
+        self.start_gate = start_gate
+        # arms no step may drive: handed over holding (hold_arms), or holding since a ``finish: hold`` step passed
+        self.held: set[str] = set(hold_arms)
+        self.on_hold = on_hold
+        self.ramp_order = ramp_order  # (arm, here, goal) -> joint order for the joint-by-joint ramp fallback, or None
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="verify")
         self._lock = threading.RLock()
         self._commands: list[tuple[str, Any]] = []
@@ -434,6 +451,10 @@ class Executor:
             run.target = None
             self.events.add("info", f"{step.id}: {step.arm} arm holds until {', '.join(step.hold_until)} done")
             return
+        held = sorted(_arms_of(run) & self.held)
+        if held:
+            return self._refuse_start(run, f"the {' and '.join(held)} arm keeps holding (the lid) for the rest of "
+                                      "this run: no step may drive it (finish: hold, or handed over with --hold-arm)")
         if skill.is_flux and self.before_attempt is not None:
             block = self.before_attempt(run)
             if block:
@@ -441,6 +462,10 @@ class Executor:
                 self.events.add("error", f"{step.id}: not started: {block}")
                 self.estop(block)  # the arm holds where it is; Resume retries this attempt
                 return
+        if skill.is_flux and self.start_gate is not None:
+            refused = self.start_gate(run)
+            if refused:
+                return self._refuse_start(run, refused)
         if skill.precheck:
             if getattr(self.verifier, "name", "") == "manual":
                 self.events.add("warn", f"{step.id}: precheck {skill.precheck} skipped (manual verifier)")
@@ -448,6 +473,16 @@ class Executor:
                 run.prechecking, run.phase = True, f"checking that {skill.precheck} still holds"
                 return  # _update runs the check on the next frame, before anything moves
         self._begin_moves(run)
+
+    def _refuse_start(self, run: StepRun, reason: str) -> None:
+        """Refused before this step moved anything: the run ends here, failed, with no retry and no replan; every arm
+        keeps holding its last command (nothing else is sent), so the box arm keeps the lid open."""
+        run.target, run.phase = None, "refused"
+        run.status, run.reason, run.t_end = "failed", reason, self.t
+        self.events.add("error", f"{run.step.id}: REFUSED before it moved: {reason}. The chain ends here; both arms "
+                        "hold where they are.", step=run.step.id)
+        self._interrupt_all()
+        self._finish("failed", f"{run.step.id} ({run.step.skill}) refused: {reason}")
 
     def _begin_moves(self, run: StepRun) -> None:
         step, skill = run.step, run.skill
@@ -490,7 +525,7 @@ class Executor:
             return
         arm, pose = run.moves.pop(0)
         target = self.home_target(arm)
-        run.move, run.target, run.t_home = (arm, pose), target, self.t
+        run.move, run.target, run.t_home, run.ramp_task = (arm, pose), target, self.t, pose
         run.phase = f"moving the {arm} arm to its {pose} pose"
         self._ramp(run, True, arm)
         self.runner.start(target, pose)
@@ -510,6 +545,7 @@ class Executor:
         if skill.name in ("home", "tuck"):  # scripted ramps too
             if self._needs_confirm(run, step.arm, "tucked" if skill.name == "tuck" else "home"):
                 return
+            run.ramp_task = skill.name
             self._ramp(run, True)
         elif skill.is_flux and self.ramp_mode is not None:
             self.ramp_mode(step.arm, False, skill)  # this skill's keep-out (envelope) and the policy limits
@@ -699,6 +735,7 @@ class Executor:
         home = self.home_target(run.step.arm) if self.home_target else None
         run.target = home
         if home is not None:
+            run.ramp_task = "home"
             self._ramp(run, True)
             self.runner.start(home, "home")
 
@@ -768,6 +805,12 @@ class Executor:
         run.status, run.t_end, run.reason = "done", self.t, why
         self.done_ids.add(run.step.id)
         self.events.add("info", f"{run.step.id}: DONE in {run.t_end - run.t_start:.1f} s ({why})")
+        if run.skill.finish == "hold":
+            self.held.add(run.step.arm)
+            if self.on_hold is not None:
+                self.on_hold(run.step.arm)
+            self.events.add("info", f"{run.step.id}: the {run.step.arm} arm keeps holding where it is; nothing drives "
+                            "it again in this run")
         if all(r.status == "done" for r in self.runs.values()):
             self._finish("succeeded", "")
 
@@ -775,7 +818,38 @@ class Executor:
         arm = arm or run.ramp_arm or run.step.arm
         if self.ramp_mode is not None and run.ramp_on != on:
             self.ramp_mode(arm, on, run.skill)
+        if on:
+            run.ramp_fallback = False
+        elif run.ramp_on and hasattr(self.backends.get(run.target), "set_fallback"):
+            self.backends[run.target].set_fallback(None)  # the next ramp starts straight again
         run.ramp_on, run.ramp_arm = on, (arm if on else None)
+
+    def ramp_fallback(self, arm: str, zone: str) -> bool:
+        """The keep-out refused a scripted ramp of ``arm`` (KeepOutMonitor): as run_single_arm.move_to, the arm holds
+        (the guard already replaced the target by the measured pose) and the ramp goes on one joint at a time, in the
+        first order the keep-out accepts at every simulated step (``ramp_order``). Once per ramp; False when there is
+        no such order or it was tried already: the caller stops (e-stop, both arms hold)."""
+        run = next((r for r in self.runs.values() if r.status == "running" and r.ramp_on and r.ramp_arm == arm), None)
+        if self.ramp_order is None or run is None or run.ramp_fallback or run.target is None or self._state12 is None:
+            return False
+        backend = self.backends.get(run.target)
+        if not hasattr(backend, "set_fallback") or not run.ramp_task:
+            return False
+        run.ramp_fallback = True
+        here = self._state12[arm_slice(arm)].copy()
+        goal = backend.goal(run.ramp_task, here)
+        order = self.ramp_order(arm, here, goal)
+        if order is None:
+            self.events.add("error", f"{run.step.id}: the keep-out ({zone}) refused the {arm} arm's ramp to its "
+                            f"{run.ramp_task} pose and no joint-by-joint order clears it either: it holds")
+            return False
+        self.runner.stop(run.target)
+        backend.set_fallback(order, goal)
+        self.runner.start(run.target, run.ramp_task)  # a fresh episode from the measured pose
+        names = ", ".join(ARM_JOINTS[j] for j in order)
+        self.events.add("warn", f"{run.step.id}: the keep-out ({zone}) refused the {arm} arm's ramp to its "
+                        f"{run.ramp_task} pose; going joint by joint instead: {names}")
+        return True
 
     def _release(self, run: StepRun) -> None:
         self._ramp(run, False)

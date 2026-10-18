@@ -145,6 +145,18 @@ cutter and the red pen in their slots; `orchestrator/skills.yaml` version 3, the
   other-arm keep-out; the imagination panel against a fake imagining server; the CLI. The Claude planner plans the chain
   with the right arms (live: 6.4 s, USD 0.020).
 
+**Wired to ws4/single_arm's real-arm work (2026-10-18 morning, fake robot only).** Each chain skill now runs with what
+eval_skill.sh gives run_single_arm for that skill: `keepout: skills/<box|green|cutter|pen_lid>/workspace.json` (the
+kit's overrides: box midline +0.17 m, green -0.23 m, cutter -0.21 m with 1 cm box-arm clearance, pen_lid -0.15 m and
+torso margin 1.4 cm, each with its envelope), the kit's skill.json read at load (task = FLUX prompt, `runner_args`:
+the cutter's 4 cm slow zone at 0.5 deg/tick and a 50 % / 0.2 s load freeze, policy only), gate.py's start gate with the
+box arm's live pose before every pen-arm attempt (a refusal ends the chain before anything moves, no retry or replan,
+both arms keep holding), `open_box` `finish: hold` (nothing drives the box arm again in that run, torque kept on at
+close; `--hold-arm right` for a box arm handed over holding the lid), and the settings behind the first real inserts:
+1 deg/tick, horizon 16, lift stall 25 deg, `ARRIVE_TOL` (lift 8), 120 s attempts, the joint-by-joint ramp fallback;
+prefetch wired, off. Packages: `skill_open_box`, `skill_green_pen`, `skill_yellow_cutter`, `skill_red_pen` on 8790.
+`tests/test_chain.py` (20 tests) covers it end to end on both fake arms.
+
 **Success checks for the new skills** (`verify_eval.py --dataset <name> --skill <skill>`, the same method as the pen:
 start frames = not done, end frames of kept takes = done, rejects by note, by-eye mid frames = not done, measured
 exactly as `ClaudeVerifier` sends it):

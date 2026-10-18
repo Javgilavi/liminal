@@ -140,24 +140,27 @@ class GatedDualArmRunner(DualArmRunner):
         frames += [tail] * (n - len(frames))
         return np.asarray(frames, dtype=float)
 
-    def _accept(self, ts, response: PolicyResponse, state12: np.ndarray) -> None:
+    def _accept(self, ts, response: PolicyResponse, state12: np.ndarray, skip: int = 0, replace: bool = False) -> None:
+        # skip / replace: prefetch mode (DualArmRunner._prefetch), the commands executed since the request are dropped
         if self.gate is None or len(ts.config.arms) != 1:
-            return super()._accept(ts, response, state12)
+            return super()._accept(ts, response, state12, skip=skip, replace=replace)
         arm = ts.config.arms[0]
         other = next(a for a in ARMS if a != arm)
         calib = ts.config.calibration[arm]
         n_exec = ts.contract.n_action_steps
         chunk = np.asarray(response.commands, dtype=float)
-        robot_chunk = np.array([calib.to_robot(c) for c in chunk[:n_exec]])
+        robot_chunk = np.array([calib.to_robot(c) for c in chunk[skip:skip + n_exec]])
+        if not len(robot_chunk):
+            return super()._accept(ts, response, state12, skip=skip, replace=replace)
         base = self.gate.pose_penetration(self._command, state12)
         hit, depth = self.gate.first_hit(arm, robot_chunk, other, self.other_future(other, n_exec, state12), base)
         self.gate.stats.chunks += 1
         if hit is None:
-            return super()._accept(ts, response, state12)
+            return super()._accept(ts, response, state12, skip=skip, replace=replace)
         safe = hit - self.gate.margin_frames
         if safe >= 0:
             chunk = chunk.copy()
-            chunk[safe + 1:] = chunk[safe]
+            chunk[skip + safe + 1:] = chunk[skip + safe]
             self.gate.stats.truncated += 1
             action = f"truncated at frame {safe + 1}/{n_exec}"
         else:
@@ -172,7 +175,8 @@ class GatedDualArmRunner(DualArmRunner):
                       f"{hit} ({depth * 1000:.1f} mm)", info)
         if self.on_blocked is not None:
             self.on_blocked(arm, other)
-        super()._accept(ts, PolicyResponse(chunk, response.latency_s, {**response.info, "gate": info}), state12)
+        super()._accept(ts, PolicyResponse(chunk, response.latency_s, {**response.info, "gate": info}), state12,
+                        skip=skip, replace=replace)
 
 
 class TickGuardRobot:

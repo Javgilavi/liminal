@@ -11,24 +11,71 @@ Oscar's plan: the robot RIGHT arm opens the closed box by pulling its handle, th
 pen in the green slot, the yellow cutter in the yellow slot and the red pen in its slot. Vocabulary: `skills.yaml`
 (version 3, the default). One process holds both arms: robot left = `/dev/haller_arm_right` (calibration
 haller_right, wrist camera USB 7.2), robot right = `/dev/haller_arm_left` (haller_left, wrist camera USB 7.3), head =
-`/dev/haller_cam_mast`. One LoRA per skill, served on 8790 (package names from ws4-datasets).
+`/dev/haller_cam_mast`. One LoRA per skill on the 8790 demo server under fixed names (`package:` in skills.yaml):
+`skill_open_box`, `skill_green_pen`, `skill_yellow_cutter`, `skill_red_pen` (ws4-datasets maps each to a checkpoint in
+`/workspace/serve/demo_packages.txt` on the volume); the session refuses to start if one is not served. `--server`
+defaults to `http://127.0.0.1:8790` on the haller.
 
 ```bash
 # 0. One process per arm: nothing else may hold either arm (this must print nothing).
 fuser /dev/haller_arm_right /dev/haller_arm_left
-# 1. Tunnel to the 8790 policy server (pod host and SSH port from ws4-datasets / the RunPod console).
+# 1. Tunnel to the 8790 demo server (pod host and SSH port from ws4-datasets / the RunPod console).
 ssh -N -L 8790:127.0.0.1:8790 -o ExitOnForwardFailure=yes -i ~/.ssh/id_ed25519_osrdvs root@<pod-ip> -p <ssh-port>
-# 2. Dry run on the real arms: observe (torque never enabled, nothing sent): cameras, plan, checks, imagination.
-cd ws4 && python -m orchestrator hmi --open --env haller --observe --planner claude --server http://127.0.0.1:8790 \
-    --skill-package open_box=<pkg> --skill-package put_green_pen_in_slot=<pkg> \
-    --skill-package put_yellow_cutter_in_slot=<pkg> --skill-package put_pen_in_slot=<pkg> --imagine lazy \
+# 2. Observe-mode dry run on the real Haller: torque is never enabled and nothing is sent (connect writes no
+#    register, no ramp runs, FLUX commands are computed and logged only). Checks the cameras, the plan, the lid and
+#    pen checks, the start gate's verdict with the box arm's live pose before each pen step, the imagination panel.
+#    Attempts go to runs/trials_mock.jsonl, never to the graded log.
+cd ws4 && python -m orchestrator hmi --open --env haller --observe --planner claude --imagine lazy \
     --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token"
-# 3. The demo: the same without --observe, plus what the trial log records.
-#    --condition post_training --variant lora_chain --checkpoint <hf-repo>@<rev> --layout L1 --operator oscar
+# 3a. Rehearse ONE skill through the HMI. open_box alone: both arms folded at rest, type "open the box".
+#     A pen skill alone, with the box arm already holding the lid (handover from the haller HMI, below): add
+#     --hold-arm right and type e.g. "put the yellow cutter in the yellow slot".
+cd ws4 && python -m orchestrator hmi --open --env haller --hold-arm right --planner stub --operator oscar \
+    --condition post_training --variant <variant> --checkpoint "<what skill_yellow_cutter serves>" \
+    --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token"
+# 3b. The full chain: both arms folded at rest with torque off, box closed, objects on the mat.
+cd ws4 && python -m orchestrator hmi --open --env haller --planner claude --imagine lazy --operator oscar \
+    --condition post_training --variant lora_chain --checkpoint "<the four skill_* checkpoints>" --layout L1 \
+    --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token"
 ```
 
 The goal box is pre-filled with the chain (`station.demo_goal`): press **Plan** (Claude: right arm first, then the three
 left-arm steps; checked live, 6.4 s, USD 0.02), check the lanes and the numbered chain strip, **Approve and run**.
+
+**What each step runs with (what ws4/single_arm learned on the real arm, 18 Oct).** Every chain skill's `keepout:`
+names its kit, `ws4/single_arm/skills/<box|green|cutter|pen_lid>/workspace.json` (build_skill.py: the station zones
+with the skill's approved overrides plus its demonstrated envelope); the `skill.json` next to it is read at load (its
+verbatim task must equal the FLUX prompt, its `runner_args` and `other_arm_gate` are applied):
+- box: right-arm midline +0.17 m (takes 7-74); green: pen-arm midline -0.23 m, 2 cm envelope trim near the box arm;
+  cutter: midline -0.21 m, 1 cm box-arm clearance and a 4 cm **slow zone** (0.5 deg/tick, load freeze at 50 % for
+  0.2 s, from its `runner_args`; policy commands only, as in run_single_arm); red pen: the lid-held takes
+  (`pen_lid`), midline -0.15 m, torso margin 1.4 cm. Ramps use the same zones without the envelope.
+- **Start gate** before every pen-arm attempt, before anything moves: gate.py with the box arm's LIVE pose (the loose
+  joint range of box-skill end poses and the skill's recorded hold, then the geometric check: no envelope voxel inside
+  the box arm, at most 1 % of the demo poses under the skill's clearance). A refusal ends the chain, failed, with the
+  reason in red next to the run state and in the events ("REFUSED before it moved"); no retry, no replan, both arms
+  keep holding their last command (the box arm keeps the lid). `python ws4/single_arm/gate.py report q1 .. q6` gives
+  the verdict per skill for a box-arm pose.
+- **Box arm holds**: `open_box` has `finish: hold`: once its check passes, nothing drives the box arm again in that
+  run (a planned step on it is refused before it moves) and its torque stays on when the session closes, even at its
+  launch pose (run_single_arm `--hold-other-arm` semantics). `--hold-arm right` does the same from launch for a box
+  arm handed over holding the lid: connect sets its goal to its present pose before torque goes on, nothing ever
+  commands it elsewhere.
+- **Runner settings behind the first real inserts** (FLUX red pen RAW 5k, 3/5): 1 deg/tick policy guard (`--max-step`,
+  as eval_skill.sh), action horizon 16 (`--action-steps` / `WS4_ACTION_STEPS`), shoulder-lift stall 25 deg
+  (`--lift-stall-deg` / `WS4_LIFT_STALL_DEG`; other joints 8), a ramp
+  arrives within run_single_arm's `ARRIVE_TOL` (lift 8 deg, others 6), 120 s per attempt, and a ramp the keep-out
+  refuses holds and then goes one joint at a time in an order the keep-out accepts at every step (once per ramp; no
+  such order: e-stop, both arms hold). Chunk prefetch is wired (`--prefetch-ticks` / `WS4_PREFETCH_TICKS`) but OFF by
+  default. The settings in force are in the events at start and in every attempt's trial notes.
+
+**Handover from the haller HMI (pen-skill rehearsal with `--hold-arm right`)**, as single_arm README "Handover from
+the HMI": Oscar supports the lid and both arms; `bash ~/haller_ws/scripts/quest-teleop/down.sh`; the ports must be free
+(`fuser $(readlink -f /dev/haller_arm_right /dev/haller_arm_left) || echo free`); fold the pen arm onto its rest by
+hand; start 3a. The event "right arm handed over holding (--hold-arm): held at [...]" means the box arm holds the lid
+and Oscar can let go. A start gate REFUSED means the lid is held where the skill's demos never had the box arm:
+support the lid, re-place the arm (`gate.py report` until ALLOWED), restart. At the end the box arm keeps holding the
+lid with torque on, and the pen arm holds where its skill left it: support both before switching the power off.
 
 What runs, so each skill starts from the state its demos had (`station.poses`, measured in the datasets): the pen arm
 ramps to its tucked pose, the box arm to its home `[0, 0.8, 2.0, 0.4, 0, 99.7]`, and `open_box` runs until the lid
@@ -55,15 +102,24 @@ Checks (research/orchestrator.md, "Final chain"; re-run with `python -m orchestr
 false pass; green pen 114/119 held out (2 false passes in 82); yellow cutter 91/91 on 31 takes, no false
 pass; red pen 65/66 on the 22 lid-held takes (1 false pass: the pen pressed against the green pen, off its strip).
 
-Tested without hardware (`tests/test_chain.py`): both fake arms, flux.remote's real HTTP server with one fake package
-per skill and a token, the whole chain end to end (the box arm frozen holding the lid from open_box on, the lid
-prechecked before each pen skill, each pen skill at home on its own package, one arm moving at a time, one trial line
-per attempt), a closed lid holding everything before the pen arm moves, holds that keep the grip, the live other-arm
-keep-out, the imagination panel against a fake imagining backend, and the CLI. Not verified: anything on the arms or the pod; the right arm's
-start pose and table height (VERIFY with ws4-vr2 / so101-zeroshot); the new checks on the full datasets.
+Tested without hardware (`tests/test_chain.py`, 20 tests): both fake arms, flux.remote's real HTTP server with one fake
+package per skill under its fixed name and a token, the whole chain end to end (the fake box policy ends holding the
+lid at the green takes' recorded hold; each policy under its kit's workspace and envelope, each ramp without it; the
+start gate allowing every pen step with the box arm's live pose; the box arm held and kept torqued at close; horizon
+16, lift stall 25 and the settings in every attempt's trial notes; one arm moving at a time, one trial line per
+attempt), a gate refusal (box arm at the first red-pen session's hold) ending the chain before the pen arm moves, the
+cutter's slow zone (0.5 deg/tick and the 50 % load freeze only under the cutter policy), the joint-by-joint ramp
+fallback and its stop, the `--hold-arm` handover (never commanded, refused steps), prefetch through the gated runner,
+kits that do not match failing the vocabulary, a closed lid holding everything before the pen arm moves, holds that
+keep the grip, the live other-arm keep-out, the imagination panel against a fake imagining backend, and the CLI. Not
+verified: anything on the arms or the pod; the right arm's start pose and table height (VERIFY with ws4-vr2 /
+so101-zeroshot); the slow zone and the ramp fallback with real capsule geometry in the chain (unit-level on the real
+keep-outs in ws4/single_arm, faked distances here).
 
 Rehearsal without hardware: `python -m orchestrator hmi --open --env haller --robot fake --policy fake --planner stub
---verifier manual`.
+--verifier manual`. The fake policy never moves the box arm, so the start gate refuses the first pen step (the
+refusal path); to rehearse a pen skill past the gate, start the fake box arm holding where the green takes had it:
+`--hold-arm right --right-fake-start 12.13 -13.8 12.26 37.54 29.93 0.87`.
 
 ## Pen-only runs: the green Haller, one arm, the red pen (2026-10-17)
 

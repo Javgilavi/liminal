@@ -35,7 +35,9 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--verifier-thinking", choices=("adaptive", "disabled"), default="adaptive",
                    help="Haiku 5.5 checks: adaptive thinking at low effort, or thinking disabled")
     g.add_argument("--budget-usd", type=float, default=5.0, help="Claude spend limit for this session")
-    g.add_argument("--server", default="http://127.0.0.1:8765", help="FLUX policy server (ssh -L tunnel to the pod)")
+    g.add_argument("--server", default=None,
+                   help="FLUX policy server (ssh -L tunnel to the pod); default http://127.0.0.1:8790 on the haller "
+                        "(the demo server with the four skill packages), else :8765")
     g.add_argument("--token-file", default=None)
     g.add_argument("--package", default="so101", help="policy server package for both arms")
     g.add_argument("--left-package", default=None)
@@ -73,7 +75,8 @@ def _session_args(p: argparse.ArgumentParser) -> None:
     h.add_argument("--keepout-window", type=int, default=60)
     h.add_argument("--max-relative-target", type=float, default=20.0)
     h.add_argument("--torque-limit", type=float, default=60.0)
-    h.add_argument("--max-step", type=float, default=2.0)
+    h.add_argument("--max-step", type=float, default=1.0,
+                   help="guard: deg per tick on the arm joints (1 = eval_skill.sh, the real-arm runs)")
     h.add_argument("--max-gripper-step", type=float, default=5.0)
     h.add_argument("--stall-deg", type=float, default=8.0)
     h.add_argument("--stall-ticks", type=int, default=15)
@@ -87,10 +90,28 @@ def _session_args(p: argparse.ArgumentParser) -> None:
                    "other_arm zone is off (logged in every attempt's notes). Default: read it before every FLUX "
                    "attempt and block the attempt when the pose is unknown")
     h.add_argument("--token-cmd", default="", help="command printing the policy server token (never shown)")
+    h.add_argument("--hold-arm", action="append", default=[], choices=("left", "right"),
+                   help="repeatable: an arm handed over holding (the box arm and the lid, after the HMI's down.sh): "
+                        "held where it is (goal = present pose, then torque on), never driven, torque left on at the "
+                        "end (run_single_arm --hold-other-arm)")
+    h.add_argument("--fake-start", type=float, nargs=6, default=None, metavar="Q",
+                   help="--robot fake: the robot-left arm's pose at launch")
+    h.add_argument("--right-fake-start", type=float, nargs=6, default=None, metavar="Q",
+                   help="--robot fake: the robot-right arm's pose at launch (e.g. holding the lid with --hold-arm)")
+    h.add_argument("--action-steps", type=int, default=None,
+                   help="commands executed per FLUX chunk before replanning (default: env WS4_ACTION_STEPS, else 16 "
+                        "on the haller, as behind the first real inserts)")
+    h.add_argument("--lift-stall-deg", type=float, default=None,
+                   help="shoulder-lift stall threshold, deg (default: env WS4_LIFT_STALL_DEG, else 25 on the haller)")
+    h.add_argument("--prefetch-ticks", type=int, default=None,
+                   help="request the next chunk when this many commands are left (default: env WS4_PREFETCH_TICKS, "
+                        "else 0 = off)")
     e = p.add_argument_group("execution and logging")
     e.add_argument("--no-gate", action="store_true", help="disable the inter-arm collision gate")
     e.add_argument("--fast", action="store_true", help="sim: run as fast as possible instead of 30 Hz")
     e.add_argument("--max-replans", type=int, default=1)
+    e.add_argument("--max-run-s", type=float, default=None,
+                   help="active control time per run (default 600 s; 1200 s on the haller: 120 s attempts)")
     e.add_argument("--auto-approve-replans", action="store_true")
     e.add_argument("--trial-log", default=None,
                    help="default: runs/trials_sim.jsonl in sim, ws4/eval/trials.jsonl on the robot")
@@ -120,14 +141,18 @@ def _config(a: argparse.Namespace):
             read_other_arm=not a.no_other_arm, limit_margin=a.limit_margin, ramp_margin=a.ramp_margin,
             right_arm_port=a.right_arm_port, right_robot_id=a.right_robot_id,
             right_keepout_config=a.right_keepout_config, keepout_window=a.keepout_window,
-            token_cmd=a.token_cmd,
+            token_cmd=a.token_cmd, hold_arms=tuple(a.hold_arm), action_steps=a.action_steps,
+            lift_stall_deg=a.lift_stall_deg, prefetch_ticks=a.prefetch_ticks,
+            fake_start=tuple(a.fake_start) if a.fake_start else None,
+            right_fake_start=tuple(a.right_fake_start) if a.right_fake_start else None,
         )
     return SessionConfig(
         **extra,
         env=a.env, policy=a.policy or ("scripted" if a.env == "sim" else "remote"), planner=a.planner,
         verifier=a.verifier, planner_model=a.planner_model, planner_effort=a.planner_effort,
         verifier_wrist=a.verifier_wrist, verifier_thinking=a.verifier_thinking, budget_usd=a.budget_usd,
-        server=a.server, token_file=a.token_file, package=a.package, left_package=a.left_package,
+        server=a.server or ("http://127.0.0.1:8790" if haller else "http://127.0.0.1:8765"),
+        token_file=a.token_file, package=a.package, left_package=a.left_package,
         skill_packages=dict(_pair(x, "--skill-package") for x in a.skill_package), imagine=a.imagine or "",
         right_package=a.right_package, async_inference=False if a.sync_inference else None, seed=a.seed,
         image_size=(h, w), randomize=not a.no_randomize, lid_on_box=a.lid_on_box,
@@ -136,6 +161,7 @@ def _config(a: argparse.Namespace):
                                                                                       else ""),
         left_wrist_cam=a.left_wrist_cam, right_wrist_cam=a.right_wrist_cam, calibration_limits=a.calibration_limits,
         gate=not a.no_gate, realtime=not a.fast, max_replans=a.max_replans,
+        max_run_s=a.max_run_s or (1200.0 if haller else 600.0),
         auto_approve_replans=a.auto_approve_replans, trial_log=a.trial_log,
         task=a.task or ("haller_chain" if haller else "pack_box"), condition=a.condition, variant=a.variant,
         checkpoint=a.checkpoint, layout=a.layout, operator=a.operator, vocabulary=a.vocabulary,
