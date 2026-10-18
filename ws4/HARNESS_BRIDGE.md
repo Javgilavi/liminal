@@ -66,6 +66,23 @@ LIMINAL_WS4_SESSION='{"operator": "oscar", "layout": "P3"}' PYTHONPATH=src pytho
 - Each FLUX attempt is logged to `ws4/eval/trials.jsonl` like an HMI run (variant `liminal_bt+lora_chain`); the
   liminal event log goes to `runs/<time>_assemble_components_haller.jsonl`, ws4's to `ws4/orchestrator/runs/`.
 
+## The box replay and the Opus planner
+
+- `open_box` runs as ws4's scripted replay of recorded box take 59 (`skill_backends: {open_box: replay}` in
+  `configs/robot/haller_ws4.yaml`; the FLUX box failed 0/4 live). The liminal log and the skill result say
+  "scripted replay of recorded demo 59, not FLUX"; ws4 logs it as condition `scripted`. Green, cutter and red pen are
+  FLUX on 8790. Last resort for the cutter: add `put_yellow_cutter_in_slot: replay` (take 67).
+- Their LLM planner (`LLMPlanner`: goal to task tree, compile errors fed back for repair) runs on Opus 5.5 with the
+  same key as the ws4 orchestrator: `ANTHROPIC_API_KEY`, else `ANTHROPIC_API_KEY=...` in the file named by
+  `ANTHROPIC_API_KEY_FILE` (default `~/.config/ws4/anthropic.env`). The key is never printed or logged.
+
+```bash
+PYTHONPATH=src python -m liminal plan "open the box, then put the green pen, the yellow cutter and the red pen in their slots" --planner claude --model claude-opus-5-5 --skills configs/skills_haller.yaml
+```
+
+  It prints a task tree that went through `parse_task`; the bridge still refuses any prompt, arm or package that is
+  not served. The robot runs use the reviewed `assemble_components_haller.yaml`.
+
 ## Arm naming (read this before touching any robot config)
 
 Everything here uses the **robot's own sides**: `left` = the pen arm = `/dev/haller_arm_right` (board 5B14030445,
