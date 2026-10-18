@@ -22,6 +22,7 @@ PAGES = {
     "evidence/notes.html",
 }
 ASSETS = {
+    "project-qr.svg",
     "liminal-overview.mp4",
     "preview-liminal-overview.jpg",
     "real-cutter-trial.mp4",
