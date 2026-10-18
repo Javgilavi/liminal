@@ -130,7 +130,9 @@ benchmark's "What each change did", item 1.
   commands gave a reach (elbow +26.7 deg, gripper -96.5 %); live images with recorded state gave a hold.
 - The live wrist frame flips hold and reach on a 1 px shift or a 1 deg tilt; recorded frames reach under the same
   shifts. Sweep: 0 of 27 wrist shifts and 0 of 10 seeds reach on the live room view; averaging never rescues it.
-- Fixes: `ws4/single_arm/align_station.py` (live alignment against a recording's home view: wrist room offset, scale,
+- **The fix (Oscar, 18 Oct): execute 16 of each chunk's actions instead of 32**, so FLUX re-plans every 0.5 s on fresh
+  frames: RAW 5k 0/5 inserts at horizon 32, 3/5 at 16 (section 0.2; the 16 block also had the 25 deg lift stall).
+- Supporting measures: `ws4/single_arm/align_station.py` (live alignment against a recording's home view: wrist room offset, scale,
   brightness; the benchmark ran at offset -11 px, scale 0.97) and image augmentation (crop + colour jitter) in the
   new LoRAs. Pre-robot gates (`ws4/research/skills.md`, augmented runs): from rest the first chunk must move >= 20 deg
   on every held-out take, also under +-2 px shifts and 0.5x brightness. Cutter aug RAW 44.2 deg (pass, served);

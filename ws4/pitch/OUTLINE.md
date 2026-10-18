@@ -40,7 +40,7 @@ memory, sim, real-world use, next) are hidden in the presentation and kept at th
 | 95-110 | Data | "337 VR takes over four skills, most of them overnight, all public on the Hub with the adapters." |
 | 110-130 | Held-out | "On takes it never trained on, the red-pen LoRA cut arm error from 5.5 to 3.2 degrees and predicts the right direction 88 % of the time, ahead of ACT on the same data." |
 | 130-160 | Results | "On the arm: the first full red-pen inserts, 3 of 5, where ACT never inserted; the green pen and the cutter too. The full chain finished 4 of 4 in two of three runs with no human touch, in a demo mode without keep-out stops; in both, the green-pen policy also slotted the red pen." |
-| 160-185 | Knife edge | "After the robot moved, FLUX held still. A field-by-field diff found one difference: the wrist camera's view of the room. One pixel flipped hold to reach. We align the station and augment." |
+| 160-185 | Hardest bug | "FLUX reached and grasped, then stalled before the insert, or held still. Its decision hangs on what it sees: one pixel of the wrist view flipped hold to reach. The fix: execute 16 of each chunk's actions instead of 32, so it re-plans every half second on fresh frames. Same model: 3 of 5 inserts, against 0 of 5 at 32." |
 | 185-210 | Imagination | "FLUX also predicts the next 1.4 seconds of video; we decode it with its actions bit-identical, and fine-tuning made it imagine better too." |
 | 210-235 | Harness | "Stanislaw and Simone's behaviour tree drives the same robot through our bridge: it opened the box by replay and placed the green pen live." |
 | 235-260 | Twin | "Javier's live lab pairs with the Haller: a MuJoCo twin mirrors the real arms in the browser, on our public page." |

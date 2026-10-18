@@ -129,15 +129,18 @@ robot again ([offline_diag.py](ws4/single_arm/offline_diag.py)):
 
 Every LoRA trains from base B: the released weights with quantiles from the skill's own training takes.
 
-### 2. FLUX's decision hangs on the wrist camera's view of the room
+### 2. FLUX's decision hangs on what it sees; re-planning every 16 actions fixed it
 
 After the robot was moved, the red-pen LoRA held still at home on live frames, while the same model reached on the
 recorded ones. A field-by-field diff of a live request against a recorded one found them identical in task string,
 image keys and order, shapes, dtypes, units and history: only the wrist image differed. Recorded images with live
 state gave a reach; live images with recorded state gave a hold. The live wrist frame flips hold and reach on a
 **1 px shift or a 1 deg tilt**; recorded frames reach under the same shifts; no seed or averaging rescued the live
-view. Fixes: [align_station.py](ws4/single_arm/align_station.py) aligns the station to a recording's home view
-(wrist offset, scale, brightness) before every run, and the newest LoRAs train with crop and colour augmentation,
+view. **The fix that made it work: execute 16 of each chunk's actions instead of 32**, so FLUX re-plans every 0.5 s on
+fresh frames: the same RAW 5k model went from 0/5 inserts at 32 to 3/5 at 16 (the 16 block also raised the lift-stall
+threshold to 25 deg). Supporting measures: [align_station.py](ws4/single_arm/align_station.py) aligns the station to a
+recording's home view (wrist offset, scale, brightness) before every run, and the newest LoRAs train with crop and
+colour augmentation,
 checked before robot time by a gate: from rest, the first chunk must move at least 20 deg on every held-out take, also
 under 2 px shifts and half brightness. The cutter passes (44.2 deg) and green (73.3); every box variant fails (4.9 to
 5.5), which is why the box step is replayed ([skills.md](ws4/research/skills.md)).
