@@ -23,7 +23,7 @@ import yaml
 
 from liminal.core.types import SO101_JOINTS
 from liminal.hardware.official_so101 import OfficialSO101
-from liminal.policy.live import vector, worker_reply
+from liminal.policy.live import clamp_gripper_boundary, vector, worker_reply
 from liminal.safety.stall import StallMonitor
 from liminal.safety.supervisor import JointLimits, SafetySupervisor
 
@@ -166,6 +166,11 @@ async def run(cfg, output, execute):
                 (output / f"plan-{index:04d}.json").write_text(json.dumps(result) + "\n")
                 if result.get("type") != "actions" or len(result.get("actions", [])) != 42:
                     raise RuntimeError("worker returned no actions")
+                if cfg.get("gripper_clamping") is True:
+                    # as liminal.policy.live: finite gripper predictions to 0-100 %, LeRobot's gripper driver range
+                    result["actions"][:count], adjustments = clamp_gripper_boundary(result["actions"], count, None)
+                    if adjustments:
+                        event("gripper_clamp", plan=index, adjustments=adjustments)
                 print(f"Plan {index}: {result['inference_seconds']:.3f}s, {count}/42 actions", flush=True)
                 segment = None
                 if hybrid is not None:

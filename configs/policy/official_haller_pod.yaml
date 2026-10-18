@@ -12,4 +12,5 @@ transport: ws4_pod
 server: http://127.0.0.1:8790
 package: skill_red_pen  # B84 + RAW 5k, the 3/5 red-pen model (Oskrt/flux-3-action-so101-haller-pen-lora lora_pen84)
 n_action_steps: 16      # the horizon of the real-arm inserts
+gripper_clamping: true  # as pen_lora_right.yaml: finite gripper predictions to 0-100 %
 token_cmd_env: WS4_TOKEN_CMD
