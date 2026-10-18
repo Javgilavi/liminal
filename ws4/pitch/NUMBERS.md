@@ -122,7 +122,9 @@ adapter folded in). Raw results on the `real-train-is` volume, `/workspace/real_
 | hold (repeat the current command) | - | 3.8, 7.6, 5.9, 7.6, 3.2; 8.5 | - | 100 % |
 | zero-shot B (base, no LoRA) | 0 | 4.6, 6.3, 4.9, 8.0, 3.7; 11.3 | 65, 71, 68, 54, 75, 66 % | 152, 88, 81, 171, 70, 93 % |
 | LoRA EMA | 2,500 | 3.0, 5.1, 4.7, 6.0, 2.9; 9.9 (arm mean 4.3) | 72, 77, 78, 64, 75, 78 % (mean 74) | 71, 68, 71, 96, 63, 90 % |
-| LoRA EMA | 5,000 / 10,000 / 15,000 / 20,000 | `[[NUM:LORA_CURVE]]` | | |
+| LoRA EMA | 4,000 | 2.4, 4.5, 4.3, 5.4, 2.5; 8.4 (arm mean 3.8) | 76, 82, 80, 71, 82, 81 % | 53, 53, 63, 83, 64, 87 % |
+| **LoRA EMA (Hub tag `step-5000`, served as `lora_5000`)** | 5,000 | **2.1, 4.4, 4.2, 5.0, 2.4; 6.7 (arm mean 3.6)** | **79, 84, 83, 75, 89, 81 % (mean 82; arm 82)** | 46, 48, 60, 75, 64, 79 % |
+| LoRA EMA | 10,000 / 15,000 / 20,000 | `[[NUM:LORA_CURVE]]` | | |
 | ACT baseline (ws4-act), 10k steps | - | arm MAE mean 4.3 | 81 to 90 % | - |
 
 ### Zero-shot with median community statistics (variant M), same 12 held-out takes
@@ -153,11 +155,22 @@ chance (42 %). As a LoRA base it missed ws4-datasets' GO bar (direction of at le
 Story line: "the released statistics fail; two ways of fixing them, with no training, give sensible predictions;
 median gives the most balanced motion."
 
-Held-out eval loss (LeRobot flow-matching loss, 256 samples): 0.261 at 500, 0.249, 0.231, 0.231, 0.233 at 2,500 microsteps
-(MEASURED, `ws4/research/pen_lora.md`). The ACT row is cited in `pen_lora.md` from ws4-act; its own report section is
+Held-out eval loss (LeRobot flow-matching loss, 256 samples): 0.261 at 500, 0.233 at 2,500, 0.219 at 4,000, 0.210 at
+5,000 microsteps (MEASURED, `ws4/research/pen_lora.md`). Public checkpoint:
+https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora (tag `step-5000`, eval loss 0.2096; it holds only the
+latest best EMA adapter).
+
+Speed, model path over demo path (127 moving held-out chunks, `pen_lora.md`): B84 pan, lift, elbow, wflex, roll 1.49,
+0.32, 0.55, 1.06, 0.99; LoRA 5k 0.76, 0.78, 0.64, 0.60, 0.55 (gripper 1.02). The LoRA learned to reach down (lift
+0.32x to 0.78x) and stopped over-swinging pan (1.49x to 0.76x), but every arm joint still moves slower than the demos
+(0.55 to 0.78x). The ACT row is cited in `pen_lora.md` from ws4-act; its own report section is
 not in the repo yet: UNVERIFIED until it lands.
 
-Reading at 2,500 microsteps (625 updates): the LoRA beats both zero-shot variants on arm MAE (4.3 vs 5.5 for B84, 4.8
+Reading at 5,000 microsteps (1,250 updates): arm MAE 3.6 deg (B84 5.5, median 4.8, hold 5.6, ACT 4.3), direction 82 %
+(B84 66.5 %, ACT 81 to 90 %), gripper MAE 6.7 %, now better than holding still (8.5 %). Say: "at a quarter of the
+run, the LoRA has a third less arm error than zero-shot, matches ACT on direction and has lower arm error than ACT".
+
+Earlier reading at 2,500 microsteps (625 updates): the LoRA beats both zero-shot variants on arm MAE (4.3 vs 5.5 for B84, 4.8
 for median, 5.6 for holding still) and on direction (74 % vs 66.5 % and 69 %); its gripper MAE (9.9 %) is still worse
 than holding still (8.5 %). ACT is ahead on direction (81 to 90 %) at the same arm MAE. Keep that comparison on the
 slide: FLUX LoRA vs ACT is a real result either way; final numbers come from the 20k checkpoint and the arm.
@@ -189,6 +202,8 @@ flex, roll and gripper) and better than chance on direction. The slide claim to 
 | Prior public demos of decoded FLUX imagination | none found; BFL docs say the API "returns actions only" | `ws4/research/imagination.md` 1.1 ("we would be first" is our claim: phrase as "we found none") |
 | Imagined vs actual clips | replay of held-out takes 101, 102, 103 (layout D, never trained on) through FLUX with B84 real weights: `ws4/imagine/outputs/replay_ep10{1,2,3}/imagination/imagined_vs_actual.mp4` (H.264, 1048x340, 8 to 10 s, gitignored), contact sheets `replay_ep101/contact_chunk1.png`, `contact_chunk4.png`. A clip from a live Sunday attempt is optional: `[[CLIP:IMAGINED_VS_ACTUAL]]` | HAVE (replay), `ws4/imagine/README.md` "First clips" |
 | Imagination accuracy (3 held-out takes) | scene camera: the imagined frame is closer to reality than "nothing moves" on 80 % of (chunk, offset) pairs; wrist camera only 43 % (frames blur within about 0.5 s); under about 0.4 s ahead it looks near-identical | MEASURED, `ws4/imagine/README.md` accuracy table (mean abs RGB at 64x64 vs the VAE's held still frame) |
+| Fine-tuning improves the imagination | wrist-camera error of imagined frames, B84 zero-shot vs LoRA 5k: +2..+8 (0.07 to 0.27 s) 0.064 to 0.050 (-22 %), +9..+20 0.138 to 0.113, +21..+32 0.205 to 0.173, +33..+42 (1.1 to 1.4 s) 0.249 to 0.206 (-17 %); scene camera about -5 %. Zero-shot imagines a smeared, broken pen by +1 s; the 5k LoRA imagines it held cleanly, as it was. Caveat: the 5k replays ran with compile on, the others with compile off | MEASURED, `ws4/imagine/README.md` (table "Wrist-camera error by training stage"), `outputs/offset_errors_b84_to_lora5000.json`; slide image `ws4/imagine/outputs/b84_vs_lora5000_ep101_chunk1.png`; clips `outputs/lora5000_ep10{1,2,3}/imagination/imagined_vs_actual.mp4` |
+| Production config (live arm server, `lora_5000`, compile on) | commands identical with lazy imagination on all 23 chunks; round trip 0.34 s with imagination vs 0.34 to 0.38 s without; decode 0.12 s | MEASURED, `ws4/imagine/README.md` (21:45 UTC) |
 
 ## 7. Safety stack
 
@@ -269,7 +284,7 @@ Overnight / morning numbers, from `trial_log.py summary --markdown`, the trainer
 | `[[NUM:LORA_TABLE]]`, `[[NUM:LORA_ALL]]` | post-training rows of the trial table; all post-training attempts | README |
 | `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | Claude-planned chain results | deck (results, orchestrator) |
 | `[[NUM:LORA_CKPT]]`, `[[NUM:LORA_EVAL_LOSS]]`, `[[NUM:LORA_STEPS_DONE]]` | checkpoint, held-out eval loss, microsteps | README, deck notes |
-| `[[NUM:LORA_CURVE]]` | held-out MAE and direction per LoRA checkpoint (section 4) | README, deck (results) |
+| `[[NUM:LORA_CURVE]]` | held-out MAE and direction at 10k / 15k / 20k (section 4; 2.5k, 4k and 5k are filled) | README, deck (heldout) |
 | `[[NUM:RECORD_HOURS]]`, `[[NUM:TRAIN_HOURS]]` | time split for the judges | outline, README, deck (teach) |
 | `[[NUM:SIM_A0R]]`, `[[NUM:SIM_LORA]]` | sim closed loop on 20 held-out layouts | README, deck (results, sim) |
 | `[[NUM:DEMO_SERVER]]` | Sunday server GPU, guidance, round trip | deck notes |

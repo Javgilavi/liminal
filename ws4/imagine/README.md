@@ -55,6 +55,28 @@ still ("nothing moves", same blur as the imagination).
   our own scene too. Numbers: `outputs/offset_errors_b84_lora500_lora3000.json`.
 - With the 3000-step LoRA, commands are again identical to plain requests on all 23 chunks, with the same round
   trip (0.38 to 0.39 s) and decode time (0.12 s); clips in `outputs/lora3000_ep10{1,2,3}/` (H.264).
+- **5000-step LoRA, on the live arm server** (8790, `compile_model` on, 21:45 UTC):
+  - commands identical to plain requests on all 23 chunks;
+  - round trip 0.34 s with imagination vs 0.34 to 0.38 s plain;
+  - decode 0.12 s per chunk.
+
+Wrist-camera imagination error by training stage:
+
+| Wrist-camera error | +2..+8 | +9..+20 | +21..+32 | +33..+42 |
+|---|---|---|---|---|
+| B84 zero-shot | 0.064 | 0.138 | 0.205 | 0.249 |
+| LoRA 3000 | 0.057 | 0.126 | 0.192 | 0.236 |
+| LoRA 5000 | **0.050** | **0.113** | **0.173** | **0.206** |
+
+- The 5k LoRA is 22 % better than B84 at short horizons and 17 % at the longest; the scene camera improves about
+  5 %.
+- Caveat: the 5k replays ran with compile on, the others with compile off. A monotonic trend this size is
+  unlikely to be a compile artifact.
+- Slide: `outputs/b84_vs_lora5000_ep101_chunk1.png`, the same moment of take 101: actual, B84-imagined and
+  5k-imagined at +0.13 to +1.4 s. Zero-shot imagines a smeared, broken pen by +1 s; the LoRA imagines it held
+  cleanly between the fingers, as happened.
+- Clips: `outputs/lora5000_ep10{1,2,3}/imagination/imagined_vs_actual.mp4` (H.264).
+- Numbers: `outputs/offset_errors_b84_to_lora5000.json`.
 
 ## What runs where
 

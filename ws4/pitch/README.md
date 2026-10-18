@@ -9,13 +9,13 @@ Nothing here is committed by this session.
 | [OUTLINE.md](OUTLINE.md) | 3-minute track pitch and 5-minute final, beat by beat with timings, judging-weight map, demo moments, Q&A prep |
 | [STORYBOARD.md](STORYBOARD.md) | Demo video shot list (2:00 main cut, 60 s cut), what exists, what to film Sunday |
 | [README_submission.md](README_submission.md) | Submission README for the repo root on main |
-| `deck/project/` | Source of the hosted slide deck (17 slides, one HTML file per slide, speaker notes in each `<aside>`) |
+| `deck/project/` | Source of the hosted slide deck (18 slides, one HTML file per slide, speaker notes in each `<aside>`) |
 | `deck/img/` | Images derived for the deck (zero-shot frame strip, demo frame cropped to the table, photo vs sim) |
 
 **Slide deck (hosted, private until shared):** https://claude.ai/artifact/FsptG2MfRYqkmaAqL4EDQm. It presents from the
 browser and exports to PPTX or PDF. Share it from the page's Share menu before sending the link to anyone.
 Slides in the 3-minute pitch: cover, zeroshot, contract (optional), diagnosis, architecture, heldout (optional),
-results, imagination, realworld, close. The rest are for the 5-minute final or Q&A (their notes say "FINAL ONLY").
+results, imagination, imaginebetter (optional), realworld, close. The rest are for the 5-minute final or Q&A (their notes say "FINAL ONLY").
 
 ## Sunday morning, in order
 

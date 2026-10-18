@@ -3,7 +3,7 @@
   "createdOnFiles": {"v": 1, "at": "2026-10-17T19:55:00Z"},
   "lists": "css",
   "title": "liminal: a robot that imagines, then acts",
-  "order": ["cover", "zeroshot", "contract", "diagnosis", "architecture", "teach", "heldout", "results", "imagination", "orchestrator", "safety", "memory", "sim", "realworld", "team", "next", "close"],
+  "order": ["cover", "zeroshot", "contract", "diagnosis", "architecture", "teach", "heldout", "results", "imagination", "imaginebetter", "orchestrator", "safety", "memory", "sim", "realworld", "team", "next", "close"],
   "sections": {
     "s1": {"description": "Hook: the Haller and the task", "start": "cover"},
     "s2": {"description": "Problem: the released checkpoint failed every graded zero-shot attempt", "start": "zeroshot"},

@@ -12,7 +12,8 @@ Team `[[TEAM:NAME]]`: `[[TEAM:MEMBERS]]`.
 
 Demo video: `[[TEAM:VIDEO_URL]]` · Slides: `[[TEAM:SLIDES_URL]]` · Data:
 [pen into slot](https://huggingface.co/datasets/Oskrt/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box),
-[pen out of slot](https://huggingface.co/datasets/Oskrt/haller_take_the_red_pen_out_of_its_slot)
+[pen out of slot](https://huggingface.co/datasets/Oskrt/haller_take_the_red_pen_out_of_its_slot) · LoRA:
+[Oskrt/flux-3-action-so101-haller-pen-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora)
 
 Our green XLeRobot "Haller" (two SO-101-style arms on a torso, a RealSense D455 head camera, wrist cameras, soft
 fin-ray fingers) puts a red pen into its slot in a cardboard box with **FLUX 3 Action in the control loop**. A Claude
@@ -104,7 +105,9 @@ The same offline diagnostic, run on the 12 held-out takes (200 frames, 181 movin
 | zero-shot B84 (the LoRA's base) | 0 | 4.6, 6.3, 4.9, 8.0, 3.7; 11.3 | 65, 71, 68, 54, 75, 66 % | 152, 88, 81, 171, 70, 93 % |
 | zero-shot median statistics (M) | 0 | 2.7, 6.7, 5.4, 5.3, 3.8; 6.8 (gripper range 0..40, not like for like) | 74, 64, 72, 77, 42, 87 % | not reported (path ratios in the text below) |
 | LoRA from B84 | 2,500 | 3.0, 5.1, 4.7, 6.0, 2.9; 9.9 | 72, 77, 78, 64, 75, 78 % | 71, 68, 71, 96, 63, 90 % |
-| LoRA from B84 | 5,000 to 20,000 | `[[NUM:LORA_CURVE]]` | | |
+| LoRA from B84 | 4,000 | 2.4, 4.5, 4.3, 5.4, 2.5; 8.4 | 76, 82, 80, 71, 82, 81 % | 53, 53, 63, 83, 64, 87 % |
+| **LoRA from B84 (public, `step-5000`)** | 5,000 | **2.1, 4.4, 4.2, 5.0, 2.4; 6.7** | **79, 84, 83, 75, 89, 81 %** | 46, 48, 60, 75, 64, 79 % |
+| LoRA from B84 | 10,000 to 20,000 | `[[NUM:LORA_CURVE]]` | | |
 | ACT baseline (same demos, 10k steps) | - | arm mean 4.3 | 81 to 90 % | - |
 
 The released statistics fail; two ways of fixing them, with no training, give sensible predictions. B84 (our own
@@ -113,10 +116,14 @@ current-calibration SO-101 community datasets (from
 [multimodalart's Space](https://huggingface.co/spaces/multimodalart/flux-3-action-so101-sim), commit `09edebb`) give
 the lowest arm error (4.8 vs 5.5 deg mean) and the most balanced motion (every joint at 0.57 to 0.89 of the demo
 path, where B84 over-swings pan at 1.49x and barely lifts at 0.32x), but no better direction overall and wrist roll
-below chance (42 %). The LoRA trains from B84. After 2,500 of 20,000 microsteps it beats both on arm error (4.3 deg mean)
-and direction (74 %), though its gripper error (9.9 %) is still worse than holding still (8.5 %). An ACT policy
-trained on the same demos is ahead on direction (81 to 90 %) at the same arm error; the final comparison uses the 20k
-checkpoint and the real-arm attempts.
+below chance (42 %). The LoRA trains from B84. At 5,000 of 20,000 microsteps it has 3.6 deg mean arm error (B84 5.5,
+median 4.8, holding still 5.6) and 82 % direction (B84 66.5 %), and its gripper error (6.7 %) is now better than
+holding still (8.5 %). An ACT policy trained on the same demos reaches 4.3 deg and 81 to 90 % direction at 10k steps
+(as cited in pen_lora.md), so the LoRA matches ACT on direction with lower arm error. It learned to reach down (lift
+at 0.78x demo speed, B84 0.32x) and stopped over-swinging pan (0.76x, B84 1.49x), but still moves more cautiously
+than the demos (0.55 to 0.78x). The final comparison uses the 20k checkpoint and the real-arm attempts. Public
+adapter: [Oskrt/flux-3-action-so101-haller-pen-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora)
+(tag `step-5000`).
 
 ### Imagination: what FLUX expects to happen
 
@@ -124,8 +131,12 @@ FLUX 3 Action denoises future video latents together with every action chunk; Le
 them. Our wrapper ([predict_with_video.py](ws4/imagine/predict_with_video.py)) decodes them: 41 frames per chunk,
 scene and wrist, 0.07 to 1.4 s ahead. Decoding FLUX's imagined video leaves its actions unchanged (bit-identical, with
 `compile_model` on and off, measured on the RTX PRO 6000), adds no round trip in lazy mode and takes 0.11 s per
-chunk after the take. On held-out takes the imagined scene frame is closer to reality than "nothing moves" on 80 % of
-offsets (43 % on the fast-moving wrist view; [imagine/README.md](ws4/imagine/README.md)). We did not find any earlier public demo of decoded FLUX imagination.
+chunk after the take (on the live arm server with the 5k LoRA: identical commands on all 23 chunks, 0.34 s round trip
+either way). On held-out takes the imagined scene frame is closer to reality than "nothing moves" on 80 % of offsets
+(43 % on the fast-moving wrist view). **Fine-tuning made FLUX both act better and imagine better:** the 5k LoRA cuts
+the wrist-camera imagination error by 22 % at 0.07 to 0.27 s ahead and 17 % at 1.1 to 1.4 s (scene about 5 %);
+zero-shot imagines a smeared, broken pen by +1 s, the LoRA imagines it held cleanly, as it was
+([imagine/README.md](ws4/imagine/README.md)). We did not find any earlier public demo of decoded FLUX imagination.
 Report: [imagination.md](ws4/research/imagination.md). Clip: held-out take 101 replayed through FLUX, actual left and
 imagined right (`ws4/imagine/outputs/replay_ep101/imagination/imagined_vs_actual.mp4`, in the demo video and slides).
 
