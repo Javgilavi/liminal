@@ -221,6 +221,7 @@ class Session:
         if unknown_arms:
             raise ValueError(f"hold_arms names unknown arms {unknown_arms}")
         self._gate_note: dict[tuple[str, int], str] = {}  # (step, attempt) -> start gate verdict, for the trial notes
+        self._start_note: dict[tuple[str, int], str] = {}  # (step, attempt) -> the parked arm's pose at policy start
         # the start poses are set up by the operator; kept across runs (Executor.known_pose)
         self.known_pose = dict.fromkeys(ARMS, True)
         self.runs_dir = Path(cfg.runs_dir) if cfg.runs_dir else RUNS_DIR
@@ -695,6 +696,7 @@ class Session:
             on_hold=self.rig.mark_holding if self.rig is not None else None,
             ramp_order=self.rig.ramp_order if self.rig is not None else None,
             known_pose=self.known_pose,
+            on_policy_start=self._policy_start if self.rig is not None else None,
         )
         result = self.executor.run(plan)
         self._encode_frames(self.base_robot.get_observation())
@@ -775,6 +777,28 @@ class Session:
                     "ws4/single_arm/gate.py report q1 .. q6 gives the verdict per skill), then start a new run")
         return None
 
+    def _policy_start(self, run: Any) -> None:
+        """For a skill whose demos had the other arm parked (``other_arm_pose``, open_box: the pen arm tucked), its
+        measured pose as the policy starts, against the kit's recorded range (skill.json ``parked_other_arm``). Logged
+        only: the executor tucked that arm itself, and eval_skill.sh's 5 deg range check is not applied here (the lift
+        sags a few deg, which could refuse a good tuck; orchestrator 2026-10-18)."""
+        skill = run.skill
+        other = "right" if run.step.arm == "left" else "left"
+        if not skill.other_arm_pose or other not in self.rig.arms:
+            return
+        q = np.asarray(self.rig.arms[other].robot.joints(), dtype=float)[:5]
+        msg = f"{skill.name} starts with the {other} arm ({skill.other_arm_pose}) at {np.round(q, 1).tolist()}"
+        note = f"{other} arm at start {np.round(q, 1).tolist()}"
+        parked = (json.loads(Path(skill.kit).read_text()).get("parked_other_arm") or {}) if skill.kit else {}
+        if "min" in parked and "max" in parked:
+            lo, hi = np.asarray(parked["min"], float)[:5], np.asarray(parked["max"], float)[:5]
+            out = max(0.0, float(np.maximum(lo - q, q - hi).max()))
+            msg += (f"; its demos had it within {np.round(lo, 1).tolist()} .. {np.round(hi, 1).tolist()}, "
+                    f"{out:.1f} deg outside (logged only, not a start check)")
+            note += f", {out:.1f} deg outside its demo range"
+        self._start_note[(run.step.id, run.attempt)] = note
+        self.events.add("info", f"{run.step.id}: {msg}", step=run.step.id)
+
     def _ramp_refused(self, arm: str, zone: str) -> bool:
         ex = self.executor
         return ex is not None and ex.ramp_fallback(arm, zone)
@@ -801,6 +825,8 @@ class Session:
                  f"verifier={self.verifier.name}; other_arm={other}"
                  + (f"; start gate {self._gate_note[(run.step.id, run.attempt)]}"
                     if (run.step.id, run.attempt) in self._gate_note else "")
+                 + (f"; {self._start_note[(run.step.id, run.attempt)]}"
+                    if (run.step.id, run.attempt) in self._start_note else "")
                  + (f"; {self.runner_settings()}" if self.rig is not None else "")
                  + (f"; kit runner_args {' '.join(run.skill.runner_args)}" if run.skill.runner_args else "")
                  + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"

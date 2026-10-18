@@ -27,9 +27,11 @@ ssh -N -L 8790:127.0.0.1:8790 -o ExitOnForwardFailure=yes -i ~/.ssh/id_ed25519_o
 #    Attempts go to runs/trials_mock.jsonl, never to the graded log.
 cd ws4 && python -m orchestrator hmi --open --env haller --observe --planner claude --imagine lazy \
     --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token"
-# 3a. Rehearse ONE skill through the HMI. open_box alone: both arms folded at rest, type "open the box".
-#     A pen skill alone, with the box arm already holding the lid (handover from the haller HMI, below): add
-#     --hold-arm right and type e.g. "put the yellow cutter in the yellow slot".
+# 3a. Rehearse ONE skill through the HMI. open_box alone: both arms folded at rest, type "open the box"; in the same
+#     HMI session each pen skill can then be planned and run on its own while the box arm keeps holding the lid (an
+#     arm a policy left stays "unknown" across runs: its next ramp asks the operator first). A pen skill alone, with
+#     the box arm already holding the lid (handover from the haller HMI, below): add --hold-arm right and type e.g.
+#     "put the yellow cutter in the yellow slot".
 cd ws4 && python -m orchestrator hmi --open --env haller --hold-arm right --planner stub --operator oscar \
     --condition post_training --variant <variant> --checkpoint "<what skill_yellow_cutter serves>" \
     --token-cmd "ssh -i ~/.ssh/id_ed25519_osrdvs -p <ssh-port> root@<pod-ip> cat /workspace/flux_token"
@@ -55,7 +57,9 @@ verbatim task must equal the FLUX prompt, its `runner_args` and `other_arm_gate`
   the box arm, at most 1 % of the demo poses under the skill's clearance). A refusal ends the chain, failed, with the
   reason in red next to the run state and in the events ("REFUSED before it moved"); no retry, no replan, both arms
   keep holding their last command (the box arm keeps the lid). `python ws4/single_arm/gate.py report q1 .. q6` gives
-  the verdict per skill for a box-arm pose.
+  the verdict per skill for a box-arm pose. `open_box` has no gate: the executor tucks the pen arm itself, and its
+  pose at the start of open_box is logged in the events and the trial notes against the box takes' range (not a
+  check: the lift's sag could refuse a good tuck).
 - **Box arm holds**: `open_box` has `finish: hold`: once its check passes, nothing drives the box arm again in that
   run (a planned step on it is refused before it moves) and its torque stays on when the session closes, even at its
   launch pose (run_single_arm `--hold-other-arm` semantics). `--hold-arm right` does the same from launch for a box

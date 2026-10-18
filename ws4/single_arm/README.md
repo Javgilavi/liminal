@@ -52,6 +52,10 @@ Options added for it:
   head and wrist next to the reference take with a blend, the wrist room offset/scale/inliers, brightness and a hint.
 - `WS4_ACTION_STEPS=N` (or `--action-steps N`): execute N commands of each 42-command chunk before replanning
   (default 32). 16 gave the inserts; without prefetching the arm waits about 0.6 s per chunk (about 50 % at 16).
+- `ALIGN=1` in `eval_skill.sh` (or `--align` with `--home-check`): after the ramp home, the runner itself serves the
+  alignment page (same numbers and hint as `align_station.py`, on the placement port 8899) from its own cameras while
+  it holds the task arm at home, against the skill's home reference (`HOME_TAKE=N` picks the take, default the last
+  held-out one). Enter = done, then the usual home check; q / Ctrl-C = stop and park. Works for either arm.
 - `WS4_PREFETCH_TICKS=P` (or `--prefetch-ticks P`, off by default and for graded runs until the red-pen RAW 5k block
   is rerun with it): request the next chunk when P commands are left and keep executing; the new chunk replaces the
   queue from the index of the commands executed since its request (`flux/dual_arm_runner.py`, tests in
@@ -456,7 +460,10 @@ test box skill (built from the pen data with the right arm's columns) against th
 may be added: `connect_so101(args)`, `SingleArmRobot(so101, "left", send=, max_relative_target=)`,
 `build_guard(args, slot, calib_path, rest)`, `KeepOutGuard(cfg, keepout, slot, measured)`, `read_token(args)`,
 `warm_up(backend, robot, target, prompts)`, `move_to(robot, goal, guard_cfg, deg_per_tick, keys, keepout)`,
-`hold_here(robot)`, `disconnect_so101(robot, torque_off)`, `FakeSO101`, `keepout.KeepOut`. Callers must read the arm
+`hold_here(robot)`, `disconnect_so101(robot, torque_off)`, `FakeSO101`, `keepout.KeepOut`, `ARRIVE_TOL` (5 values,
+lift 8), `joint_order(keepout, start, goal, step=1.0)`, `gate.check(ko, other_q, demo_poses, max_below, samples=4)`,
+`gate.load_poses(path)`, and per skill `skills/<box|green|cutter|pen_lid>/skill.json` (`task`, `workspace`,
+`runner_args`, `other_arm_gate`) with its `workspace.json`. Callers must read the arm
 every tick before `guard.filter` (the keep-out compares against `robot.last_q`), call `hold_here` on any stop, and
 switch torque off at the end only if `so101.ws4_launch_torque` is False.
 

@@ -21,7 +21,8 @@
 # Median row gripper (M's gripper stats span 0..40, ours 0..100 with open = 100): M_START_GRIP (start-pose gripper,
 # default 100; 40 starts inside M's range) or M_GRIP_SCALE (e.g. 0.4: model = 0.4 x robot gripper), not both.
 # DRY_RUN=1 prints the runner commands and touches nothing. FAKE_ROBOT=1 runs against the real server with the fake
-# arm: no arm port opened, nothing logged. HOLD_OTHER (default 1 for the chain's pen-arm skills): the runner takes the
+# arm: no arm port opened, nothing logged. ALIGN=1 adds --align (live station alignment at the home check),
+# HOME_TAKE=N picks the reference take for it and the home check (default: the last held-out take). HOLD_OTHER (default 1 for the chain's pen-arm skills): the runner takes the
 # box arm over from the HMI and holds it at its pose (--hold-other-arm). Run preflight.py --skill <skill> first. Placement page:
 # http://127.0.0.1:8899 while the runner waits for Enter.
 set -euo pipefail
@@ -99,8 +100,13 @@ if [[ " ${ROWS[*]} " == *" lora "* ]]; then
   echo "pre-registered LoRA row: package $LORA, variant $LORA_VARIANT; $LORA_CHOICE"
 fi
 read -r -a SKILL_EXTRA <<< "$SKILL_RUNNER_ARGS"  # per-skill runner flags recorded in skill.json (cutter: slow zone)
+# ALIGN=1: after the ramp home, a live alignment page vs the home reference until Enter (station back on the
+# recording's spot). Horizon, lift stall and prefetch come from WS4_ACTION_STEPS / WS4_LIFT_STALL_DEG /
+# WS4_PREFETCH_TICKS in the environment (run_single_arm.py reads them).
+[ -n "${ALIGN:-}" ] && [ "$HOME_REF" != none ] && SKILL_EXTRA+=(--align)
 HOME_ARGS=()
 [ "$HOME_REF" != none ] && HOME_ARGS=(--home-check "$HOME_REF")
+[ "$HOME_REF" != none ] && [ -n "${HOME_TAKE:-}" ] && HOME_ARGS+=(--home-check-take "$HOME_TAKE")  # default: last take
 read -r -a SKILL_GATE <<< "$SKILL_GATE_ARGS"  # pen-arm chain skills: geometric box-arm gate (gate.py)
 read -r -a PARKED_LO <<< "$SKILL_PARKED_LO"
 read -r -a PARKED_HI <<< "$SKILL_PARKED_HI"

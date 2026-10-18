@@ -269,6 +269,11 @@ def test_final_chain_end_to_end_over_the_policy_server(tmp_path, chain_server):
         assert all("action horizon 16" in t.notes and "lift stall 25.0 deg" in t.notes and "prefetch off" in t.notes
                    for t in attempts)
         assert ["start gate ok" in t.notes for t in attempts] == [False, True, True, True]
+        # open_box: the tucked pen arm's pose at its start, against the box takes' range (logged, not checked)
+        tucked = np.round(s.vocab.station.poses["left"]["tucked"][:5], 1).tolist()
+        started = [e["msg"] for e in s.events.recent(500) if "open_box starts with the left arm (tucked)" in e["msg"]]
+        assert len(started) == 1 and f"at {tucked}" in started[0] and "0.0 deg outside" in started[0], started
+        assert "left arm at start" in attempts[0].notes and not any("arm at start" in t.notes for t in attempts[1:])
         assert "kit runner_args --slow-zone 0.04" in attempts[2].notes
         (chain,) = [t for t in trials if t.task == "final_chain"]
         assert chain.success and chain.steps_done == chain.steps_total == 4

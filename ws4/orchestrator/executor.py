@@ -145,6 +145,7 @@ class Executor:
         on_hold: Callable[[str], None] | None = None,
         ramp_order: Callable[[str, np.ndarray, np.ndarray], list[int] | None] | None = None,
         known_pose: dict[str, bool] | None = None,
+        on_policy_start: Callable[[StepRun], None] | None = None,
     ):
         self.runner = runner
         self.robot = robot
@@ -183,6 +184,7 @@ class Executor:
         self.held: set[str] = set(hold_arms)
         self.on_hold = on_hold
         self.ramp_order = ramp_order  # (arm, here, goal) -> joint order for the joint-by-joint ramp fallback, or None
+        self.on_policy_start = on_policy_start  # a FLUX policy is about to start (after every ramp): log the arms
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="verify")
         self._lock = threading.RLock()
         self._commands: list[tuple[str, Any]] = []
@@ -551,6 +553,11 @@ class Executor:
             self.ramp_mode(step.arm, False, skill)  # this skill's keep-out (envelope) and the policy limits
         if skill.is_flux:
             self.known_pose[step.arm] = False  # from here on the policy decides where the arm is
+            if self.on_policy_start is not None:
+                try:
+                    self.on_policy_start(run)
+                except Exception as exc:  # logging must never stop the arm
+                    self.events.add("warn", f"policy start log failed: {type(exc).__name__}: {exc}")
         try:
             if hasattr(backend, "begin"):
                 backend.begin(target, step.arm, skill)

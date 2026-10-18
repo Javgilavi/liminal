@@ -419,3 +419,24 @@ def test_prefetch_cuts_the_waiting(tmp_path, monkeypatch):
     (meta,) = _run(tmp_path / "on", monkeypatch, *common, "--prefetch-ticks", "32")
     assert meta["args"]["prefetch_ticks"] == 32
     assert waiting_share(tmp_path / "off") > 0.15 and waiting_share(tmp_path / "on") < 0.05
+
+
+def test_align_at_home_runs_until_enter_or_q(monkeypatch):
+    import types
+
+    monkeypatch.setattr(rsa.sys, "stdin", types.SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(rsa.time, "sleep", lambda s: None)
+
+    class ScriptedKeys:
+        def __init__(self, key, after):
+            self.key, self.left = key, after
+
+        def poll(self):
+            self.left -= 1
+            return self.key if self.left <= 0 else None
+
+    robot = rsa.SingleArmRobot(rsa.FakeSO101(), "left")
+    ref = np.random.default_rng(1).integers(0, 255, (480, 640, 3), dtype=np.uint8)
+    args = types.SimpleNamespace(placement_port=0)
+    assert rsa.align_at_home(args, robot, ScriptedKeys("\n", 3), ref, ref, "ref", period_s=0.0)
+    assert not rsa.align_at_home(args, robot, ScriptedKeys("q", 2), ref, ref, "ref", period_s=0.0)

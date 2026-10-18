@@ -1030,6 +1030,49 @@ def start_check(robot: SingleArmRobot, ref_img: np.ndarray, label: str, out: Pat
     return {"start_shift_px": [round(dx, 1), round(dy, 1)], "start_rot_deg": round(rot, 2)}
 
 
+def align_at_home(args: argparse.Namespace, robot: SingleArmRobot, keys: Keys, ref_head: np.ndarray,
+                  ref_wrist: np.ndarray, ref_name: str, period_s: float = 1.0) -> bool:  # fmt: skip
+    """--align: with the arm held at home, show the runner's own head and wrist frames against the home reference
+    (align_station.py's offset, scale, brightness and hint, page on --placement-port) until Enter; False on Ctrl-C/q.
+    The station (robot and table together) is moved by hand meanwhile; the arm keeps holding its home goal."""
+    import align_station as al
+    from placement import PlacementView
+
+    if not sys.stdin.isatty():
+        print("align: no terminal, skipped", flush=True)
+        return True
+    view = PlacementView(args.placement_port)
+    print(f"align page: {view.url} vs {ref_name}. Move the station until the wrist row lines up "
+          f"(good: |offset| < {al.GOOD['offset_px']:.0f} px, scale {al.GOOD['scale'][0]}..{al.GOOD['scale'][1]}). "
+          "Enter = done, go on to the home check; q / Ctrl-C = stop and park", flush=True)  # fmt: skip
+    try:
+        while True:
+            obs = robot.get_observation()
+            head, wrist = obs[IMG_HEAD], obs[WRIST_KEY[robot.slot]]
+            off = al.view_offset(ref_wrist, wrist)
+            bright = float(wrist.mean() / max(float(ref_wrist.mean()), 1.0))
+            advice, ok = al.hint(off, bright)
+            nums = ("wrist: no overlap with the reference" if off is None else
+                    f"wrist: offset {off['dx']:+.0f} px, {off['dy']:+.0f} px, scale {off['scale']:.2f}, "
+                    f"{off['inliers']} inliers")  # fmt: skip
+            lines = [f"{nums}, brightness {bright:.2f}", ("OK  " if ok else "->  ") + advice,
+                     "Enter in the terminal = done; q / Ctrl-C = stop and park"]
+            view.show(al.panel(ref_head, head, ref_wrist, wrist, lines))
+            print(time.strftime("%H:%M:%S"), lines[0], "|", lines[1], flush=True)
+            deadline = time.monotonic() + period_s
+            while True:  # keys are polled at least once per frame
+                key = keys.poll()
+                if key == "\n":
+                    return True
+                if key in ("q", "ctrl-c", "stop-file"):
+                    return False
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.05)
+    finally:
+        view.close()
+
+
 def check_at_home(args: argparse.Namespace, runner: DualArmRunner, robot: SingleArmRobot, keys: Keys,
                   session: Path) -> bool:  # fmt: skip
     """Ramp to the start pose (as an attempt does), then the runner's live frames and joints vs the at-home
@@ -1051,6 +1094,10 @@ def check_at_home(args: argparse.Namespace, runner: DualArmRunner, robot: Single
             return False
         time.sleep(1.0)
     session.mkdir(parents=True, exist_ok=True)
+    if getattr(args, "align", False):
+        ref_head, ref_wrist, _, ref_name = hc.load_refs(Path(args.home_check), args.home_check_take)
+        if not align_at_home(args, robot, keys, ref_head, ref_wrist, ref_name):
+            return False
     try:  # the arm holds at home here: a failed analysis is reported, the operator still decides
         ref_head, ref_wrist, ref_state, ref_name = hc.load_refs(Path(args.home_check), args.home_check_take)
         obs = robot.get_observation()
@@ -1144,6 +1191,9 @@ def main(argv: list[str] | None = None) -> None:
                    help="--backend act: commands executed per chunk before re-planning (default: the checkpoint's)")
     p.add_argument("--action-steps", type=int, default=_env_int("WS4_ACTION_STEPS"),
                    help="remote/fake: commands executed per chunk before re-planning (default: the package's 32)")
+    p.add_argument("--align", action="store_true",
+                   help="with --home-check: after the ramp home, a live alignment page vs the home reference until "
+                        "Enter (move the station onto the recording's spot)")
     p.add_argument("--prefetch-ticks", type=int, default=_env_int("WS4_PREFETCH_TICKS"),
                    help="request the next chunk when this many commands are left, executing meanwhile (0/unset = "
                         "off: the arm holds for each round trip; env WS4_PREFETCH_TICKS)")
