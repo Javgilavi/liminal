@@ -63,6 +63,7 @@ ASSETS = {
     "replay.json",
     "scene.json.gz",
     "setup.png",
+    "real-setup-twin.jpg",
     "twin-scene.png",
     "zero-shot-red.mp4",
 }
