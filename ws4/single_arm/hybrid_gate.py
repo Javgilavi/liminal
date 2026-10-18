@@ -10,7 +10,8 @@ Minimum path, because liminal's FK mapping for the Haller is not verified (``kin
   KeepOutGuard (1 deg/tick, keep-out, envelope), the stall and load freeze and the torque cap, as without the gate.
 - ``stop``, and ``edit`` / ``eef`` (a correction this mapping cannot execute): HybridStop is raised, which the runner
   turns into its e-stop freeze (``guard.estop()`` + ``hold_here``). Stop never claims success.
-- Any model, API or validation error also freezes (fail closed).
+- Any model, API or validation error also freezes (fail closed). In the orchestrator the freeze is the executor's
+  e-stop ("control error: ..."): every arm holds, Release + Resume retries the attempt.
 The gate never adds motion; the only commands are FLUX's own, through the same guard.
 """
 
@@ -52,27 +53,34 @@ def jpeg_base64(rgb: np.ndarray) -> str:
 
 
 class GatedBackend:
-    """A FluxBackend (flux.backends) whose every chunk Opus reviews first; one instance = one arm's gate."""
+    """A FluxBackend (flux.backends) whose every chunk Opus reviews first: one gate (history, frames) per runner target.
 
-    def __init__(self, inner: Any, config_path: str | Path, log_path: str | Path, *, controller: Any = None,
+    Used by run_single_arm (``--hybrid-config``) and by the ws4 orchestrator Session (``WS4_HYBRID_CONFIG``), where the
+    executor's ``begin`` hook starts a new episode at every step attempt.
+    """
+
+    def __init__(self, inner: Any, config_path: str | Path, log_path: str | Path, *, notify: Any = None,
                  encode: Any = jpeg_base64):  # fmt: skip
         import yaml
 
-        hybrid = _liminal_hybrid()
-        raw = yaml.safe_load(Path(config_path).read_text())
-        config = hybrid.HybridConfig(**raw)
+        self._hybrid = _liminal_hybrid()
+        path = Path(config_path)
+        raw = yaml.safe_load((path if path.is_absolute() or path.exists() else REPO / path).read_text())
+        model = Path(raw.get("model_path", "sim/single_arm/so101.xml"))
+        raw["model_path"] = str(model if model.is_absolute() or model.exists() else REPO / model)
+        config = self._hybrid.HybridConfig(**raw)
         if not config.enabled:
             raise SystemExit(f"{config_path}: enabled is false")
         if config.kinematics_verified:
             # Corrections would need liminal's local IK with this mapping, which this wrapper does not execute.
             raise SystemExit("the ws4 gate runs continue/stop only; use a kinematics_verified: false config")
         self.inner, self.config, self.encode = inner, config, encode
-        self.controller = controller or hybrid.HybridController(config)
+        self.notify = notify or (lambda message: print(message, flush=True))
+        self.controllers: dict[str, Any] = {}
         self.contract = inner.contract  # run_single_arm may replace it (--action-steps); the runner reads this one
         self.log_path = Path(log_path)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
-        self._executed: list[list[float]] | None = None
-        self._segment: Any = None
+        self._pending: dict[str, tuple[Any, list[list[float]]]] = {}
         self.decisions: list[dict] = []
 
     def __getattr__(self, name: str) -> Any:  # fetch_imagination, info, ... of the wrapped backend
@@ -84,41 +92,53 @@ class GatedBackend:
         with self.log_path.open("a") as stream:
             stream.write(json.dumps({"t": time.time(), "kind": kind, **values}, default=str) + "\n")
 
-    def new_attempt(self, task: str) -> None:
+    def new_attempt(self, task: str, target: str | None = None) -> None:
         """Every attempt is its own episode: no history or frames from the previous one."""
-        self.controller.reset()
-        self._executed = self._segment = None
-        self.log("hybrid_attempt", task=task, model=self.config.model)
+        for name in [target] if target is not None else list(self.controllers):
+            if name in self.controllers:
+                self.controllers[name].reset()
+            self._pending.pop(name, None)
+        self.log("hybrid_attempt", task=task, target=target, model=self.config.model)
+
+    def begin(self, target: str, arm: str, skill: Any) -> None:
+        """The ws4 executor's per-attempt hook (executor._start_step)."""
+        if hasattr(self.inner, "begin"):
+            self.inner.begin(target, arm, skill)
+        self.new_attempt(getattr(skill, "prompt", "") or getattr(skill, "name", ""), target)
 
     def predict(self, request: Any) -> Any:
         response = self.inner.predict(request)
         if request.target == "warmup":
             return response
+        target = request.target or "policy"
+        if target not in self.controllers:
+            self.controllers[target] = self._hybrid.HybridController(self.config)
+        controller = self.controllers[target]
         measured = [float(v) for v in np.asarray(request.states, dtype=np.float64)[-1]]
-        if self._segment is not None:
+        if target in self._pending:
             # The previous chunk's commands as handed to the runner (the guard may have clipped them; the request's
             # command history records the clipped ones for FLUX).
-            self.controller.record(self._segment, self._executed, measured, self.log)
-            self._segment = None
+            segment, executed = self._pending.pop(target)
+            controller.record(segment, executed, measured, self.log)
         frames = {role: self.encode(np.asarray(request.images[f"observation.images.{role}"])[-1])
                   for role in ("scene", "wrist")}  # fmt: skip
         commands = np.asarray(response.commands, dtype=np.float64)
         horizon = int(self.contract.n_action_steps)
         try:
-            segment = asyncio.run(self.controller.choose(
+            segment = asyncio.run(controller.choose(
                 goal=request.task, actions=commands.tolist(), observation={"state": measured, **frames},
                 max_steps=horizon, log=self.log))  # fmt: skip
         except Exception as exc:
-            print(f"OPUS GATE ERROR -> freeze: {type(exc).__name__}: {str(exc)[:160]}", flush=True)
-            raise HybridStop(f"gate error {type(exc).__name__}") from exc
+            self.notify(f"OPUS GATE ERROR -> freeze: {type(exc).__name__}: {str(exc)[:160]}")
+            raise HybridStop(f"Opus gate error {type(exc).__name__}") from exc
         decision = segment.decision
         self.decisions.append(decision)
         status = decision["assessment"]
-        print(f"OPUS {decision['mode']} {decision['steps']} ({status['execution_status']}, "
-              f"{status['intent_status']}): {decision['reason'][:200]}", flush=True)  # fmt: skip
+        self.notify(f"OPUS {decision['mode']} {decision['steps']} ({status['execution_status']}, "
+                    f"{status['intent_status']}): {decision['reason'][:200]}")  # fmt: skip
         if decision["mode"] == "stop":
             raise HybridStop(f"Opus stop: {decision['reason'][:100]}")
         if decision["mode"] != "student":
             raise HybridStop(f"Opus asked for an {decision['mode']} correction; mapping unverified, freezing")
-        self._segment, self._executed = segment, commands[:horizon].tolist()
+        self._pending[target] = (segment, commands[:horizon].tolist())
         return response
