@@ -21,6 +21,7 @@ PAGES = {
     "evidence/notes.html",
 }
 ASSETS = {
+    "paper-texture.svg",
     "preview-zero-shot-red.jpg",
     "preview-lora-red.jpg",
     "preview-real-prediction.jpg",

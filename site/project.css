@@ -878,21 +878,56 @@ footer a:hover {
     font-size: 27px;
   }
 }
-/* Warm paper and faint fibers keep the page quiet behind the demonstrations. */
+/* Uncoated paper: monochrome grain, fine fibers and softly shaded edges. */
 body {
   background-color: var(--paper);
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.045' filter='url(%23n)'/%3E%3C/svg%3E"),
-    radial-gradient(ellipse at 20% 0%, #fffaf0 0%, transparent 65%);
+    url("./assets/paper-texture.svg"),
+    radial-gradient(ellipse at 45% 0%, #f9f3e5a6, transparent 65%),
+    linear-gradient(
+      90deg,
+      #dfd8c9 0%,
+      #eee8da 14%,
+      #f2ecde 48%,
+      #eee8da 86%,
+      #dfd8c9 100%
+    );
   background-size:
-    180px 180px,
-    100% 1500px;
-  background-repeat: repeat, no-repeat;
+    320px 320px,
+    100% 1100px,
+    100% 100%;
+  background-repeat: repeat, no-repeat, no-repeat;
 }
 .button.light,
 .task-explorer,
 .demo-grid {
-  background-color: #faf7ef;
+  background-color: #f7f2e6;
+}
+.task-explorer,
+.architecture,
+.results-panel,
+.gallery-stage,
+#physical-panel {
+  background-image: url("./assets/paper-texture.svg");
+  background-size: 320px 320px;
+}
+.hero-media,
+.demo-grid,
+.task-explorer {
+  box-shadow:
+    0 2px 5px #51473307,
+    0 14px 35px #51473305;
+}
+@media (max-width: 600px) {
+  body {
+    background-image:
+      url("./assets/paper-texture.svg"),
+      linear-gradient(110deg, #e9e2d3, #f1ebdd 55%, #e9e3d5);
+    background-size:
+      320px 320px,
+      100% 100%;
+    background-repeat: repeat, no-repeat;
+  }
 }
 .intro-actions {
   flex-wrap: wrap;
