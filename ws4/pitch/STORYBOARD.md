@@ -1,7 +1,7 @@
 # Demo video storyboard and this morning's shot list
 
-**Status 12:20:** the edited video (v3, with the chain footage) comes from the video-cut session at about 12:50 in
-Google Drive `liminal/05_video`. Its captions must match NUMBERS.md 0.1b: the chain completed 4/4 in 2 of 3 runs,
+**Status 13:10:** the submission video is `gdrive:liminal/05_video/liminal_2min_v4.mp4` (video-cut), with the chain
+footage. Its captions must match NUMBERS.md 0.1b: the chain completed 4/4 in 2 of 3 runs,
 unguarded demo mode, box = scripted replay (not FLUX), red pen placed by the green-pen LoRA.
 
 Re-centred on the 4-skill chain, Sun 18 Oct about 08:15 CEST. Two cuts from one shoot: the **main cut (2:00)** for
@@ -21,7 +21,7 @@ red pen runs at the **pen84 spot**; box, green and cutter at **last night's spot
 |---|---|---|---|---|
 | 1 | **Red-pen insert, RAW 5k at horizon 16**, one full insert from reach to release, phone wide + runner video | about 07:00 to 07:45, first block (3 graded attempts, phone on each) | pen84 | Runner records scene and wrist automatically; the phone adds the wide shot. If no new success: use this morning's runner videos (HAVE, below) |
 | 2 | **Each skill once**: open the box and hold the lid (scripted replay of a recorded take, 72 in the final runs, film it as "not FLUX"); green pen; yellow cutter; red pen with the lid held | box (P3) and cutter about 08:15 to 09:00 after the augmented swap; green about 09:00 to 09:30; red pen lid-held: one check attempt with RAW 5k (expect a hold, labelled failed) unless an augmented red pen lands | last night's, P3 | Through the HMI (one run per goal) so the Haiku check shows; 10 to 20 s of each is enough |
-| 3 | **Full chain with the HMI on screen**: Plan, lanes, Approve, the four steps, each Haiku check turning green | about 09:30 to 11:30, 2 to 3 runs, best one kept | last night's, P3 | Screen-record the HMI and run the phone at the same time; this is `[[CLIP:HMI_CHAIN]]` |
+| 3 | **Full chain with the HMI on screen**: Plan, lanes, Approve, the four steps, each Haiku check turning green | about 09:30 to 11:30, 2 to 3 runs, best one kept | last night's, P3 | Screen-record the HMI and run the phone at the same time; the chain footage is in `liminal_2min_v4.mp4` |
 | 4 | **Imagination panel live** during the chain (`--imagine lazy`) | with P3; a first take in the pen84 HMI red-pen run at about 07:45 | | Screen recording of the panel; optional, replay clips exist (HAVE) |
 | 5 | **E-stop**: spacebar during a step, both arms freeze, the lid stays held, Release, Resume | about 07:45, during the pen84 HMI red-pen run (Release + Resume after) | any | 5 s; only if it fits |
 | 6 | **VR teleop b-roll**: Oscar in the Quest Pro, the arm following | sim mode in any 5-minute gap (for example a model swap); real arm only after 12:30 if time allows | any | 10 s; sim mode is fine, caption "sim" |
@@ -34,7 +34,7 @@ becomes one HMI clip per skill. After that, cut the video from what exists.
 
 | # | Time | Dur | Shot | Caption / voice-over | Source | Status |
 |---|---|---|---|---|---|---|
-| 1 | 0:00 | 5 s | Haller station photo, title "liminal: imagine, then act" | none, music in | `ws4/assets/photos/xlerobot_station.jpg` | HAVE |
+| 1 | 0:00 | 5 s | Haller station photo, title "liminal: imagine, then act" | none, music in | Drive `liminal/be17b137-1ea4-4e32-87af-edb29c8e3481.jpg` (the Haller at the venue; not the home photo) | HAVE |
 | 2 | 0:05 | 6 s | Zero-shot runaway (red SO-101): the arm never reaches the cups (`60s`, 4 s) | "Released FLUX 3 Action, zero-shot: 0 of 16" | `ws4/single_arm/runs/20261017_171141/attempt01/video.mp4` | HAVE |
 | 3 | 0:11 | 8 s | The contract: A to E table builds; lift error 19.9 to 3.2 deg | "A calibration contract, fixed offline, no training" | deck slides "contract", "diagnosis" (Present mode capture) | MAKE |
 | 4 | 0:19 | 8 s | VR teleop b-roll + the four datasets as captions (`60s`, 4 s) | "337 VR takes, four skills, one night" | shot P6 | RECORD |
@@ -66,4 +66,4 @@ becomes one HMI clip per skill. After that, cut the video from what exists.
   or 3x nearest-neighbour; do not stretch to 16:9.
 - Every robot clip is a real attempt at real speed unless the caption says 2x or 4x. Failed attempts are labelled.
 - Captions: one line, bottom, high contrast, numbers exactly as in NUMBERS.md section 0.
-- Export H.264, under 100 MB, upload where the submission form asks (`[[TEAM:VIDEO_URL]]`).
+- Export H.264, under 100 MB, upload where the submission form asks: https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view.

@@ -11,7 +11,10 @@ ws4/pitch/NUMBERS.md (section 0 first). Delete this comment.
 **ERH Physical AI Hackathon 2026, track "Imagine, Then Act" (Black Forest Labs FLUX 3 Action).**
 Team `[[TEAM:NAME]]`: `[[TEAM:MEMBERS]]`.
 
-Demo video: `[[TEAM:VIDEO_URL]]` · Slides: `[[TEAM:SLIDES_URL]]` · Adapters and data: [huggingface.co/Oskrt](https://huggingface.co/Oskrt) ·
+Repository: [github.com/Javgilavi/liminal](https://github.com/Javgilavi/liminal) · Project page:
+[javgilavi.github.io/liminal](https://javgilavi.github.io/liminal/) · Demo video:
+[liminal_2min_v4.mp4](https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view) · Slides: [hosted deck](https://claude.ai/artifact/FsptG2MfRYqkmaAqL4EDQm) (PDF: `liminal_slides.pdf` next to the video) ·
+Adapters and data: [huggingface.co/Oskrt](https://huggingface.co/Oskrt) ·
 How to train your own: [ws4/LORA_HOWTO.md](ws4/LORA_HOWTO.md)
 
 Our green XLeRobot "Haller" (two SO-101-style arms on a torso, a RealSense D455 head camera, a wrist camera per arm,
