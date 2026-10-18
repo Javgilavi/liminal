@@ -1,0 +1,74 @@
+{
+  "source_revision": "df25c60c3a1c4cb971e308bc3abc7d633f74285a",
+  "source_date": "2026-10-18",
+  "simulation": {
+    "title": "Corrected single-arm simulation comparison",
+    "task": "Red block into blue container",
+    "fps": 20,
+    "seeds": [
+      20000,
+      20001,
+      20002,
+      20003,
+      20004
+    ],
+    "train_episodes": 64,
+    "validation_episodes": 16,
+    "frames": 32220,
+    "models": [
+      {
+        "name": "Zero-shot",
+        "contact": 5,
+        "bilateral": 0,
+        "lift": 0,
+        "placement": 0,
+        "max_lift_cm": 1.92
+      },
+      {
+        "name": "Raw LoRA",
+        "contact": 5,
+        "bilateral": 3,
+        "lift": 2,
+        "placement": 0,
+        "max_lift_cm": 15.69
+      },
+      {
+        "name": "EMA LoRA",
+        "contact": 2,
+        "bilateral": 0,
+        "lift": 0,
+        "placement": 0,
+        "max_lift_cm": 1.28
+      }
+    ],
+    "n": 5,
+    "lift_threshold_cm": 3.5,
+    "sources": [
+      "docs/validation/single-arm-v1.md",
+      "experiments/single-arm-v1/simulation-results.json"
+    ]
+  },
+  "hardware": {
+    "official_trials": 16,
+    "execution_requests": 11,
+    "trials_with_commands": 9,
+    "independent_task_success_labels": 0,
+    "interpretation": "No hardware task success rate can be inferred from these engineering trials.",
+    "sources": [
+      "experiments/single-arm-v1/real-robot-results.json"
+    ]
+  },
+  "twin": {
+    "generated": 576,
+    "accepted": 243,
+    "green": 133,
+    "red": 110,
+    "evaluations_per_checkpoint": 20,
+    "placements_per_checkpoint": 0,
+    "interpretation": "Scripted training demonstrations and learned policy evaluation are different outcomes.",
+    "sources": [
+      "media/README.md",
+      "examples/dual_so101_sim/twin/README.md"
+    ]
+  }
+}
