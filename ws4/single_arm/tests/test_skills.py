@@ -168,3 +168,45 @@ def test_envelope_gap_samples_inside_each_voxel():
     assert gap.shape == (len(ws.env_cells),)
     centre_only = build_skill.envelope_gap(ws, [box_arm], samples=1)
     assert np.all(gap <= centre_only + 1e-12)  # points inside a voxel can only come closer than its centre
+
+
+GREEN = HERE / "skills" / "green"
+GREEN_HOLD = [12.13, -13.80, 12.26, 37.54, 29.93, 0.87]  # box arm during the green and cutter takes
+BOX_TAKE_74_END = [4.2, -31.4, 48.4, -2.3, 67.6, 0.9]  # a box-skill end pose that intrudes into green's envelope
+RED_PEN_HOLD = [0.88, 15.12, -5.85, 32.62, 14.64, 0.87]
+
+
+def _green_gate():
+    if not (GREEN / "demo_poses.npz").exists():
+        pytest.skip("skills/green has no gate yet (gate.py write green)")
+    import gate
+
+    info = json.loads((GREEN / "skill.json").read_text())
+    return gate, KeepOut.load(REPO / info["workspace"]), gate.load_poses(GREEN / "demo_poses.npz"), info
+
+
+def test_gate_allows_the_recorded_hold_and_refuses_intruding_box_poses():
+    gate, ko, poses, info = _green_gate()
+    ok, d = gate.check(ko, GREEN_HOLD, poses)
+    assert ok and d["envelope_voxels_inside"] == 0, d
+    ok, d = gate.check(ko, BOX_TAKE_74_END, poses)
+    assert not ok and d["envelope_voxels_inside"] > 0, d
+    ok, d = gate.check(ko, RED_PEN_HOLD, poses)
+    assert not ok, d
+    g = info["other_arm_gate"]
+    assert g["reason"].startswith("the box-skill end pose varies") and g["max_below"] == 0.01
+    assert g["joint_lo"][4] < 29.93 < g["joint_hi"][4]  # the loose range keeps the recorded hold
+
+
+def test_eval_skill_passes_the_gate(tmp_path):
+    green = tmp_path / "green"
+    green.mkdir()
+    (green / "skill.json").write_text(json.dumps({
+        "skill": "green", "arm": "left", "task": "t", "workspace": "w", "layouts": "l", "validation": {"ok": True},
+        "other_arm_gate": {"joint_lo": [-5, -40, -30, -30, 20, 0], "joint_hi": [30, 35, 55, 50, 95, 100],
+                           "demo_poses": "d.npz", "max_below": 0.01}}))  # fmt: skip
+    out = _dry_run(tmp_path, ("SKILL", "green"))
+    assert out.returncode == 0, out.stderr
+    cmd = [line for line in out.stdout.splitlines() if line.startswith("python ")][-1]
+    assert "--other-arm-lo -5 -40 -30 -30 20 0 --other-arm-hi 30 35 55 50 95 100 --other-arm-tol 0" in cmd
+    assert "--other-arm-demo-poses d.npz --other-arm-gate-max-below 0.01" in cmd

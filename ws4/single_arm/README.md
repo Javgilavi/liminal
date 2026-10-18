@@ -36,6 +36,29 @@ unless marked UNVERIFIED. Graded attempts live in `ws4/eval/trials.jsonl` (`task
 
 ## Haller (XLeRobot tower): FLUX on the robot-left arm (red pen into its slot in a cardboard box)
 
+### Red-pen benchmark, 18 Oct (first real-arm inserts)
+
+Full table, setup and caveats: [benchmarks/red_pen_2026-10-18.md](benchmarks/red_pen_2026-10-18.md) (regenerate with
+`python ws4/single_arm/benchmark.py`). On the rebuilt pen84 table, FLUX RAW 5k (B84 + `lora_pen84` 005000) at an
+action horizon of 16 inserted the pen in 3 of 5 attempts (9/15 steps); at the package horizon of 32 the best
+checkpoint (RAW 5k) reached 8/15 steps without an insert, ACT pen84 100k 8/15 without an insert, and the lid-held
+scene 0/15 (FLUX held still: the pen84 LoRA never saw that scene, and the wrist camera's view of the room decided
+hold or reach). Run folders are backed up to `~/haller_rescue/single_arm_2026-10-18/` and the real-serve-6000 volume
+(`/workspace/single_arm_runs/`).
+
+Options added for it:
+
+- `align_station.py`: camera-only live page (http://127.0.0.1:8899) that puts the station back on a recording's spot:
+  head and wrist next to the reference take with a blend, the wrist room offset/scale/inliers, brightness and a hint.
+- `WS4_ACTION_STEPS=N` (or `--action-steps N`): execute N commands of each 42-command chunk before replanning
+  (default 32). 16 gave the inserts; without prefetching the arm waits about 0.6 s per chunk (about 50 % at 16).
+- `WS4_LIFT_STALL_DEG=D` (or `--lift-stall-deg D`): the shoulder lift's stall threshold. The 7.4 V lift trails its
+  command by 8-10 deg under load near the 60 % torque cap, which stopped 9 of 15 attempts at 8 deg; the load freeze
+  still catches a real push.
+- Ramps: a lift short of its goal by up to 8 deg counts as arrived (other joints 6), and a ramp refused by the
+  keep-out (after an insert the straight return path entered the torso zone) falls back to one joint at a time in an
+  order the keep-out accepts at every step.
+
 The red arm was retired (elbow servo damaged). The team demo moved to Oscar's green Haller station; demos come from VR
 teleop (ws4-vr2, haller_ws HMI), this workstream provides calibration, safety and the FLUX runs.
 
@@ -354,6 +377,68 @@ Red pen in the final setup: the current red-pen envelope (104 old takes, box at 
 box at its current position. Near the slots, 54 % of the green commands fall outside its TCP envelope (up to 5.3 cm),
 pan goes up to 10 deg past its joint envelope, and 34 % cross its midline. With the midline at -0.23 it still refuses
 11,298 of 53,042 green steps. About 10 red-pen takes in the final setup are recommended, built like green.
+
+**Cutter skill, built 18 Oct 04:10 (no references yet).** `ws4/haller_put_the_yellow_cutter_in_the_yellow_slot`, 70
+takes (drop 10, 27, 29, 30, 38, 44, 45, 50; held-out 67-69 at P3), box arm holding the lid. The standing rule gives
+midline -0.21 m (demos reach -0.154 m measured / -0.175 m commanded), takes 3, 5, 31, 52 out of the envelope (mast
+outliers, 6.5 %) and the 2 cm trim (34 voxels; at least 2.12 cm guaranteed). That still left the 4 cm box-arm
+clearance refusing 52 of 58 takes: the pen arm's forearm and wrist pass the lid-holding box arm's shoulder and upper
+arm next to the yellow slot (1.7 cm measured, 1.3 cm commanded). The orchestrator decided on a 1.0 cm clearance for
+the cutter only, with a **slow zone**:
+- whenever the arm's capsules are within 4 cm of the other arm's (measured), `KeepOutGuard` caps arm steps at 0.5 deg
+  per tick from the previous command;
+- `run_attempt` freezes on 50 % of the torque cap for 0.2 s instead of 70 % for 0.3 s.
+
+Runner flags `--slow-zone 0.04 --slow-step 0.5 --slow-load-sustain 0.5 --slow-load-ticks 6`, recorded in skill.json
+`runner_args` and passed by eval_skill.sh; off for every other skill. Result: 0 refused over the 58 good takes with
+the station zones (49,950 steps) and the held-out takes with the envelope (2,364). Train with the envelope: 2 of
+47,586, both measured states in take 66 (commands pass). The slow zone covers 4.4 % of the demo ticks, in 31 of 58
+takes. Fake-robot tests: in the zone a 10 deg command moves 0.5 deg, and a 55 % load freezes there but not outside.
+
+**Box-arm gate for the pen-arm chain skills (18 Oct 04:55).** The box arm holds the lid wherever the FLUX box skill
+ended, and that varies run to run. Box demos' end poses (59 good takes, last second): lift -25..25, elbow -11..41,
+roll 45..85 deg (p5..p95). The green/cutter recordings held at roll 29.9 and the red-pen session at roll 14.6, both
+below every box end, so a ±5 deg range around a recorded hold would refuse nearly every real run. Approved by the
+orchestrator, [gate.py](gate.py) replaces it for green, cutter and pen_lid:
+- a loose joint sanity range: box ends plus the skill's recorded hold, each widened by 5 deg;
+- a geometric gate with the live box-arm pose: refuse when any envelope voxel lies inside the box arm's capsules, or
+  when more than 1 % of the skill's saved demo poses (about 3,000, `demo_poses.npz`) fall under its other-arm
+  clearance (green 4 cm, cutter 1 cm).
+
+It is recorded in skill.json `other_arm_gate`, checked at the home check and before every attempt, and passed by
+eval_skill.sh. The per-tick capsule check and the cutter's slow zone stay the safety guard. Verdicts:
+- the recorded hold and the median box end: allowed for both;
+- box take 74's end: refused for both (envelope voxels inside the box arm);
+- take 38's end: refused for the cutter only;
+- the red-pen hold: refused for both.
+
+`BOX_END="q1 .. q6" bash ws4/single_arm/chain_dryrun.sh` (or `gate.py report q1 .. q6`) shows the verdict per pen
+skill for a box result before a demo run.
+
+**Handover from the HMI to the runner (pen-arm chain skills, box arm holding the lid).** The HMI's `down.sh` drops
+torque on both arms (recorder notes, 18 Oct 02:37), and the runner takes the box arm over with `--hold-other-arm`
+(eval_skill.sh sets it for green, cutter and pen_lid). It caps Torque_Limit, writes Goal_Position = the box arm's
+present position, then enables torque and verifies. It never commands that arm anywhere else, and leaves it holding
+(torque on) when it exits. First real handover 18 Oct 03:41: it took the box arm over and held it (torque on,
+goal = present), then the start check refused correctly: the box arm had dropped to a folded pose when down.sh cut
+torque ([-2.5, -95.2, 97.9, 65.7, 14.7], lift 56 deg outside the pen_lid range). Re-placing it: support it,
+`python ws4/single_arm/torque_off.py --port /dev/haller_arm_left --robot-id haller_left` (typed confirmation),
+place it holding the lid as in the takes (`show_joints.py` streams its joints; `gate.py report q1..q6` gives the
+verdict), then start the session again and hold it until the runner prints `held`.
+1. Oscar supports the lid and both arms by hand.
+2. `bash ~/haller_ws/scripts/quest-teleop/down.sh`, then check the ports are free:
+   `fuser $(readlink -f /dev/haller_arm_right /dev/haller_arm_left) || echo free`.
+3. Fold the pen arm down onto its rest by hand. The runner parks it back at its launch pose at the end and switches
+   its torque off there, so the launch pose must be the folded rest, not mid-air.
+4. Still supporting the lid: `python ws4/single_arm/preflight.py --skill green` (read-only, about 30 s: ports, EEPROM
+   vs calibration files for both arms, servo health, cameras).
+5. Start the session command. Its first runner line is `other arm (/dev/haller_arm_left) held at [...]: torque on,
+   goal = its own pose`: from then on the box arm holds the lid and Oscar can let go. The pen arm then connects at its
+   rest (torque on), the home check ramps it to home, and the box-arm gate prints its verdict with the live pose.
+   REFUSED means the box arm holds the lid somewhere the skill's demos never had it: re-place it through the HMI
+   and start again.
+6. At the end the pen arm parks at rest (torque off). The box arm keeps holding the lid (torque on): support the lid
+   before powering it off or starting the HMI again.
 
 Tested without the arm: 8 tests in `tests/test_skills.py` (table, right-arm keep-out, mirrored home check, refs index,
 provisional split, eval_skill commands for the box on the right arm, the refusal gate). There was also a fake-robot run of a

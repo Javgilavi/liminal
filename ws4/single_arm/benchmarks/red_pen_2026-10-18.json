@@ -1,0 +1,537 @@
+{
+ "FLUX RAW 10k, lid-held scene (P3), horizon 32": {
+  "note": "lid held up by the box arm; pen84 LoRA never saw it",
+  "attempts": [
+   {
+    "attempt": 1,
+    "layout": "P3",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": false,
+    "gripper_shut_s": 18.4,
+    "keepout_refusals": {
+     "tcp_env": 31
+    },
+    "chunks": 24,
+    "run": "ws4/single_arm/runs/20261018_034531/attempt01"
+   },
+   {
+    "attempt": 2,
+    "layout": "P3",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": false,
+    "gripper_shut_s": 6.5,
+    "keepout_refusals": {},
+    "chunks": 24,
+    "run": "ws4/single_arm/runs/20261018_034531/attempt02"
+   },
+   {
+    "attempt": 3,
+    "layout": "P3",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop (keep-out: tcp_env refused for 45 ticks of the last 60)",
+    "end_kind": "keep-out stop",
+    "duration_s": 21.4,
+    "moved_5deg_in_3s": false,
+    "gripper_shut_s": 11.8,
+    "keepout_refusals": {
+     "tcp_env": 59
+    },
+    "chunks": 13,
+    "run": "ws4/single_arm/runs/20261018_034941/attempt02"
+   },
+   {
+    "attempt": 4,
+    "layout": "P3",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop (keep-out: tcp_env refused for 45 ticks of the last 60)",
+    "end_kind": "keep-out stop",
+    "duration_s": 30.0,
+    "moved_5deg_in_3s": false,
+    "gripper_shut_s": 15.2,
+    "keepout_refusals": {
+     "tcp_env": 60
+    },
+    "chunks": 18,
+    "run": "ws4/single_arm/runs/20261018_034941/attempt03"
+   },
+   {
+    "attempt": 5,
+    "layout": "P3",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop (keep-out: tcp_env refused for 45 ticks of the last 60)",
+    "end_kind": "keep-out stop",
+    "duration_s": 55.7,
+    "moved_5deg_in_3s": false,
+    "gripper_shut_s": 35.1,
+    "keepout_refusals": {
+     "tcp_env": 157
+    },
+    "chunks": 33,
+    "run": "ws4/single_arm/runs/20261018_034941/attempt04"
+   }
+  ]
+ },
+ "ACT pen84 100k, pen84 table": {
+  "note": "ACT session, box-arm tolerance 15",
+  "attempts": [
+   {
+    "attempt": 1,
+    "layout": "A",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 0.9,
+    "keepout_refusals": {},
+    "chunks": 35,
+    "run": "ws4/single_arm/runs/20261018_041957/attempt01"
+   },
+   {
+    "attempt": 2,
+    "layout": "B",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 0.9,
+    "keepout_refusals": {},
+    "chunks": 35,
+    "run": "ws4/single_arm/runs/20261018_041957/attempt02"
+   },
+   {
+    "attempt": 3,
+    "layout": "C",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 0.9,
+    "keepout_refusals": {},
+    "chunks": 35,
+    "run": "ws4/single_arm/runs/20261018_041957/attempt03"
+   },
+   {
+    "attempt": 4,
+    "layout": "D",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 0.9,
+    "keepout_refusals": {},
+    "chunks": 35,
+    "run": "ws4/single_arm/runs/20261018_041957/attempt04"
+   },
+   {
+    "attempt": 5,
+    "layout": "A",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 0.9,
+    "keepout_refusals": {},
+    "chunks": 35,
+    "run": "ws4/single_arm/runs/20261018_041957/attempt05"
+   }
+  ]
+ },
+ "FLUX EMA 10k, pen84 table, horizon 32": {
+  "note": "stall 8 deg on every joint",
+  "attempts": [
+   {
+    "attempt": 1,
+    "layout": "A",
+    "steps_done": 1,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 9 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 115.9,
+    "moved_5deg_in_3s": false,
+    "gripper_shut_s": 11.3,
+    "keepout_refusals": {},
+    "chunks": 69,
+    "run": "ws4/single_arm/runs/20261018_044837/attempt01"
+   },
+   {
+    "attempt": 2,
+    "layout": "B",
+    "steps_done": 1,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 120.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 3.3,
+    "keepout_refusals": {
+     "tcp_env": 295
+    },
+    "chunks": 71,
+    "run": "ws4/single_arm/runs/20261018_044837/attempt02"
+   },
+   {
+    "attempt": 3,
+    "layout": "C",
+    "steps_done": 1,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 8 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 85.7,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 12.9,
+    "keepout_refusals": {
+     "table": 42
+    },
+    "chunks": 51,
+    "run": "ws4/single_arm/runs/20261018_044837/attempt03"
+   },
+   {
+    "attempt": 4,
+    "layout": "D",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 8 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 79.4,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.6,
+    "keepout_refusals": {},
+    "chunks": 47,
+    "run": "ws4/single_arm/runs/20261018_044837/attempt04"
+   },
+   {
+    "attempt": 5,
+    "layout": "A",
+    "steps_done": 1,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 8 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 89.5,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.4,
+    "keepout_refusals": {
+     "table": 3
+    },
+    "chunks": 53,
+    "run": "ws4/single_arm/runs/20261018_044837/attempt05"
+   }
+  ]
+ },
+ "FLUX RAW 10k, pen84 table, horizon 32": {
+  "note": "stall 8 deg on every joint",
+  "attempts": [
+   {
+    "attempt": 1,
+    "layout": "A",
+    "steps_done": 1,
+    "interventions": 0,
+    "end": "stop (keep-out: table refused for 45 ticks of the last 60)",
+    "end_kind": "keep-out stop",
+    "duration_s": 38.7,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {
+     "table": 61
+    },
+    "chunks": 23,
+    "run": "ws4/single_arm/runs/20261018_050002/attempt01"
+   },
+   {
+    "attempt": 2,
+    "layout": "B",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "timeout",
+    "end_kind": "timeout",
+    "duration_s": 120.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.4,
+    "keepout_refusals": {},
+    "chunks": 71,
+    "run": "ws4/single_arm/runs/20261018_050002/attempt02"
+   },
+   {
+    "attempt": 3,
+    "layout": "C",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop (keep-out: joint_env refused for 45 ticks of the last 60)",
+    "end_kind": "keep-out stop",
+    "duration_s": 82.8,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {
+     "joint_env": 78
+    },
+    "chunks": 49,
+    "run": "ws4/single_arm/runs/20261018_050002/attempt03"
+   },
+   {
+    "attempt": 4,
+    "layout": "D",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 10 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 109.3,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {},
+    "chunks": 65,
+    "run": "ws4/single_arm/runs/20261018_050002/attempt04"
+   },
+   {
+    "attempt": 5,
+    "layout": "A",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop (keep-out: table refused for 45 ticks of the last 60)",
+    "end_kind": "keep-out stop",
+    "duration_s": 33.1,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {
+     "table": 45,
+     "tcp_env": 16
+    },
+    "chunks": 20,
+    "run": "ws4/single_arm/runs/20261018_050002/attempt05"
+   }
+  ]
+ },
+ "FLUX RAW 5k, pen84 table, horizon 32": {
+  "note": "stall 8 deg on every joint",
+  "attempts": [
+   {
+    "attempt": 1,
+    "layout": "A",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 10 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 40.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.6,
+    "keepout_refusals": {},
+    "chunks": 24,
+    "run": "ws4/single_arm/runs/20261018_050840/attempt01"
+   },
+   {
+    "attempt": 2,
+    "layout": "B",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 9 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 13.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {},
+    "chunks": 8,
+    "run": "ws4/single_arm/runs/20261018_050840/attempt02"
+   },
+   {
+    "attempt": 3,
+    "layout": "C",
+    "steps_done": 1,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 9 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 18.4,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {},
+    "chunks": 11,
+    "run": "ws4/single_arm/runs/20261018_051358/attempt03"
+   },
+   {
+    "attempt": 4,
+    "layout": "D",
+    "steps_done": 2,
+    "interventions": 0,
+    "end": "stop (stall: shoulder_lift lagged 9 deg for 15 ticks)",
+    "end_kind": "stall freeze",
+    "duration_s": 20.1,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {},
+    "chunks": 12,
+    "run": "ws4/single_arm/runs/20261018_051358/attempt04"
+   },
+   {
+    "attempt": 5,
+    "layout": "A",
+    "steps_done": 1,
+    "interventions": 0,
+    "end": "stop (keep-out: table refused for 45 ticks of the last 60)",
+    "end_kind": "keep-out stop",
+    "duration_s": 30.2,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {
+     "table": 45
+    },
+    "chunks": 18,
+    "run": "ws4/single_arm/runs/20261018_051358/attempt05"
+   }
+  ]
+ },
+ "FLUX RAW 5k, horizon 32, lift stall 25": {
+  "note": "one attempt (load freeze), then horizon 16",
+  "attempts": [
+   {
+    "attempt": 6,
+    "layout": "A",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop (load: shoulder_lift at 72% of the torque cap)",
+    "end_kind": "load freeze",
+    "duration_s": 19.7,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 1.5,
+    "keepout_refusals": {},
+    "chunks": 12,
+    "run": "ws4/single_arm/runs/20261018_051805/attempt01"
+   }
+  ]
+ },
+ "FLUX RAW 5k, horizon 16, lift stall 25": {
+  "note": "A B C in one session, D A resumed (START_AT=4); the successes ended with the stop key after the insert, D and A were stopped by Oscar at 26 s and 43 s without a reach",
+  "attempts": [
+   {
+    "attempt": 7,
+    "layout": "A",
+    "steps_done": 3,
+    "interventions": 0,
+    "end": "stop ('\\n')",
+    "end_kind": "operator stop",
+    "duration_s": 93.9,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 2.1,
+    "keepout_refusals": {
+     "base": 1,
+     "torso": 2,
+     "tcp_env": 26
+    },
+    "chunks": 81,
+    "run": "ws4/single_arm/runs/20261018_051926/attempt01"
+   },
+   {
+    "attempt": 8,
+    "layout": "B",
+    "steps_done": 3,
+    "interventions": 0,
+    "end": "stop ('\\n')",
+    "end_kind": "operator stop",
+    "duration_s": 91.1,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 2.2,
+    "keepout_refusals": {},
+    "chunks": 78,
+    "run": "ws4/single_arm/runs/20261018_052519/attempt02"
+   },
+   {
+    "attempt": 9,
+    "layout": "C",
+    "steps_done": 3,
+    "interventions": 0,
+    "end": "stop ('\\n')",
+    "end_kind": "operator stop",
+    "duration_s": 47.9,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 2.1,
+    "keepout_refusals": {
+     "tcp_env": 52
+    },
+    "chunks": 41,
+    "run": "ws4/single_arm/runs/20261018_052519/attempt03"
+   },
+   {
+    "attempt": 12,
+    "layout": "D",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop ('\\n')",
+    "end_kind": "operator stop",
+    "duration_s": 26.4,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 2.0,
+    "keepout_refusals": {
+     "table": 15
+    },
+    "chunks": 23,
+    "run": "ws4/single_arm/runs/20261018_053221/attempt04"
+   },
+   {
+    "attempt": 13,
+    "layout": "A",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop ('\\n')",
+    "end_kind": "operator stop",
+    "duration_s": 43.0,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 2.2,
+    "keepout_refusals": {
+     "tcp_env": 1
+    },
+    "chunks": 38,
+    "run": "ws4/single_arm/runs/20261018_053221/attempt05"
+   }
+  ]
+ },
+ "FLUX RAW 5k, horizon 8, lift stall 25": {
+  "note": "layouts A B (operator stopped both, session ended)",
+  "attempts": [
+   {
+    "attempt": 10,
+    "layout": "A",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop ('\\n')",
+    "end_kind": "operator stop",
+    "duration_s": 66.4,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 2.6,
+    "keepout_refusals": {},
+    "chunks": 75,
+    "run": "ws4/single_arm/runs/20261018_052854/attempt01"
+   },
+   {
+    "attempt": 11,
+    "layout": "B",
+    "steps_done": 0,
+    "interventions": 0,
+    "end": "stop ('\\n')",
+    "end_kind": "operator stop",
+    "duration_s": 70.2,
+    "moved_5deg_in_3s": true,
+    "gripper_shut_s": 2.7,
+    "keepout_refusals": {},
+    "chunks": 79,
+    "run": "ws4/single_arm/runs/20261018_052854/attempt02"
+   }
+  ]
+ }
+}

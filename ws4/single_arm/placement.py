@@ -112,9 +112,12 @@ class PlacementView:
             return self._jpeg
 
     def update(self, live: np.ndarray, ref: np.ndarray, label: str) -> np.ndarray:
+        return self.show(composite(live, ref, label))
+
+    def show(self, img: np.ndarray) -> np.ndarray:
+        """Serve an already composed RGB image (align_station.py builds its own)."""
         import cv2
 
-        img = composite(live, ref, label)
         ok, buf = cv2.imencode(".jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 80])
         if ok:
             with self._lock:

@@ -25,6 +25,7 @@ policy server through the SSH tunnel.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import select
@@ -34,7 +35,7 @@ import subprocess
 import sys
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -65,6 +66,7 @@ from placement import PlacementView, composite, load_refs, read_rgb, ref_shift  
 
 CHECKPOINT = "black-forest-labs/flux-3-action-so101@0713a7a"  # weights identical to c9e13b2 (flux/checkpoint_facts.md)
 POLICY_BACKENDS = ("remote", "act")  # learned policies: warmed up, graded and logged
+ARRIVE_TOL = np.array([6.0, 8.0, 6.0, 6.0, 6.0])  # move_to: deg per arm joint at which a ramp has arrived
 STOP_FILE = HERE / "STOP"
 KEY_FILE = HERE / "KEY"  # one character, read once: lets a headless operator answer the same prompts as the keyboard
 RUNS = HERE / "runs"
@@ -317,6 +319,67 @@ def station_parity(args: argparse.Namespace):
     return transforms, controls
 
 
+class FakeOtherArmHolder:
+    """Test stand-in for ``OtherArmHolder``: holds a fixed pose (``--fake-other-q``, default ``FAKE_HOLD``)."""
+
+    FAKE_HOLD = np.array([12.13, -13.8, 12.26, 37.54, 29.93, 0.87])
+
+    def __init__(self, port: str, robot_id: str, torque_limit: float, pose: Any = None):
+        self.hold_q = np.asarray(pose, float) if pose is not None else self.FAKE_HOLD.copy()
+        self.closed = False
+
+    def read(self) -> np.ndarray:
+        return self.hold_q.copy()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class OtherArmHolder:
+    """Takes over the other arm and holds it exactly where it is (the chain: the box arm keeps the lid open while a
+    pen skill runs; the HMI held it until now). Order, as on the task arm: cap Torque_Limit, write Goal_Position = its
+    present position (raw ticks; on these arms that write already switches torque on), then enable torque and
+    verify. It is never commanded anywhere else. ``close`` releases the port with torque left ON, so the arm keeps
+    holding the lid after the runner exits: support the lid before switching it off. Hardware path UNVERIFIED
+    until the first handover on the Haller (fake-arm tests only)."""
+
+    def __init__(self, port: str, robot_id: str, torque_limit: float):
+        from show_joints import JOINTS, open_bus
+
+        self.joints = list(JOINTS)
+        self.bus = open_bus(port, robot_id)  # connect + read only
+        present = self.bus.sync_read("Present_Position", normalize=False, num_retry=3)
+        for motor in self.bus.motors:
+            if motor != "gripper":
+                self.bus.write("Torque_Limit", motor, int(torque_limit * 10), num_retry=3)
+        self.bus.sync_write("Goal_Position", present, normalize=False, num_retry=3)
+        self.bus.enable_torque(num_retry=3)
+        torque = self.bus.sync_read("Torque_Enable", normalize=False, num_retry=3)
+        if not all(torque.values()):
+            raise SystemExit(f"other arm: torque did not come on everywhere: {torque}")
+        self.hold_q = self.read()
+        print(f"other arm ({port}) held at {np.round(self.hold_q, 1)}: torque on, goal = its own pose", flush=True)
+
+    def read(self) -> np.ndarray:
+        q = self.bus.sync_read("Present_Position", self.joints, num_retry=3)
+        return np.array([q[j] for j in self.joints])
+
+    def close(self) -> None:
+        self.bus.port_handler.closePort()  # no torque write: the arm keeps holding
+        print("other arm released by the runner with torque ON (still holding): support it before power-off",
+              flush=True)  # fmt: skip
+
+
+OTHER_ARM_READER: Any = None  # set while the runner holds the other arm (its port is ours then)
+
+
+def read_other(args: argparse.Namespace) -> np.ndarray:
+    """The other arm's pose: from the holder when the runner holds it, else read-only from its port."""
+    if OTHER_ARM_READER is not None:
+        return OTHER_ARM_READER()
+    return read_arm_joints(args.other_arm_port, args.other_arm_id)
+
+
 def disconnect_so101(robot: Any, torque_off: bool = True) -> None:
     for camera in robot.cameras.values():
         camera.disconnect()
@@ -335,22 +398,41 @@ class KeepOutGuard(SafetyGuard):
         self.keepout, self.slot, self.measured = keepout, slot, measured
         self.counts = dict.fromkeys(ZONES, 0)
         self.last_zone = ""
+        # Slow zone (off unless set): while the measured arm is within ``slow_zone`` m of the parked other arm, arm
+        # joints move at most ``slow_step`` deg per tick from the previous command; run_attempt also lowers the load
+        # freeze there. Used where a skill's demos pass close to the other arm (cutter: lid-holding box arm).
+        self.slow_zone: float | None = None
+        self.slow_step = 0.5
+        self.in_slow_zone = False
+        self.slow_ticks = 0
 
     def filter(self, command: np.ndarray, previous: np.ndarray):
         out, report = super().filter(command, previous)
         self.last_zone = ""
+        self.in_slow_zone = False
         q = self.measured()
         if q is None:
             return out, report
         s = arm_slice(self.slot)
+        arm = slice(s.start, s.start + ARM_DIM - 1)
         refuse, zone = self.keepout.refuse(out[s], q)
         if refuse:
             out = out.copy()
-            out[s.start : s.start + ARM_DIM - 1] = q[: ARM_DIM - 1]
+            out[arm] = q[: ARM_DIM - 1]
             report.clamped = np.asarray(report.clamped).copy()
-            report.clamped[s.start : s.start + ARM_DIM - 1] = True
+            report.clamped[arm] = True
             self.counts[zone] += 1
             self.last_zone = zone
+        if self.slow_zone is not None and float(self.keepout.other_arm_gap(q)) < self.slow_zone:
+            self.in_slow_zone = True
+            self.slow_ticks += 1
+            if previous is not None:
+                slow = np.clip(out[arm], previous[arm] - self.slow_step, previous[arm] + self.slow_step)
+                if not np.allclose(slow, out[arm]):
+                    report.clamped = np.asarray(report.clamped).copy()
+                    report.clamped[arm] |= ~np.isclose(slow, out[arm])
+                    out = out.copy()
+                    out[arm] = slow
         return out, report
 
 
@@ -460,6 +542,16 @@ class Recorder:
 
 
 # ---------------------------------------------------------------------- policy side
+def _env_float(name: str) -> float | None:
+    value = os.environ.get(name, "").strip()
+    return float(value) if value else None
+
+
+def _env_int(name: str) -> int | None:
+    value = os.environ.get(name, "").strip()
+    return int(value) if value else None
+
+
 def read_token(args: argparse.Namespace) -> str | None:
     """Token from a command's stdout (e.g. ``ssh pod cat /workspace/flux_token``), never printed or put in argv."""
     if args.token_cmd:
@@ -513,10 +605,32 @@ def warm_up(backend: Any, robot: SingleArmRobot, target: Any, tasks: list[str]) 
 
 
 # ---------------------------------------------------------------------- one attempt
+def joint_order(keepout: KeepOut, start: np.ndarray, goal: np.ndarray, step: float = 1.0) -> list[int] | None:
+    """First order of the arm joints, moved one at a time from ``start`` to ``goal`` in ``step`` deg steps, whose
+    every step the keep-out accepts (simulated on the commands), or None. Pan goes first in the search order."""
+    for order in itertools.permutations(range(ARM_DIM - 1)):
+        q, ok = np.array(start, dtype=float), True
+        for j in order:
+            while ok and abs(q[j] - goal[j]) > 1e-6:
+                nxt = q.copy()
+                nxt[j] += np.clip(goal[j] - q[j], -step, step)
+                ok = not keepout.refuse(nxt, q)[0]
+                q = nxt
+            if not ok:
+                break
+        if ok:
+            return list(order)
+    return None
+
+
 def move_to(robot: SingleArmRobot, goal: np.ndarray, guard_cfg: SafetyConfig, deg_per_tick: float, keys: Keys,
-            keepout: KeepOut | None = None) -> bool:  # fmt: skip
+            keepout: KeepOut | None = None, fallback: bool = True) -> bool:  # fmt: skip
     """Slow joint-space move to ``goal`` (robot units) through the same limits and, when given, the FK keep-out on
-    every step; False if a stop key, a keep-out refusal or a missed goal interrupts it."""
+    every step; False if a stop key, a keep-out refusal or a missed goal interrupts it.
+
+    When the straight ramp is refused (after an insert the gripper sits by the box, and its first straight step went
+    deeper into the torso zone: 18 Oct), ``fallback`` moves one joint at a time in an order the keep-out accepts at
+    every step (``joint_order``); each of those single-joint ramps is checked live like any other."""
     lo, hi = guard_cfg.lower[arm_slice(robot.slot)], guard_cfg.upper[arm_slice(robot.slot)]
     goal = np.clip(goal, lo, hi)
     # Start from the measured pose: after a stall the last command can be far from the arm (seen 2026-10-17).
@@ -533,13 +647,28 @@ def move_to(robot: SingleArmRobot, goal: np.ndarray, guard_cfg: SafetyConfig, de
             if refuse:
                 hold_here(robot)
                 print(f"ramp refused by the keep-out ({zone}) at {np.round(nxt, 1)}; arm holds", flush=True)
-                return False
+                if not fallback:
+                    return False
+                here = robot.joints()
+                order = joint_order(keepout, here, goal)
+                if order is None:
+                    print("no joint-by-joint order clears the keep-out either; arm holds", flush=True)
+                    return False
+                print("going joint by joint instead: " + ", ".join(ARM_JOINTS[j] for j in order), flush=True)
+                waypoint = here.copy()
+                for j in order:
+                    waypoint[j] = goal[j]
+                    if not move_to(robot, waypoint.copy(), guard_cfg, deg_per_tick, keys, keepout, fallback=False):
+                        return False
+                return move_to(robot, goal, guard_cfg, deg_per_tick, keys, keepout, fallback=False)  # gripper
         cmd = nxt
         robot.send_joints(cmd, measure=True)
         if np.allclose(cmd, goal):
             deadline = deadline or time.monotonic() + 5.0  # let the servos settle on the final goal
             err = np.abs(robot.joints() - goal)[: ARM_DIM - 1]
-            if err.max() < 6.0:  # the 7.4 V Haller's lift settles about 4 deg short against gravity at P=16
+            # The 7.4 V Haller's lift settles about 4 deg short against gravity at P=16, and 6.1 deg after hours of
+            # use (18 Oct): it gets 8 deg, the other joints 6.
+            if (err < ARRIVE_TOL).all():
                 return True
             if time.monotonic() > deadline:
                 print(f"goal not reached, error per joint {np.round(err, 1)}", flush=True)
@@ -567,12 +696,35 @@ def hold_here(robot: SingleArmRobot) -> None:
         print(f"could not set the hold pose: {exc}", flush=True)
 
 
-def parked_ok(args: argparse.Namespace, other_q: Any) -> bool:
+def parked_ok(args: argparse.Namespace, other_q: Any, keepout: KeepOut | None = None) -> bool:
     """The other arm must sit where the skill's demos had it: each arm joint inside ``--other-arm-lo`` ..
     ``--other-arm-hi`` (the min / max over the demos) widened by ``--other-arm-tol`` deg; ``--other-arm-expect`` is
     the one-pose form (a tucked arm). Its capsules in the keep-out use the live pose either way; its place in both
     camera views is part of what was learned (the box arm holding the lid open varies a little per run). The runner
-    never moves that arm; a refusal names the joint."""
+    never moves that arm; a refusal names the joint.
+
+    With ``--other-arm-demo-poses`` (pen-arm chain skills, the box arm holding the lid wherever the box skill ended)
+    the joint range is only a loose sanity check and ``gate.check`` decides: refuse when an envelope voxel lies
+    inside the box arm or more than ``--other-arm-gate-max-below`` of the demo poses would come closer than the
+    skill's other-arm clearance."""
+    if not _joint_range_ok(args, other_q):
+        return False
+    poses = getattr(args, "other_arm_demo_poses", None)
+    if poses and keepout is not None and other_q is not None:
+        import gate
+
+        ok, d = gate.check(keepout, other_q, gate.load_poses(poses), args.other_arm_gate_max_below)
+        print(f"box-arm gate: demo min gap {d['demo_min_gap']:.3f} m, {d['demo_below'] * 100:.1f} % of demo poses "
+              f"under {d['clearance']} m, envelope voxels inside the box arm {d['envelope_voxels_inside']} -> "
+              f"{'ok' if ok else 'REFUSED'}", flush=True)  # fmt: skip
+        if not ok:
+            print("REFUSED: the box arm's pose is not compatible with this skill's demonstrated motion. Move it "
+                  "(orchestrator ramp) and start again.", flush=True)  # fmt: skip
+            return False
+    return True
+
+
+def _joint_range_ok(args: argparse.Namespace, other_q: Any) -> bool:
     expect = getattr(args, "other_arm_expect", None)
     lo, hi = getattr(args, "other_arm_lo", None), getattr(args, "other_arm_hi", None)
     if lo is None or hi is None:
@@ -626,10 +778,10 @@ def run_attempt(
     keepout = getattr(runner.guard, "keepout", None)
     if args.other_arm_port and keepout is not None:
         # Re-read the parked arm before every attempt, in case someone moved it (read-only, torque untouched).
-        other_q = read_arm_joints(args.other_arm_port, args.other_arm_id)
+        other_q = read_other(args)
         keepout.other_q = tuple(float(v) for v in other_q)
         print(f"parked other arm at {np.round(other_q, 1)}", flush=True)
-        if not parked_ok(args, other_q):
+        if not parked_ok(args, other_q, keepout):
             raise KeyboardInterrupt
     if args.start_pose is not None and args.robot == "so101" and not args.observe:
         print(f"ramping to the start pose {args.start_pose} ...", flush=True)
@@ -651,7 +803,13 @@ def run_attempt(
     load_run = np.zeros(ARM_DIM - 1, dtype=int)
     load_cap = 10.0 * (args.torque_limit if args.robot == "so101" else 100.0)  # load units at the torque cap
     keep_stop, keep0 = KeepoutStop(args.keepout_ticks, args.keepout_window), dict(getattr(runner.guard, "counts", {}))
+    slow0 = getattr(runner.guard, "slow_ticks", 0)
     stall = np.zeros(ARM_DIM - 1, dtype=int)
+    # The 7.4 V Haller's lift trails its command by 8-10 deg under load in the air near the 60 % torque cap (18 Oct,
+    # 7 false stall stops): --lift-stall-deg gives it its own threshold; the load freeze still catches a real push.
+    stall_deg = np.full(ARM_DIM - 1, args.stall_deg)
+    if getattr(args, "lift_stall_deg", None) is not None:
+        stall_deg[1] = args.lift_stall_deg
     volts: list[float] = []
     healths: list[dict | None] = []
     print(f"attempt running: {task!r} for up to {args.seconds:.0f} s. space/q/Enter = STOP, s = success, f = fail",
@@ -689,7 +847,7 @@ def run_attempt(
         # command by more than --stall-deg for --stall-ticks is blocked (table, cup, its own base). The elbow was
         # damaged on 2026-10-17 after attempts where the wrist folded into the robot's base.
         lag = np.abs(report.command[arm_slice(target)] - q)[: ARM_DIM - 1]
-        stall = np.where(lag > args.stall_deg, stall + 1, 0)
+        stall = np.where(lag > stall_deg, stall + 1, 0)
         if (stall >= args.stall_ticks).any():
             j = int(np.argmax(stall))
             runner.guard.estop()
@@ -702,8 +860,12 @@ def run_attempt(
         load = robot.arm_load()
         if load is not None:
             frac = load / load_cap
-            load_run = np.where(frac >= args.load_sustain, load_run + 1, 0)  # same rule as load_trip()
-            if (frac >= args.load_peak).any() or (load_run >= args.load_ticks).any():
+            # In the slow zone (close to the other arm) the freeze triggers earlier: first contact, not a push.
+            slow = getattr(runner.guard, "in_slow_zone", False)
+            sustain = getattr(args, "slow_load_sustain", args.load_sustain) if slow else args.load_sustain
+            ticks = getattr(args, "slow_load_ticks", args.load_ticks) if slow else args.load_ticks
+            load_run = np.where(frac >= sustain, load_run + 1, 0)  # same rule as load_trip()
+            if (frac >= args.load_peak).any() or (load_run >= ticks).any():
                 j = int(np.argmax(frac))
                 runner.guard.estop()
                 end_reason = f"stop (load: {ARM_JOINTS[j]} at {100 * frac[j]:.0f}% of the torque cap)"
@@ -739,6 +901,7 @@ def run_attempt(
         "min_supply_v_per_s": volts, "min_supply_v": min((v for v in volts if v), default=None),
         "health_per_s": healths,
         "keepout_refusals": {z: n - keep0.get(z, 0) for z, n in getattr(runner.guard, "counts", {}).items()},
+        "slow_zone_ticks": getattr(runner.guard, "slow_ticks", 0) - slow0,
         "args": {k: v for k, v in vars(args).items() if k != "token_cmd"},
         "checkpoint": (f"{args.act_checkpoint} (LeRobot ACT)" if args.backend == "act" else args.checkpoint)
         if args.backend in POLICY_BACKENDS else f"{args.backend} backend",
@@ -824,6 +987,8 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
         success=result["steps_done"] == len(STEPS) and result["interventions"] == 0,
         interventions=result["interventions"], layout=meta.get("layout") or args.layout, failure=failure,
         notes=f"{args.note + '; ' if args.note else ''}prompt={task!r}; guidance {args.guidance_note}; "
+        f"{f'action horizon {args.action_steps} per chunk; ' if getattr(args, 'action_steps', None) else ''}"
+        f"{f'lift stall {args.lift_stall_deg} deg; ' if getattr(args, 'lift_stall_deg', None) else ''}"
         f"{'start ' + meta['layout_ref'] + '; ' if meta.get('layout_ref') else ''}"
         f"safety: {args.max_step} deg/tick guard, LeRobot cap "
         f"{args.max_relative_target} deg, torque limit {args.torque_limit:.0f}%; "
@@ -873,9 +1038,9 @@ def check_at_home(args: argparse.Namespace, runner: DualArmRunner, robot: Single
 
     keepout = getattr(runner.guard, "keepout", None)
     if args.other_arm_port and keepout is not None:
-        keepout.other_q = tuple(float(v) for v in read_arm_joints(args.other_arm_port, args.other_arm_id))
+        keepout.other_q = tuple(float(v) for v in read_other(args))
         print(f"home check: parked other arm at {np.round(keepout.other_q, 1)}", flush=True)
-        if not parked_ok(args, keepout.other_q):
+        if not parked_ok(args, keepout.other_q, keepout):
             return False  # before any motion: no attempts, the arm is parked again below
     if args.start_pose is not None and args.robot == "so101" and not args.observe:
         print(f"home check: ramping to the start pose {args.start_pose} ...", flush=True)
@@ -954,6 +1119,15 @@ def main(argv: list[str] | None = None) -> None:
                    help="per-joint min of the other arm over the skill's demos (with --other-arm-hi)")
     p.add_argument("--other-arm-hi", type=float, nargs=ARM_DIM, default=None, help="per-joint max, see --other-arm-lo")
     p.add_argument("--other-arm-tol", type=float, default=5.0, help="deg allowed outside the pose / range")
+    p.add_argument("--hold-other-arm", action="store_true",
+                   help="take over the other arm at --other-arm-port and hold it where it is (goal = present, then "
+                   "torque on); released with torque still on at the end (the chain: box arm holding the lid)")
+    p.add_argument("--fake-other-q", type=float, nargs=ARM_DIM, default=None,
+                   help="--robot fake with --hold-other-arm: the pose the fake holder holds")
+    p.add_argument("--other-arm-demo-poses", default=None,
+                   help="npz of the skill's demo poses: geometric box-arm gate at start (gate.py)")
+    p.add_argument("--other-arm-gate-max-below", type=float, default=0.01,
+                   help="gate: largest fraction of demo poses allowed under the other-arm clearance")
     p.add_argument("--start-pose", type=float, nargs=ARM_DIM, default=None,
                    help="ramp here before every attempt (Haller demos: 0 0 0 0 0 100)")  # fmt: skip
     p.add_argument("--allow-torque-off", action="store_true",
@@ -967,6 +1141,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--act-device", default="auto", help="--backend act: cuda, cpu or auto")
     p.add_argument("--act-steps", type=int, default=None,
                    help="--backend act: commands executed per chunk before re-planning (default: the checkpoint's)")
+    p.add_argument("--action-steps", type=int, default=_env_int("WS4_ACTION_STEPS"),
+                   help="remote/fake: commands executed per chunk before re-planning (default: the package's 32)")
     p.add_argument("--fake-delay", type=float, default=0.6, help="fake inference latency, s")
     p.add_argument("--fake-velocity", type=float, nargs=ARM_DIM, default=[0.2, 0.2, -0.2, 0.2, 0.0, 0.0],
                    help="fake policy drift, deg per tick per joint")  # fmt: skip
@@ -991,11 +1167,20 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--load-sustain", type=float, default=0.7, help="load freeze: fraction of the torque cap ...")
     p.add_argument("--load-ticks", type=int, default=9, help="... held this many ticks (9 = 0.3 s)")
     p.add_argument("--load-peak", type=float, default=0.9, help="load freeze: fraction of the cap on any tick")
+    p.add_argument("--slow-zone", type=float, default=None,
+                   help="m: while the arm is this close to the parked other arm, step --slow-step and freeze at "
+                   "--slow-load-sustain for --slow-load-ticks (off by default)")
+    p.add_argument("--slow-step", type=float, default=0.5, help="deg per tick on the arm joints in the slow zone")
+    p.add_argument("--slow-load-sustain", type=float, default=0.5, help="load freeze in the slow zone: fraction")
+    p.add_argument("--slow-load-ticks", type=int, default=6, help="load freeze in the slow zone: ticks (6 = 0.2 s)")
     p.add_argument("--keepout-ticks", type=int, default=45,
                    help="keep-out refusals within --keepout-window policy ticks that end an attempt")
     p.add_argument("--keepout-window", type=int, default=60, help="policy ticks (holds between chunks excluded)")
     p.add_argument("--no-keepout", action="store_true", help="disable the FK keep-out (fake-arm tests only)")
     p.add_argument("--stall-ticks", type=int, default=15, help="consecutive stalled ticks before freezing (15 = 0.5 s)")
+    # Also from the environment, so eval_skill.sh sessions can set them without a script change (18 Oct).
+    p.add_argument("--lift-stall-deg", type=float, default=_env_float("WS4_LIFT_STALL_DEG"),
+                   help="shoulder-lift stall threshold, deg (default: --stall-deg; env WS4_LIFT_STALL_DEG)")
     p.add_argument("--offset", type=float, nargs=ARM_DIM, default=None, help="model = scale * robot + offset")
     p.add_argument("--scale", type=float, nargs=ARM_DIM, default=None,
                    help="model = scale * robot + offset; must match the package's training data (D: 1 -1 1 1 -1 1)")
@@ -1031,7 +1216,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--park-pose", type=float, nargs=ARM_DIM, default=None,
                    help="only move slowly to this pose (station keep-out on), then torque off (Haller folded rest)")
     args = p.parse_args(argv)
-    global STEPS
+    global STEPS, OTHER_ARM_READER
     STEPS = tuple(args.steps) if args.steps else TASK_STEPS.get(args.trial_task, STEPS)
     tasks = args.task or ["stack the cups"]
     import logging
@@ -1040,6 +1225,15 @@ def main(argv: list[str] | None = None) -> None:
     if args.scene_cam == "blank" and args.backend in POLICY_BACKENDS and not args.no_log:
         raise SystemExit("a blank scene camera is out of distribution: such attempts must not be logged (--no-log)")
 
+    holder = None
+    if args.hold_other_arm:
+        if not args.other_arm_port:
+            raise SystemExit("--hold-other-arm needs --other-arm-port")
+        if args.robot == "so101":
+            holder = OtherArmHolder(args.other_arm_port, args.other_arm_id, args.torque_limit)
+        else:
+            holder = FakeOtherArmHolder(args.other_arm_port, args.other_arm_id, args.torque_limit, args.fake_other_q)
+        OTHER_ARM_READER = holder.read
     calib_path = None
     if args.robot == "so101":
         if not args.scene_cam:
@@ -1063,6 +1257,10 @@ def main(argv: list[str] | None = None) -> None:
                                  offset=np.array(args.offset) if args.offset else np.zeros(ARM_DIM))  # fmt: skip
     target = per_arm_target(args.slot, "policy", scene=CameraView(IMG_HEAD), calibration=calibration)
     backend = build_backend(args)
+    if args.action_steps is not None and args.backend in ("remote", "fake"):
+        # The runner reads the horizon from the backend's contract (DualArmRunner._accept keeps n_action_steps).
+        backend.contract = replace(backend.contract, n_action_steps=args.action_steps)
+        print(f"action horizon: {args.action_steps} of {backend.contract.chunk_size} commands per chunk", flush=True)
     if args.no_keepout and args.robot == "so101" and not args.observe:
         raise SystemExit("the FK keep-out stays on for the real arm")
     keepout = KeepOut.load(Path(args.keepout_config)) if args.keepout_config else KeepOut.load()
@@ -1070,6 +1268,8 @@ def main(argv: list[str] | None = None) -> None:
         print("NOTE: table height not calibrated (keepout.py --touch); using the UNVERIFIED default", flush=True)
     guard = SafetyGuard(guard_cfg) if args.no_keepout else KeepOutGuard(
         guard_cfg, keepout, args.slot, lambda: robot.last_q)
+    if args.slow_zone is not None and isinstance(guard, KeepOutGuard):
+        guard.slow_zone, guard.slow_step = args.slow_zone, args.slow_step
     runner = DualArmRunner(robot, [target], {"policy": backend}, guard, async_inference=True)
     runner.ramp_config = ramp_cfg  # scripted ramps (start pose, return, park) use the ramp limits
     if args.home or args.park_pose is not None:
@@ -1154,6 +1354,9 @@ def main(argv: list[str] | None = None) -> None:
                 so101.bus.disconnect(disable_torque=False)
                 print("arm still holds with torque on (it was holding at launch, or is not at its launch pose). "
                       "Support it before switching the power off.", flush=True)  # fmt: skip
+        if holder is not None:
+            holder.close()
+            OTHER_ARM_READER = None
     print(f"session folder {session}")
 
 

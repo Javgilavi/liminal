@@ -6,6 +6,7 @@ import threading
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
@@ -222,3 +223,185 @@ def test_other_arm_range_accepts_a_lid_holding_pose_inside_the_demonstrated_spre
     assert rsa.parked_ok(args, [20.5, -37.0, 24.0, 35.0, 0.0, 2.0])  # 4.5 deg past the max: within the margin
     assert not rsa.parked_ok(args, [13.0, -46.0, 24.0, 35.0, 0.0, 2.0])  # lift 6 deg below the min
     assert rsa.parked_ok(args, [13.0, -37.0, 24.0, 35.0, 0.0, 80.0])  # the gripper is not checked
+
+
+# A box-arm pose 2.6 cm from the fake arm's start pose (capsule surfaces), with the other-arm clearance at 1 cm so the
+# keep-out itself does not refuse: only the slow zone acts (cutter, orchestrator 18 Oct).
+NEAR_OTHER = [-62.4, -17.1, -7.0, 73.1, -58.7, 2.1]
+
+
+def _near_keepout(tmp_path):
+    from keepout import KeepOut
+
+    ko = KeepOut.for_haller("left")
+    ko.other_clearance = 0.01
+    path = tmp_path / "near.json"
+    ko.save(path)
+    return KeepOut.load(path), path
+
+
+def test_slow_zone_halves_the_step_near_the_other_arm(tmp_path):
+    ko, _ = _near_keepout(tmp_path)
+    ko.other_q = tuple(NEAR_OTHER)
+    rest = np.array([0.0, -95.0, 95.0, 70.0, 0.0, 2.0])
+    big = rsa.SafetyConfig(lower=-np.full(12, 1e3), upper=np.full(12, 1e3), max_step=np.full(12, 1e3))
+    previous = np.concatenate([rest, rsa.PHANTOM_STATE])
+    command = previous.copy()
+    command[1] += 10.0  # lift 10 deg in one tick
+    guard = rsa.KeepOutGuard(big, ko, "left", lambda: rest)
+    out, _ = guard.filter(command, previous)
+    assert np.isclose(out[1], previous[1] + 10.0) and not guard.in_slow_zone  # slow zone off by default
+    guard.slow_zone = 0.04
+    out, report = guard.filter(command, previous)
+    assert guard.in_slow_zone and guard.slow_ticks == 1
+    assert np.isclose(out[1], previous[1] + 0.5) and report.clamped[1]
+
+
+def test_slow_zone_freezes_on_a_lower_load(tmp_path, monkeypatch):
+    _, path = _near_keepout(tmp_path)
+    monkeypatch.setattr(rsa, "read_arm_joints", lambda port, rid: np.array(NEAR_OTHER))
+    monkeypatch.setattr(rsa.SingleArmRobot, "arm_load", lambda self: np.full(5, 550.0))  # 55 % of the fake cap
+    args = ("--keepout-config", str(path), "--other-arm-port", "/dev/null", "--keepout-ticks", "100000")
+    (meta,) = _run(tmp_path / "slow", monkeypatch, *args, "--slow-zone", "0.04")
+    assert meta["end_reason"].startswith("stop (load") and meta["slow_zone_ticks"] > 0
+    (meta,) = _run(tmp_path / "normal", monkeypatch, *args)  # same load outside a slow zone: below the 70 % trigger
+    assert meta["end_reason"] == "timeout" and meta["slow_zone_ticks"] == 0
+
+
+def test_box_arm_gate_refuses_an_intruding_pose_before_any_motion(tmp_path, monkeypatch, capsys):
+    green = Path(__file__).resolve().parents[1] / "skills" / "green"
+    if not (green / "demo_poses.npz").exists():
+        pytest.skip("skills/green has no gate yet")
+    args = ("--keepout-config", str(green / "workspace.json"), "--other-arm-port", "/dev/null",
+            "--other-arm-demo-poses", str(green / "demo_poses.npz"), "--keepout-ticks", "100000")  # fmt: skip
+    monkeypatch.setattr(rsa, "read_arm_joints", lambda port, rid: np.array([4.2, -31.4, 48.4, -2.3, 67.6, 0.9]))
+    assert _run(tmp_path / "intrude", monkeypatch, *args) == []
+    assert "box-arm gate" in capsys.readouterr().out
+    monkeypatch.setattr(rsa, "read_arm_joints", lambda port, rid: np.array([12.13, -13.8, 12.26, 37.54, 29.93, 0.87]))
+    (meta,) = _run(tmp_path / "hold", monkeypatch, *args)
+    assert meta["chunks"] >= 1
+
+
+class _FakeBus:
+    """Records what OtherArmHolder does to a bus: the order matters (goal = present before torque on)."""
+
+    def __init__(self):
+        self.calls, self.motors = [], ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll",
+                                       "gripper"]  # fmt: skip
+        self.port_handler = type("P", (), {"closePort": lambda _: self.calls.append(("close",))})()
+
+    def sync_read(self, reg, motors=None, normalize=True, num_retry=0):
+        self.calls.append(("read", reg, normalize))
+        if reg == "Present_Position" and not normalize:
+            return {m: 2000 + i for i, m in enumerate(self.motors)}
+        if reg == "Torque_Enable":
+            return dict.fromkeys(self.motors, 1)
+        return {m: float(i) for i, m in enumerate(motors or self.motors)}
+
+    def write(self, reg, motor, value, num_retry=0):
+        self.calls.append(("write", reg, motor, value))
+
+    def sync_write(self, reg, values, normalize=True, num_retry=0):
+        self.calls.append(("sync_write", reg, dict(values), normalize))
+
+    def enable_torque(self, num_retry=0):
+        self.calls.append(("enable_torque",))
+
+
+def test_holder_takes_the_box_arm_over_at_its_own_pose(monkeypatch):
+    import show_joints
+
+    bus = _FakeBus()
+    monkeypatch.setattr(show_joints, "open_bus", lambda port, rid: bus)
+    holder = rsa.OtherArmHolder("/dev/haller_arm_left", "haller_left", 60.0)
+    kinds = [c[0] for c in bus.calls]
+    goal = next(i for i, c in enumerate(bus.calls) if c[:2] == ("sync_write", "Goal_Position"))
+    assert kinds.index("enable_torque") > goal  # the goal is written before torque comes on
+    assert bus.calls[goal][2] == {m: 2000 + i for i, m in enumerate(bus.motors)} and bus.calls[goal][3] is False
+    limits = [c for c in bus.calls if c[:2] == ("write", "Torque_Limit")]
+    assert {c[2] for c in limits} == set(bus.motors[:5]) and all(c[3] == 600 for c in limits)
+    n = len(bus.calls)
+    holder.close()
+    assert bus.calls[n:] == [("close",)]  # no torque write on release: the arm keeps holding the lid
+
+
+def test_held_other_arm_is_read_from_the_holder(tmp_path, monkeypatch):
+    def no_port_read(port, rid):
+        raise AssertionError("the held arm's port belongs to the holder")
+
+    monkeypatch.setattr(rsa, "read_arm_joints", no_port_read)
+    pose = ["0.9", "15.2", "-5.8", "32.6", "14.6", "0.9"]
+    (meta,) = _run(tmp_path, monkeypatch, "--other-arm-port", "fake", "--hold-other-arm", "--fake-other-q", *pose,
+                   "--keepout-ticks", "100000")  # fmt: skip
+    assert np.allclose(meta["other_arm_q"], [float(v) for v in pose])
+
+
+def test_align_station_offset_and_hint():
+    cv2 = pytest.importorskip("cv2")
+    import align_station
+
+    rng = np.random.default_rng(0)
+    ref = cv2.GaussianBlur(rng.integers(0, 255, (480, 640, 3), dtype=np.uint8), (5, 5), 0)
+    for _ in range(60):  # corners for ORB
+        x, y = rng.integers(20, 600), rng.integers(20, 300)
+        colour = tuple(int(v) for v in rng.integers(0, 255, 3))
+        cv2.rectangle(ref, (int(x), int(y)), (int(x) + 25, int(y) + 18), colour, -1)
+    live = np.roll(ref, -30, axis=1)  # the room sits 30 px further left: the camera points too far right
+    off = align_station.view_offset(ref, live)
+    assert off is not None and abs(off["dx"] + 30) < 3 and abs(off["dy"]) < 3 and abs(off["scale"] - 1) < 0.02
+    advice, ok = align_station.hint(off, 1.0)
+    assert "turn LEFT" in advice and not ok
+    same = align_station.view_offset(ref, ref)
+    assert align_station.hint(same, 1.0)[1]
+    assert "more light" in align_station.hint(same, 0.6)[0]
+
+
+def test_action_steps_shortens_the_executed_horizon(tmp_path, monkeypatch):
+    # --action-steps N executes N commands per chunk instead of the package's 32: more chunks in the same time.
+    (default,) = _run(tmp_path / "a", monkeypatch, "--keepout-ticks", "100000")
+    (short,) = _run(tmp_path / "b", monkeypatch, "--keepout-ticks", "100000", "--action-steps", "8")
+    assert short["args"]["action_steps"] == 8 and default["args"]["action_steps"] is None
+    assert short["chunks"] >= 2 * default["chunks"]
+    trace = np.load(next((tmp_path / "b").glob("*/attempt01/trace.npz")))
+    runs, n = [], 0
+    for status in trace["status"]:
+        if status == "waiting":
+            if n:
+                runs.append(n)
+            n = 0
+        else:
+            n += 1
+    assert runs and max(runs) <= 8
+
+
+def test_lift_stall_and_horizon_from_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("WS4_LIFT_STALL_DEG", "25")
+    monkeypatch.setenv("WS4_ACTION_STEPS", "16")
+    (meta,) = _run(tmp_path, monkeypatch, "--keepout-ticks", "100000")
+    assert meta["args"]["lift_stall_deg"] == 25.0 and meta["args"]["action_steps"] == 16
+    monkeypatch.delenv("WS4_LIFT_STALL_DEG")
+    monkeypatch.delenv("WS4_ACTION_STEPS")
+    (plain,) = _run(tmp_path / "plain", monkeypatch, "--keepout-ticks", "100000")
+    assert plain["args"]["lift_stall_deg"] is None and plain["args"]["action_steps"] is None
+
+
+def test_ramp_falls_back_to_joint_by_joint_around_the_keepout(monkeypatch):
+    from flux.safety import SafetyConfig
+
+    monkeypatch.setattr(rsa.time, "sleep", lambda s: None)
+
+    class PanFirst:  # refuses any lift move while pan is still out, like the torso zone after an insert (18 Oct)
+        def refuse(self, nxt, cur):
+            moves_lift = abs(nxt[1] - cur[1]) > 1e-6
+            return (moves_lift and abs(cur[0]) > 5, "torso" if moves_lift and abs(cur[0]) > 5 else "")
+
+    start = np.array([24.0, 10.0, 50.0, 80.0, 35.0, 2.0])
+    robot = rsa.SingleArmRobot(rsa.FakeSO101(start.copy()), "left")
+    robot.joints()
+    keys = rsa.Keys()
+    cfg = SafetyConfig()
+    goal = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 100.0])
+    assert not rsa.move_to(robot, goal, cfg, 2.0, keys, PanFirst(), fallback=False)  # straight ramp: refused
+    assert rsa.joint_order(PanFirst(), robot.joints(), goal)[0] == 0
+    assert rsa.move_to(robot, goal, cfg, 2.0, keys, PanFirst())  # pan first, then the rest
+    assert np.allclose(robot.joints(), goal, atol=1e-6)
