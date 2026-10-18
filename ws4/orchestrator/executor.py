@@ -313,7 +313,9 @@ class Executor:
                                               or self.state in TERMINAL):
                 self._last_frame = now_wall
                 self.on_frame(obs, report)
-            if self.max_run_s is not None and self.t > self.max_run_s and self.state == "running":
+            gated = sum(b.total_wait_s for b in {id(b): b for b in self.backends.values()
+                                                  if hasattr(b, "gate_wait_s")}.values())
+            if self.max_run_s is not None and self.t - gated > self.max_run_s and self.state == "running":
                 self._finish("failed", f"run exceeded {self.max_run_s:.0f} s")
             if self.realtime:
                 next_tick += period
@@ -670,8 +672,11 @@ class Executor:
                     self._verify(run, obs)
                     if run.status != "running":
                         continue
-            if self.t - run.t_start > skill.timeout_s:
-                self._fail_attempt(run, f"timeout after {skill.timeout_s:.0f} s without a verified success")
+            # Time the arm held while the Opus gate reviewed a chunk (hybrid_gate) is not policy time.
+            gated = backend.gate_wait_s(run.target) if hasattr(backend, "gate_wait_s") else 0.0
+            if self.t - run.t_start - gated > skill.timeout_s:
+                self._fail_attempt(run, f"timeout after {skill.timeout_s:.0f} s without a verified success"
+                                   + (f" (plus {gated:.0f} s of Opus review)" if gated else ""))
 
     def _verify(self, run: StepRun, obs: dict) -> None:
         if getattr(self.verifier, "fast", False):

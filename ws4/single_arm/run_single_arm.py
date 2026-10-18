@@ -1259,6 +1259,9 @@ def main(argv: list[str] | None = None) -> None:
                    help="Opus reviews every FLUX chunk first (hybrid_gate.py: continue, or stop = freeze), e.g. "
                         "configs/hybrid/claude_opus_haller.yaml; --backend remote only, no prefetch "
                         "(env WS4_HYBRID_CONFIG)")
+    p.add_argument("--hybrid-every", type=int, default=_env_int("WS4_HYBRID_EVERY") or 1,
+                   help="with --hybrid-config: Opus reviews the first chunk of an attempt, then every N-th "
+                        "(env WS4_HYBRID_EVERY, default 1)")
     p.add_argument("--fake-delay", type=float, default=0.6, help="fake inference latency, s")
     p.add_argument("--fake-velocity", type=float, nargs=ARM_DIM, default=[0.2, 0.2, -0.2, 0.2, 0.0, 0.0],
                    help="fake policy drift, deg per tick per joint")  # fmt: skip
@@ -1404,8 +1407,10 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit("--hybrid-config reviews FLUX chunks: --backend remote (or fake), no prime, no prefetch")
         from hybrid_gate import GatedBackend
 
-        backend = GatedBackend(backend, args.hybrid_config, RUNS / f"hybrid_{datetime.now():%Y%m%d_%H%M%S}.jsonl")
-        print(f"OPUS GATE ON: {backend.config.model} reviews every chunk (continue, or stop = freeze); "
+        backend = GatedBackend(backend, args.hybrid_config, RUNS / f"hybrid_{datetime.now():%Y%m%d_%H%M%S}.jsonl",
+                               every=args.hybrid_every)  # fmt: skip
+        print(f"OPUS GATE ON: {backend.config.model} reviews chunk 1, then every {args.hybrid_every} "
+              "(continue, or stop = freeze); "
               f"log {backend.log_path}", flush=True)  # fmt: skip
     if args.no_keepout and args.robot == "so101" and not args.observe:
         raise SystemExit("the FK keep-out stays on for the real arm")

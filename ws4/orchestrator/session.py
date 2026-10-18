@@ -156,6 +156,7 @@ class SessionConfig:
     # Opus reviews every FLUX chunk (ws4/single_arm/hybrid_gate.py): continue through the guard, or stop = e-stop hold.
     # "" = WS4_HYBRID_CONFIG, else off. E.g. configs/hybrid/claude_opus_haller.yaml (repo-relative paths are fine).
     hybrid_config: str = ""
+    hybrid_every: int = 0  # review the first chunk of each attempt, then every N-th; 0 = WS4_HYBRID_EVERY, else 1
     # Arms handed over holding at launch (run_single_arm --hold-other-arm, single_arm README "Handover from the HMI"):
     # held where they are (goal = present pose, then torque on, as connect_so101 does), never driven, torque on at
     # close.
@@ -451,12 +452,15 @@ class Session:
             sys.path.insert(0, single_arm)
         from hybrid_gate import GatedBackend
 
+        every = self.cfg.hybrid_every or _env_number("WS4_HYBRID_EVERY", int) or 1
         gated = GatedBackend(backend, path, self.runs_dir / f"hybrid_{time.strftime('%Y%m%d_%H%M%S')}.jsonl",
+                             every=every,
                              notify=lambda message: self.events.add(
                                  "warn" if "GATE ERROR" in message or not message.startswith("OPUS student") else
                                  "info", message))  # fmt: skip
-        self.events.add("warn", f"Opus gate ON ({gated.config.model}): every FLUX chunk is reviewed while the arm "
-                        f"holds; continue = through the guard, stop = e-stop hold; log {gated.log_path}")
+        self.events.add("warn", f"Opus gate ON ({gated.config.model}): chunk 1 of every attempt, then every {every}, "
+                        "reviewed while the arm holds (not counted in the attempt timeout); continue = through the "
+                        f"guard, stop = e-stop hold; log {gated.log_path}")
         return gated
 
     def _policy_backend(self, package: str) -> Any:

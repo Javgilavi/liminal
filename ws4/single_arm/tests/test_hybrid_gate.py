@@ -98,3 +98,13 @@ def test_gate_refuses_verified_mapping_and_prefetch(tmp_path, monkeypatch):
         rsa.main([*base, "--hybrid-config", str(gate_config(tmp_path, kinematics_verified=True))])
     with pytest.raises(SystemExit, match="no prefetch"):
         rsa.main([*base, "--hybrid-config", str(gate_config(tmp_path)), "--prefetch-ticks", "4"])
+
+
+def test_every_nth_chunk_is_reviewed_and_the_rest_pass_unchanged(tmp_path, monkeypatch):
+    meta, trace, events, calls = attempt(tmp_path, monkeypatch, "student", "--hybrid-every", "3", "--action-steps", "8")
+    assert meta["end_reason"] == "timeout" and meta["chunks"] >= 4
+    # chunk 1, 4, 7, ... (a request still in flight at the timeout may be one more than the accepted chunks)
+    assert len(calls) in {-(-meta["chunks"] // 3), -(-(meta["chunks"] + 1) // 3)} and len(calls) < meta["chunks"]
+    executed = [e["executed_joints"] for e in events if e["kind"] == "hybrid_executed"]
+    assert executed and all(len(x) <= 33 for x in executed)  # 3 chunks of commands, subsampled for the payload
+    assert next(e for e in events if e["kind"] == "hybrid_attempt")["every"] == 3

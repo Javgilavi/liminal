@@ -595,8 +595,9 @@ def test_lora_cycles_with_operator_reset(tmp_path, lora_server):
         s.close()
 
 
-def _gated_session(monkeypatch, tmp_path, mode):
+def _gated_session(monkeypatch, tmp_path, mode, think_s=0.0):
     """A haller Session with WS4_HYBRID_CONFIG set and a fake reasoner in place of the Anthropic API."""
+    import asyncio
     import sys
     from pathlib import Path
 
@@ -611,6 +612,8 @@ def _gated_session(monkeypatch, tmp_path, mode):
 
         async def decide(self, payload, images, schema):
             calls.append(payload["task"])
+            if think_s:
+                await asyncio.sleep(think_s)
             pose = payload["current_eef"]
             return {"request_id": payload["request_id"], "mode": mode, "steps": 2, "reason": f"test {mode}",
                     "edit": {"delta_position": [0, 0, 0], "delta_rotation_vector": [0, 0, 0], "gripper": "keep"},
@@ -680,3 +683,15 @@ def test_opus_gate_refuses_prefetch(monkeypatch, tmp_path):
                         async_inference=True, runs_dir=str(tmp_path / "runs"))
     with pytest.raises(ValueError, match="prefetch must be off"):
         Session(cfg)
+
+
+def test_opus_review_time_is_not_counted_in_the_attempt_timeout(monkeypatch, tmp_path):
+    session, calls = _gated_session(monkeypatch, tmp_path, "student", think_s=2.0)  # step timeout_s is 1.5
+    try:
+        session.verifier = PassOnAttempt()
+        result = session.execute(session.plan("put the pen in the box").result.plan)
+        assert result.status == "succeeded" and len(calls) == 1
+        (gate,) = {id(b): b for b in session.backends.values() if type(b).__name__ == "GatedBackend"}.values()
+        assert gate.total_wait_s >= 2.0
+    finally:
+        session.close()
