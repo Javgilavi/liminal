@@ -138,7 +138,11 @@ def create_research_app(
     async def paired_origin(request: Request, call_next):
         if request.url.hostname not in loopback_hosts:
             return Response("Use the loopback companion address", status_code=400)
-        if request.headers.get("sec-fetch-site") == "cross-site" and not request.headers.get("origin"):
+        if (
+            request.url.path.startswith("/api/")
+            and request.headers.get("sec-fetch-site") == "cross-site"
+            and not request.headers.get("origin")
+        ):
             return Response("Cross-site embedding is disabled", status_code=403)
         origin = request.headers.get("origin")
         external = origin and urlsplit(origin).netloc != request.headers.get("host")

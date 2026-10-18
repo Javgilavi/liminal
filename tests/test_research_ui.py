@@ -194,4 +194,7 @@ def test_companion_rejects_rebound_hosts_and_cross_site_camera_embedding(compani
         == 400
     )
     assert client.get("/api/cameras/top", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    assert (
+        client.get("/pair", headers={"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"}).status_code == 200
+    )
     runner.assert_not_called()
