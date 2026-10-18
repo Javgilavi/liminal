@@ -78,6 +78,13 @@ explicit memory-saving fallback, not the selected dual-arm configuration.
 | WS4 | Simulation + per-arm LoRA evaluation (original embodiment plan superseded) | `sim/`, `configs/embodiment/` | [04](docs/research/04_xlerobot_sim.md) |
 | WS5 | Hardware setup, safety, operator UI / triggering | `hardware/`, `safety/`, `ui/` | [05](docs/research/05_hardware_ui.md) |
 
+## On the Haller (ws4 bridge)
+
+On the green Haller the tree runs through the ws4 stack: each skill becomes one ws4 step (kit keep-outs, start gate,
+held box arm, stall and load freezes, e-stop that freezes with torque on), FLUX runs on the remote policy server with
+one LoRA package per skill, and `ws4_haiku` perception reuses ws4's measured Haiku checks. Command, arm naming and
+what is verified: [ws4/HARNESS_BRIDGE.md](ws4/HARNESS_BRIDGE.md).
+
 ## Quick start (no hardware needed)
 
 ```bash
