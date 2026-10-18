@@ -116,7 +116,8 @@ class Skill:
     start_gate: dict | None = None  # other_arm_gate (gate.py): the other arm's pose is checked before the step
     kit: str = ""  # path of that skill.json
     # flux: the skill's package on the policy server. replay: ``replay`` = {episode, root, columns} of a recorded take,
-    # fed through the same safety stack as a scripted policy (the box fallback, 18 Oct); never FLUX, never a trial row.
+    # fed through the same safety stack as a scripted policy (the box fallback, 18 Oct); never FLUX, trial condition
+    # "scripted".
     backend: str = "flux"
     replay: dict | None = None
     keywords: tuple[str, ...] = ()

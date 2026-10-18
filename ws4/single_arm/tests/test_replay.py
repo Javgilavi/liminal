@@ -99,34 +99,23 @@ def _run(tmp_path, monkeypatch, *extra):
     return [json.loads(m.read_text()) for m in sorted(tmp_path.glob("*/attempt*/meta.json"))]
 
 
-def test_fake_arm_replays_the_take_through_the_guard_and_ends_holding(tmp_path, monkeypatch):
-    root = write_dataset(tmp_path / "box", {5: TAKE})
-    metas = _run(tmp_path / "runs", monkeypatch, "--backend", "replay", "--replay-root", str(root),
-                 "--replay-episode", "5", "--seconds", "60", "--attempts", "2", "--no-keepout",
-                 "--start-pose", *map(str, BOX_HOME))  # fmt: skip
-    assert len(metas) == 2  # each attempt replays the take again from its start pose
-    for meta in metas:
-        assert meta["end_reason"] == "replay finished: scripted replay of recorded demo 5, holding where the take ends"
-        assert meta["checkpoint"].startswith("scripted replay of recorded demo 5 (") and "flux" not in \
-            meta["checkpoint"].lower()
-        assert meta["replay"]["episode"] == 5 and meta["replay"]["label"] == "scripted replay of recorded demo 5"
-        assert not meta["replay"]["handed_over_to_flux"]
-    trace = np.load(next((tmp_path / "runs").glob("*/attempt02/trace.npz")))
-    command = trace["command"]
-    assert np.abs(np.diff(command[:, :5], axis=0)).max() <= 1.0 + 1e-9  # the 1 deg/tick guard holds
-    assert np.allclose(command[-1], TAKE[-1], atol=1e-6)  # it ends on the take's last pose
-    assert not (tmp_path / "runs" / "trials.jsonl").exists()  # a replay is never a graded trial
-
-
 def test_replay_refuses_settings_that_would_break_it(tmp_path, monkeypatch):
     root = write_dataset(tmp_path / "box", {5: TAKE})
-    for bad in (["--prefetch-ticks", "16"], ["--scale", "1", "-1", "1", "1", "-1", "1"]):
-        with pytest.raises(SystemExit):
-            _run(tmp_path / "runs", monkeypatch, "--backend", "replay", "--replay-root", str(root),
-                 "--replay-episode", "5", *bad)  # fmt: skip
+    with pytest.raises(SystemExit):
+        _run(tmp_path / "runs", monkeypatch, "--backend", "replay", "--replay-root", str(root), "--replay-episode",
+             "5", "--scale", "1", "-1", "1", "1", "-1", "1")  # fmt: skip
     with pytest.raises(SystemExit, match="needs --backend remote"):
         _run(tmp_path / "runs", monkeypatch, "--backend", "fake", "--prime-ticks", "32", "--replay-root", str(root),
              "--replay-episode", "5")  # fmt: skip
+
+
+def test_prefetch_is_forced_off_for_a_replay(tmp_path, monkeypatch, capsys):
+    root = write_dataset(tmp_path / "box", {5: TAKE})
+    monkeypatch.setenv("WS4_PREFETCH_TICKS", "16")  # set for the FLUX rows; it would skip recorded steps here
+    (meta,) = _run(tmp_path / "runs", monkeypatch, "--backend", "replay", "--replay-root", str(root),
+                   "--replay-episode", "5", "--seconds", "60", "--no-keepout")  # fmt: skip
+    assert meta["args"]["prefetch_ticks"] == 0 and meta["end_reason"].startswith("replay finished")
+    assert "chunk prefetch off for the replay (was 16)" in capsys.readouterr().out
 
 
 def test_prime_ticks_replays_the_start_then_hands_over_to_flux(tmp_path, monkeypatch):

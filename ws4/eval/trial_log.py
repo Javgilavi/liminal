@@ -25,13 +25,13 @@ from datetime import datetime
 from pathlib import Path
 
 DEFAULT_LOG = Path(__file__).resolve().parent / "trials.jsonl"
-CONDITIONS = ("zero_shot", "post_training")
+CONDITIONS = ("zero_shot", "post_training", "scripted")  # scripted: no policy (a replayed demo take)
 
 
 @dataclass
 class Trial:
     task: str
-    condition: str  # zero_shot | post_training
+    condition: str  # zero_shot | post_training | scripted
     variant: str  # A0, A1, lora_A, lora_B, lora_P, ...
     checkpoint: str  # repo id or path, with revision
     steps_total: int

@@ -466,7 +466,8 @@ of at most `--max-step` deg, 5 % on the gripper, linear in joint space, from the
 follows the recorded path, only slower where the operator moved faster. When the last command has been executed the
 attempt ends with `replay finished: scripted replay of recorded demo N, holding where the take ends`; the arm keeps
 holding (x, the default) or returns on r. meta.json carries `replay` and `checkpoint: scripted replay of recorded demo
-N (...)`; a replay is never asked for a score or written to trials.jsonl. Default take 59 (P3, train): nearest the
+N (...)`; scored attempts go to trials.jsonl with condition `scripted` and variant `scripted-replay-ep<N>`, never
+with the policy rows. Prefetch is forced off (it would skip recorded steps). Default take 59 (P3, train): nearest the
 box home at its start (1.6 deg), the widest pen-skill gate margins at its end, settled in its last second, 0
 keep-out refusals over its 549 ticks from box home (18.3 s). `python ws4/single_arm/replay.py 59` summarises a take.
 

@@ -360,8 +360,10 @@ class Session:
                 continue
             from replay import ReplayBackend, load_take  # ws4/single_arm (on sys.path since haller.build)
 
-            if cfg.prefetch_ticks:
-                raise ValueError("a replay counts whole chunks: no prefetch_ticks with a replay skill")
+            if cfg.prefetch_ticks:  # WS4_PREFETCH_TICKS may be set: prefetching would skip recorded steps
+                self.events.add("warn", f"chunk prefetch off (was {cfg.prefetch_ticks}): {skill.name} is a replay, "
+                                "which counts whole chunks")
+                cfg.prefetch_ticks = 0
             name = f"replay_{skill.name}"
             r = skill.replay
             be = ReplayBackend(*load_take(r["root"], r["episode"], r["columns"]), max_step=cfg.max_step,
@@ -853,13 +855,14 @@ class Session:
 
     def _log_attempt(self, run: Any, ok: bool, reason: str) -> None:
         """One trial_log line per FLUX attempt (task = the skill), so each skill's success rate is graded too. A
-        scripted replay is no policy under evaluation: its attempts are in the events and result.json only."""
+        scripted replay is no policy: its rows have condition "scripted" and variant "scripted-replay-ep<N>", as
+        run_single_arm logs them, so they never mix with the FLUX rows."""
         cfg = self.cfg
-        if run.skill.driver:
-            self.events.add("info", f"{run.step.id}: attempt {run.attempt} ({'verified' if ok else 'failed'}) not "
-                            f"logged as a trial: {run.skill.driver}, not FLUX")
-            return
         tl = load_trial_log()
+        condition, variant, checkpoint = cfg.condition, self._variant(), self._checkpoint()
+        if run.skill.driver:
+            condition, variant = "scripted", f"scripted-replay-ep{run.skill.replay['episode']}"
+            checkpoint = f"{run.skill.driver} ({run.skill.replay['root']}, {run.skill.replay['columns']}_* columns)"
         verdict = run.verdicts[-1] if run.verdicts else None
         other = self._other_arm.get((run.step.id, run.attempt), "n/a")
         notes = (f"step {run.step.id} attempt {run.attempt}/{run.step.max_attempts} of run "
@@ -875,7 +878,7 @@ class Session:
                  + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"
                     if verdict else ""))
         trial = tl.Trial(
-            task=run.skill.name, condition=cfg.condition, variant=self._variant(), checkpoint=self._checkpoint(),
+            task=run.skill.name, condition=condition, variant=variant, checkpoint=checkpoint,
             steps_total=1, steps_done=1 if ok else 0, success=ok and run.attempt_interventions == 0,
             interventions=run.attempt_interventions, layout=self.layout_name(), failure="" if ok else reason[:120],
             notes=notes[:900], operator=cfg.operator,

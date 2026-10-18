@@ -77,8 +77,9 @@ verbatim task must equal the FLUX prompt, its `runner_args` and `other_arm_gate`
 replays recorded take 59 (`replay:` in skills.yaml, `--replay-episode N` for another take) instead of FLUX, through the
 same stack (1 deg/tick time warp, the box kit's keep-out with its envelope, the freezes, `finish: hold`); its lid check
 runs once the take has ended. The step card says `REPLAY scripted replay of recorded demo 59, not FLUX`, the events
-say `SCRIPTED REPLAY OF RECORDED DEMO 59, NOT FLUX`, no trial row is written for it, and the chain's trial line notes
-and checkpoint name it. `skill_open_box` need not be served. Add the flag to 3a or 3b; the pen skills stay FLUX.
+say `SCRIPTED REPLAY OF RECORDED DEMO 59, NOT FLUX`, its attempts are logged with condition `scripted` and variant
+`scripted-replay-ep59` (never with the FLUX rows), and the chain's trial line notes and checkpoint name it; prefetch is
+forced off (it would skip recorded steps). `skill_open_box` need not be served. Add the flag to 3a or 3b; the pen skills stay FLUX.
 
 **Handover from the haller HMI (pen-skill rehearsal with `--hold-arm right`)**, as single_arm README "Handover from
 the HMI": Oscar supports the lid and both arms; `bash ~/haller_ws/scripts/quest-teleop/down.sh`; the ports must be free

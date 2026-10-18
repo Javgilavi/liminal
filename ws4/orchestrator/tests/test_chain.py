@@ -853,7 +853,7 @@ def box_take():
 def test_box_replay_runs_the_chain_and_is_never_called_flux(tmp_path):
     """--skill-backend open_box=replay: the box step replays a recorded take through the same stack (1 deg/tick,
     the box kit's keep-out, the hold), checked once the take has ended; the box package is not even served. It is
-    labelled a scripted replay in the events, the HMI state and the chain's trial line, and writes no trial row."""
+    labelled a scripted replay in the events, the HMI state and the trial log (condition "scripted")."""
     from orchestrator.haller import import_single_arm
 
     import_single_arm()
@@ -861,11 +861,13 @@ def test_box_replay_runs_the_chain_and_is_never_called_flux(tmp_path):
 
     root = write_box_take(tmp_path / "box", 7, box_take())
     server, url, token, backends = serve(tmp_path, omit=("open_box",))
-    s = chain_session(tmp_path, url, token, skill_backends={"open_box": "replay"},
+    s = chain_session(tmp_path, url, token, skill_backends={"open_box": "replay"}, prefetch_ticks=8,
                       replay={"episode": 7, "root": str(root), "columns": "left"})
     try:
         box = s.vocab["open_box"]
         assert box.backend == "replay" and box.driver == replay_module.label(7) == "scripted replay of recorded demo 7"
+        assert s.cfg.prefetch_ticks == 0 and s.runner.prefetch_ticks == 0  # forced off: it would skip recorded steps
+        assert any("chunk prefetch off (was 8)" in e["msg"] for e in s.events.recent(200))
         assert "right:replay_open_box" in s.target_backend and "right:skill_open_box" not in s.target_backend
         s.verifier = checks = ScriptedChecks()
         right = []
@@ -885,13 +887,17 @@ def test_box_replay_runs_the_chain_and_is_never_called_flux(tmp_path):
         start = [m for m in msgs if "start on right arm" in m]
         assert start and all("SCRIPTED REPLAY OF RECORDED DEMO 7, NOT FLUX" in m and "FLUX prompt" not in m
                              for m in start)
-        assert any("not logged as a trial: scripted replay of recorded demo 7, not FLUX" in m for m in msgs)
         assert any("open_box: scripted replay of recorded demo 7 (not FLUX)" in m for m in msgs)  # runner settings
         card = [st for snap in snaps for st in snap["steps"] if st["skill"] == "open_box"]
         assert card and all(st["driver"] == "scripted replay of recorded demo 7" for st in card)
         assert {v["name"]: v["driver"] for v in s.snapshot()["vocabulary"]}["open_box"] == box.driver
         trials = load_trial_log().load(tmp_path / "trials.jsonl")
-        assert [t.task for t in trials] == CHAIN[1:] + ["final_chain"]  # no trial row for the replay
+        assert [t.task for t in trials] == CHAIN + ["final_chain"]
+        box_row = trials[0]  # its own condition and variant: never mixed with the FLUX rows
+        assert (box_row.condition, box_row.variant) == ("scripted", "scripted-replay-ep7") and box_row.success
+        assert box_row.checkpoint.startswith("scripted replay of recorded demo 7 (") and "left_* columns" in \
+            box_row.checkpoint
+        assert all(t.condition == "post_training" and t.variant == "lora_chain" for t in trials[1:])
         chain = trials[-1]
         assert "NOT FLUX: open_box: scripted replay of recorded demo 7" in chain.notes
         assert chain.checkpoint == "ws4/chain-loras@test (open_box: scripted replay of recorded demo 7, not FLUX)"

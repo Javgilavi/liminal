@@ -1013,10 +1013,14 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
     import trial_log
 
     failure = "" if result["steps_done"] == len(STEPS) else f"stopped before: {STEPS[result['steps_done']]}"
-    replay = meta.get("replay")  # --prime-ticks: a FLUX attempt that started from a recorded take; never mixed in
-    variant = f"{args.variant}+primed-ep{replay['episode']}-{args.prime_ticks}" if replay else args.variant
+    replay = meta.get("replay")  # never mixed in with the policy rows
+    condition, variant = args.condition, args.variant
+    if getattr(args, "backend", "") == "replay":  # a recorded take, no policy: its own condition and variant
+        condition, variant = "scripted", f"scripted-replay-ep{replay['episode']}"
+    elif replay:  # --prime-ticks: a FLUX attempt that started from a recorded take
+        variant = f"{args.variant}+primed-ep{replay['episode']}-{args.prime_ticks}"
     trial = trial_log.Trial(
-        task=args.trial_task, condition=args.condition, variant=variant, checkpoint=meta["checkpoint"],
+        task=args.trial_task, condition=condition, variant=variant, checkpoint=meta["checkpoint"],
         steps_total=len(STEPS), steps_done=result["steps_done"],
         success=result["steps_done"] == len(STEPS) and result["interventions"] == 0,
         interventions=result["interventions"], layout=meta.get("layout") or args.layout, failure=failure,
@@ -1220,7 +1224,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--slot", choices=("left", "right"), default="left", help="runner slot; no effect on the model")
     p.add_argument("--backend", choices=("fake", *POLICY_BACKENDS, "replay"), default="fake",
                    help="remote = FLUX (or act/serve.py) server; act = LeRobot ACT checkpoint in this process; "
-                        "replay = one recorded take as a scripted policy (replay.py), not FLUX, not logged as a trial")
+                        "replay = one recorded take as a scripted policy (replay.py), not FLUX; logged with condition "
+                        "scripted, variant scripted-replay-ep<N>")
     p.add_argument("--replay-episode", type=int, default=DEFAULT_EPISODE,
                    help=f"--backend replay / --prime-ticks: the take (default {DEFAULT_EPISODE}, see replay.py)")
     p.add_argument("--replay-root", default=str(DEFAULT_ROOT), help="the take's LeRobot dataset (default: the box)")
@@ -1318,7 +1323,7 @@ def main(argv: list[str] | None = None) -> None:
     import logging
 
     logging.getLogger().setLevel(logging.ERROR)  # LeRobot logs every capped goal at WARNING, 30 times a second
-    if args.scene_cam == "blank" and args.backend in POLICY_BACKENDS and not args.no_log:
+    if args.scene_cam == "blank" and args.backend in (*POLICY_BACKENDS, "replay") and not args.no_log:
         raise SystemExit("a blank scene camera is out of distribution: such attempts must not be logged (--no-log)")
 
     holder = None
@@ -1356,8 +1361,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.backend == "replay" or args.prime_ticks:
         if args.scale or args.offset:
             raise SystemExit("a replay sends the recorded robot-unit commands: no --scale / --offset")
-        if args.prefetch_ticks:
-            raise SystemExit("a replay counts whole chunks: no --prefetch-ticks with --backend replay / --prime-ticks")
+        if args.prefetch_ticks:  # WS4_PREFETCH_TICKS may be set for FLUX rows; prefetching would skip recorded steps
+            print(f"chunk prefetch off for the replay (was {args.prefetch_ticks}): it counts whole chunks", flush=True)
+            args.prefetch_ticks = 0
         if args.prime_ticks and args.backend != "remote":
             raise SystemExit("--prime-ticks hands over to FLUX: it needs --backend remote")
         info = backend.info
@@ -1365,7 +1371,8 @@ def main(argv: list[str] | None = None) -> None:
               f"time-warped to {args.max_step:g} deg/tick: {'NOT FLUX' if args.backend == 'replay' else 'then FLUX'}",
               flush=True)  # fmt: skip
     if args.action_steps is not None and args.backend in ("remote", "fake", "replay"):
-        # The runner reads the horizon from the backend's contract (DualArmRunner._accept keeps n_action_steps).
+        # The runner reads the horizon from the backend's contract (DualArmRunner._accept keeps n_action_steps). For a
+        # replay it only sets how often the take is asked for: the commands sent are the same.
         backend.contract = replace(backend.contract, n_action_steps=args.action_steps)
         print(f"action horizon: {args.action_steps} of {backend.contract.chunk_size} commands per chunk", flush=True)
     if args.no_keepout and args.robot == "so101" and not args.observe:
@@ -1433,7 +1440,8 @@ def main(argv: list[str] | None = None) -> None:
                 meta.update(layout=layout, layout_ref=ref.stem if ref else "", **start)
                 (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))
                 # Score the attempt while the arm still holds where it ended, so a quit ("x") never loses it.
-                result = None if args.no_log or args.backend not in POLICY_BACKENDS else ask_result(keys, meta)
+                scored = args.backend in (*POLICY_BACKENDS, "replay")  # a replay: condition "scripted" (log_trial)
+                result = None if args.no_log or not scored else ask_result(keys, meta)
                 if result is not None:
                     meta["result"] = result
                     (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))
