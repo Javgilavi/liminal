@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 Instructions for anyone, human or AI coding agent, changing this repo during the
 hackathon. Read this before your first commit.
@@ -7,7 +7,9 @@ hackathon. Read this before your first commit.
 
 A dual-arm orchestration layer on top of a learned VLA (FLUX 3 Action). **FLUX is the
 manipulation backend, not the coordinator.** It executes bounded, text-prompted skills
-on one arm (option A) or on both arms as one bimanual skill (option B, see PLAN.md). The behavior tree decides what runs, when, on which arm, and what must stay
+on one arm, using task LoRA bundles and two independent per-arm FLUX instances.
+The initial unified XLeRobot embodiment fine-tune was superseded (see PLAN.md).
+The behavior-tree harness decides what runs, when, on which arm, and what must stay
 true while it runs. Perception decides whether it worked.
 
 ## Commands
@@ -34,13 +36,17 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
 3. **Never trust a skill's own success claim.** A skill counts as done only when its
    `success` predicate holds in `WorldState`. `SkillNode` and `run_task` re-check it. Don't
    bypass that.
-4. **LLMs propose, the tree enforces.** Planners output task-file YAML that goes
-   through `parse_task`. No LLM output ever reaches motors or marks a goal complete.
+4. **LLMs propose, deterministic controllers enforce.** Task planners output YAML
+   through `parse_task`. The explicitly enabled live hybrid gate is a separate
+   action-level exception: a validated student/edit/eef/stop decision passes through
+   bounded local IK and `SafetySupervisor.send()`. No model output goes directly to
+   motors or marks a goal complete. Hybrid motion requires verified kinematic mapping;
+   never bypass the limits, freshness checks, ownership, or existing hardware stop.
 5. **One arm, one owner.** Arm ownership is claimed by nodes (`safety.claim`). A skill
    on an arm group (`both`) claims every member. An `ArmConflict` is a planning bug.
    Fix the tree, don't catch and ignore it.
 6. **Per-target policy state.** FLUX observation history is kept per skill target (an
-   arm in option A, the `both` group in option B). Never mix queues. Inference is
+   arm in the current runtime, or the `both` group in legacy compatibility tests). Never mix queues. Inference is
    single-flight per model instance behind one lock.
 7. **Interfaces are contracts.** `core/types.py`, `core/interfaces.py` and the task-file
    grammar in `orchestration/task_spec.py` are shared by all workstreams. Change them
@@ -50,17 +56,19 @@ Tests run on mock arms only, with no GPU, no network and no serial ports. Keep i
    get a `VERIFY` comment (see `configs/policy/flux3_so101.yaml`). Remove the marker
    once confirmed on real hardware or code.
 
-## Two FLUX embodiment options (see PLAN.md)
+## Current FLUX architecture (see PLAN.md)
 
-- **Option A, per-arm** (default): skills target `left` / `right`; policy
-  `configs/policy/flux3_so101.yaml` (`action_dim: 6`). A1 = one shared model, A2 =
-  `instances: per_arm`.
-- **Option B, bimanual**: skills target the `both` group; policy
-  `configs/policy/flux3_dual_bimanual.yaml` (`action_dim: 12`, `[left | right]`).
+Task LoRA fine-tuning retains the existing 6-D SO-101 embodiment. Dual-arm policy
+profiles select `instances: per_arm`: two independent FLUX instances coordinated
+by the real skill-runtime harness. Skills target `left` / `right`; each instance
+serializes its own checkpoint changes and inference. Shared inference is an
+explicit fallback, not the selected dual-arm profile.
 
-Keep both working: don't hard-code 6-D actions or single-arm skill targets outside
-`hardware/`. `FluxPolicyBackend` refuses a skill whose arm/group joint count doesn't match
-`action_dim`.
+The initial unified 12-D XLeRobot fine-tune (former Option B) is superseded.
+Its configs and `both` group mock tests remain compatibility scaffolds only.
+Keep generic action dimensions and group support working: do not hard-code 6-D
+outside hardware. No validated 12-D checkpoint is supplied. XLeRobot hardware
+continues to use the per-arm architecture.
 
 ## Ownership (see TASK.md)
 
@@ -71,12 +79,12 @@ Keep both working: don't hard-code 6-D actions or single-arm skill targets outsi
 | `orchestration/`, `perception/`, `configs/tasks/`, `configs/skills.yaml` | WS3 long-horizon |
 | `sim/`, `configs/embodiment/`, `configs/robot/mujoco_*.yaml` | WS4 sim + XLeRobot |
 | `hardware/`, `safety/`, `ui/`, `configs/robot/so101_*.yaml`, `scripts/record_waypoints.py` | WS5 hardware + UI |
-| `core/`, `app.py`, `AGENT.md`, `CLAUDE.md`, `PLAN.md`, `TASK.md`, `README.md` | shared, so coordinate first |
+| `core/`, `app.py`, `AGENTS.md`, `CLAUDE.md`, `PLAN.md`, `TASK.md`, `README.md` | shared, so coordinate first |
 
 Touching another workstream's path is fine for small fixes. Tell the owner.
 
-`CLAUDE.md` is an exact copy of this file, for Claude Code. Edit `AGENT.md`, then run
-`cp AGENT.md CLAUDE.md`. A test fails if they drift.
+`CLAUDE.md` is an exact copy of this file, for Claude Code. Edit `AGENTS.md`, then run
+`cp AGENTS.md CLAUDE.md`. A test fails if they drift.
 
 ## How to extend
 
@@ -96,7 +104,7 @@ Touching another workstream's path is fine for small fixes. Tell the owner.
 
 ## Style
 
-- Python ≥3.10, type hints, dataclasses, `async` for anything that waits on the world.
+- Python 3.12, type hints, dataclasses, `async` for anything that waits on the world.
 - Match the surrounding code. Comments explain *why*, not *what*.
 - Line length 120 (ruff). Keep modules small and dependency-light.
 - Commits: `ws<N>: <imperative summary>` (e.g. `ws3: add Fallback recovery to lid task`).

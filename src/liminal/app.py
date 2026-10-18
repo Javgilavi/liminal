@@ -11,6 +11,9 @@ import yaml
 from liminal.core.interfaces import Arm, SkillBackend
 from liminal.orchestration.context import ExecutionContext
 from liminal.orchestration.skills import PrimitiveBackend, SkillRouter
+from liminal.perception.inspector import SceneInspector
+from liminal.perception.types import InspectionProfile
+from liminal.perception.vlm import VisionModel
 from liminal.perception.world_state import WorldState
 from liminal.safety.supervisor import JointLimits, SafetySupervisor
 
@@ -37,7 +40,9 @@ def build_arms(robot_cfg: dict[str, Any]) -> tuple[dict[str, Arm], dict[str, Any
             from liminal.hardware.so101 import SO101Arm
 
             arms[name] = SO101Arm(name, port=a["port"], robot_id=a.get("id"),
-                                  max_relative_target=a.get("max_relative_target"))
+                                  max_relative_target=a.get("max_relative_target"),
+                                  max_speed=a.get("max_speed", 20.0),
+                                  temperature_limit=a.get("temperature_limit", 55.0))
         elif kind == "mujoco":
             from liminal.sim.mujoco_arm import MujocoArm
 
@@ -53,7 +58,9 @@ def build_arms(robot_cfg: dict[str, Any]) -> tuple[dict[str, Arm], dict[str, Any
         elif kind == "opencv":
             from liminal.hardware.cameras import OpenCVCamera
 
-            cameras[name] = OpenCVCamera(name, c["index"], c.get("width", 640), c.get("height", 480))
+            cameras[name] = OpenCVCamera(name, c["index"], c.get("width", 640), c.get("height", 480),
+                                         fps=c.get("fps", 30), rotation=c.get("rotation", 0),
+                                         label=c.get("label"), fourcc=c.get("fourcc"))
         elif kind == "mujoco":
             from liminal.sim.mujoco_arm import MujocoCamera
 
@@ -83,14 +90,16 @@ def build_policy(backend: str, policy_cfg: dict[str, Any] | None = None) -> Skil
 
 def build_context(robot: str | Path | dict[str, Any], backend: str = "mock",
                   policy: str | Path | dict[str, Any] | None = None, log_path: str | Path | None = None,
-                  policy_backend: SkillBackend | None = None) -> ExecutionContext:
+                  policy_backend: SkillBackend | None = None, vision_model: VisionModel | None = None,
+                  inspection: InspectionProfile | None = None,
+                  inspection_confirmations: int = 2) -> ExecutionContext:
     robot_cfg = robot if isinstance(robot, dict) else _load(robot)
     policy_cfg = policy if isinstance(policy, dict) or policy is None else _load(policy)
     arms, cameras = build_arms(robot_cfg)
     limits = {k: JointLimits(**v) for k, v in robot_cfg.get("limits", {}).items()}
     p = robot_cfg.get("primitives", {})
     policy_cfg = dict(policy_cfg or {})
-    # Option A2 (PLAN.md): one independent policy instance per arm, optionally on its own GPU.
+    # Selected dual-arm architecture: independent instances, optionally on separate GPUs.
     instances = policy_cfg.pop("instances", "shared")
     devices = policy_cfg.pop("devices", {})
     arm_policies: dict[str, SkillBackend] = {}
@@ -109,11 +118,21 @@ def build_context(robot: str | Path | dict[str, Any], backend: str = "mock",
         unknown = set(members) - set(arms)
         if g in arms or unknown:
             raise ValueError(f"arm group {g!r} must not shadow an arm and must list known arms (unknown: {unknown})")
-    return ExecutionContext(
+    world = WorldState(log_path=log_path)
+    ctx = ExecutionContext(
         arms=arms,
-        world=WorldState(log_path=log_path),
+        world=world,
         safety=SafetySupervisor(arms, limits),
         skills=router,
         cameras=cameras,
+        inspection=inspection or InspectionProfile(),
         arm_groups=groups,
     )
+    if vision_model is not None:
+        ctx.inspector = SceneInspector(
+            vision_model,
+            cameras,
+            world,
+            confirmations=inspection_confirmations,
+        )
+    return ctx

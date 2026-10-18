@@ -1,0 +1,82 @@
+<!-- Haller (github.com/oscardvs/haller_ws), Phase A rig: two SO-ARM101 followers on a static
+     XLeRobot tower over a bench. No mobile base (Phase B, not built yet).
+
+     Frame: bench top at z = 0, arms reach toward -y, x to the operator's right when standing
+     behind the tower. Every name in an arm gets a left_/right_ prefix (joints, actuators,
+     `wrist` camera), which is what liminal's configs/robot/mujoco_dual.yaml expects.
+
+     Sources for each number (VERIFY = not measured on the real robot yet):
+       arm model        TheRobotStudio SO-ARM100 so101_new_calib_camera.xml (LeRobot joint names,
+                        zero = middle of range = LeRobot "new calib"), servo force 1.86 N.m (7.4 V STS3215),
+                        kp doubled for Haller's P_Coefficient=32
+       riser 0.10 m     haller_ws config.solo-real.yaml "the measured riser"
+       arm spacing      +/-0.15 m from XLeRobot's MJCF tower (Rotation_Pitch at y = +/-0.15). haller_ws
+                        uses +/-0.20 but marks it "PLACEHOLDER, nobody has measured the real tower". VERIFY
+       D455 pose        XLeRobot head mount (Haller bolts the D455 rigid in Gimbal_Pitch_Holder):
+                        ~0.21 m behind and ~0.30 m above the shoulders. Aim point is a guess. VERIFY
+       D455 fov         65 deg vertical: Intel RGB spec 90 x 65 (haller's "87 x 58" is the depth FOV)
+       wrist cams       OV2710, 87.0 x 56.2 deg @ 1280x720 (haller_ws calibration/cameras/wrist_*.json)
+       bench, cubes,    haller_ws bimanual sim preset (sim/assets/scenes/*.xml, sim/builder.py) -->
+<mujoco model="haller_dual_so101">
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81" cone="elliptic" impratio="10"/>
+
+  <visual>
+    <quality shadowsize="4096"/>
+    <global offwidth="1280" offheight="960"/>
+  </visual>
+
+  <asset>
+    <model name="so101" file="so101/so101.xml"/>
+    <texture name="bench_tex" type="2d" builtin="checker" rgb1="0.38 0.38 0.39" rgb2="0.32 0.32 0.33"
+             width="256" height="256"/>
+    <material name="bench_mat" texture="bench_tex" texrepeat="24 18" reflectance="0.05"/>
+  </asset>
+
+  <worldbody>
+    <light name="overhead_light" pos="0 0 1.5" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
+    <light name="operator_fill" pos="0 -1.1 0.75" dir="0 0.82 -0.57" diffuse="0.32 0.32 0.34"
+           specular="0.05 0.05 0.05" castshadow="false"/>
+
+    <geom name="arena_floor" type="plane" size="2 2 0.05" pos="0 0 -0.02" rgba="0.16 0.16 0.18 1"/>
+    <geom name="workbench" type="box" size="0.6 0.45 0.01" pos="0 0 -0.01" material="bench_mat"/>
+    <geom name="place_zone" type="box" size="0.06 0.06 0.001" pos="0 -0.21 0.001" rgba="0.2 0.4 0.9 1"/>
+
+    <!-- XLeRobot tower: base plate on a 0.10 m riser, plus the mast that carries the D455.
+         Plate footprint is approximate (VERIFY); the mast is visual only. -->
+    <body name="tower">
+      <geom name="tower_plate" type="box" size="0.26 0.09 0.05" pos="0 0.03 0.05" rgba="0.15 0.15 0.15 1"/>
+      <geom name="tower_mast" type="box" size="0.02 0.02 0.23" pos="0 0.25 0.33" rgba="0.15 0.15 0.15 1"
+            contype="0" conaffinity="0"/>
+      <!-- `top` is the D455 colour stream (/dev/haller_cam_mast, recorded at 640x480 as dataset key `top`).
+           It looks over the arms toward the operator. fovy 65 = D455 RGB vertical FOV (90 x 65 at 16:10).
+           The 4:3 mode crops the sides, so horizontal is ~80 deg. VERIFY against a real frame. -->
+      <camera name="top" pos="0 0.21 0.46" xyaxes="-1 0 0  0 -0.7465 0.6654" fovy="65"/>
+    </body>
+
+    <!-- yaw -90 deg: the SO-101 model reaches along its +x, the bench task frame along -y. -->
+    <frame name="left_mount" pos="-0.15 0 0.10" euler="0 0 -1.5708">
+      <attach model="so101" body="base" prefix="left_"/>
+    </frame>
+    <frame name="right_mount" pos="0.15 0 0.10" euler="0 0 -1.5708">
+      <attach model="so101" body="base" prefix="right_"/>
+    </frame>
+
+    <!-- Cube slots from haller_ws builder._CUBE_SLOTS: one per arm + a contested midline cube. -->
+    <body name="cube_red" pos="-0.28 -0.22 0.02">
+      <freejoint/>
+      <geom type="box" size="0.02 0.02 0.02" mass="0.05" rgba="0.85 0.20 0.20 1"/>
+    </body>
+    <body name="cube_green" pos="0.28 -0.22 0.02">
+      <freejoint/>
+      <geom type="box" size="0.02 0.02 0.02" mass="0.05" rgba="0.20 0.70 0.25 1"/>
+    </body>
+    <body name="cube_amber" pos="0 -0.12 0.02">
+      <freejoint/>
+      <geom type="box" size="0.02 0.02 0.02" mass="0.05" rgba="0.95 0.75 0.15 1"/>
+    </body>
+
+    <!-- Operator view from the front (haller's "threequarter"), not a real camera. -->
+    <camera name="front" pos="0 -0.72 0.54" xyaxes="1 0 0  0 0.6529 0.7574" fovy="46"/>
+  </worldbody>
+</mujoco>

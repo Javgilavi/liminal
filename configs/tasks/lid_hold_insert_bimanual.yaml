@@ -1,3 +1,5 @@
+# HISTORICAL / SUPERSEDED: original unified embodiment fine-tune, not the current LoRA runtime.
+# Retained for compatibility and mock tests; no validated 12-D checkpoint is supplied.
 # Demo A with option B (PLAN.md): the bimanual policy does hold + insert as ONE skill
 # on the `both` group. The tree still sequences, verifies and recovers around it.
 # Run with --policy configs/policy/flux3_dual_bimanual.yaml once the fine-tune exists.

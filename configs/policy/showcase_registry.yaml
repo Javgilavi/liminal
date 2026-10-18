@@ -1,0 +1,105 @@
+# VERIFY: opening, green pen and yellow boxcutter bundles are not staged. Zero hashes block use.
+midtraining_base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
+embodiment: so101
+joint_order: &id001
+- shoulder_pan
+- shoulder_lift
+- elbow_flex
+- wrist_flex
+- wrist_roll
+- gripper
+state_units: degrees_percent
+action_semantics: absolute_position
+action_dim: 6
+camera_roles:
+- scene
+- wrist
+camera_map:
+  left:
+    scene: top
+    wrist: left_wrist
+  right:
+    scene: top
+    wrist: right_wrist
+obs_history: 8
+chunk_size: 42
+execute_steps: 16
+control_hz: 30
+max_observation_age_s: 1
+load_timeout_s: 180
+inference_timeout_s: 30
+device: cuda
+checkpoints:
+  red_pen_raw_10000:
+    path: /liminal/models/so101-haller-pen-raw10000-e85fc583-left
+    sha256: 43e4c9c772d1a475ecf2b964d8f8d5504e763f86e46ba9538fddfe0e2b55f858
+    base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
+    embodiment: so101
+    joint_order: *id001
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: &id002
+    - scene
+    - wrist
+    targets:
+    - left
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: dataset_native
+  open_box:
+    path: /liminal/models/skills/open_box
+    sha256: '0000000000000000000000000000000000000000000000000000000000000000'
+    base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
+    embodiment: so101
+    joint_order: *id001
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: *id002
+    targets:
+    - right
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: dataset_native
+  put_green_pen_in_slot:
+    path: /liminal/models/skills/put_green_pen_in_slot
+    sha256: '0000000000000000000000000000000000000000000000000000000000000000'
+    base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
+    embodiment: so101
+    joint_order: *id001
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: *id002
+    targets:
+    - left
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: dataset_native
+  put_yellow_boxcutter_in_slot:
+    path: /liminal/models/skills/put_yellow_boxcutter_in_slot
+    sha256: '0000000000000000000000000000000000000000000000000000000000000000'
+    base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
+    embodiment: so101
+    joint_order: *id001
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: *id002
+    targets:
+    - left
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: dataset_native
+skill_checkpoints:
+  put_red_pen_in_slot: red_pen_raw_10000
+  open_box: open_box
+  put_green_pen_in_slot: put_green_pen_in_slot
+  put_yellow_boxcutter_in_slot: put_yellow_boxcutter_in_slot
+instances: per_arm
+max_invariant_age_s: 5

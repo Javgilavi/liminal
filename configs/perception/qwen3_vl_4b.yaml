@@ -1,0 +1,44 @@
+model:
+  provider: qwen
+  checkpoint: Qwen/Qwen3-VL-4B-Instruct
+  revision: ebb281ec70b05090aa6165b016eac8ec08e71b17  # VERIFY with the first local evaluation.
+  device: cuda:0             # VERIFY against the deployment machine's GPU layout
+  dtype: bfloat16
+  quantization: bnb_4bit     # Set to none for an unquantized BF16 baseline.
+  max_new_tokens: 150
+
+inspection:
+  cameras: [top, left_wrist, right_wrist]
+  confirmations: 2
+  timeout_s: 10.0
+  retry_delay_s: 0.1
+  context: >-
+    Inspect a dual-arm component-replacement workspace containing an openable box,
+    a cable, a faulty component, a red cup, and a green replacement component.
+    Judge only the named visible state predicates; do not propose robot actions.
+  definitions:
+    lid_open: >-
+      The box lid is raised far enough that the interior and component access area
+      are visibly exposed.
+    access_clear: >-
+      No cable or other obstacle crosses the main arm's route between the box
+      opening and the component grasp area.
+    access_blocked: >-
+      A cable or other obstacle visibly crosses or obstructs the main arm's route
+      into the component grasp area.
+    cable_secured_clear: >-
+      The helper arm has the cable under control and the cable is visibly held away
+      from both the box opening and the main arm's working corridor.
+    faulty_component_in_red_cup: >-
+      The faulty component is visibly resting inside the red cup, not merely above,
+      beside, or occluding it.
+    replacement_in_slot: >-
+      The green replacement component is visibly seated in the intended box slot,
+      rather than hovering above it or lying elsewhere in the box.
+    cable_restored: >-
+      The helper arm is no longer holding the cable and the cable is visibly back in
+      its intended resting route outside the main arm's working corridor.
+    main_arm_home: >-
+      The main arm is visibly at its configured safe home pose and clear of the box.
+  exclusive_groups:
+    - [access_clear, access_blocked]

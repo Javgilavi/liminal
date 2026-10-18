@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Liminal · bimanual control</title><link rel="stylesheet" href="/static/style.css">
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <header><div><h1>Liminal</h1><span id="link" role="status">Connecting…</span></div>
+    <button id="estop" class="danger">E-STOP · release both arms</button></header>
+  <p class="notice">Connection starts with torque off. Support the arm before engaging or releasing it.
+    Keep loads light and watch both arms: there is no geometric collision detection.</p>
+  <p id="error" role="alert"></p>
+  <main><section id="arms" aria-label="Arm controls"></section>
+    <section><h2>Cameras</h2><div id="cameras"></div></section>
+    <section><h2>Tasks</h2><form id="task-form"><select id="task" aria-label="Task"></select>
+      <button id="run">Run task</button></form><pre id="report"></pre></section>
+  </main>
+  <footer><button id="reset">Reset E-stop (does not engage)</button>
+    <span>Five joints in degrees · gripper in % · each jog is one capped step</span></footer>
+  <template id="arm-template"><article><h2></h2><p class="health"></p><p class="owner"></p>
+    <button class="engage">Engage at current pose</button><button class="release">Free-drive</button>
+    <table><thead><tr><th>Joint</th><th>Position</th><th>Jog</th></tr></thead><tbody></tbody></table>
+  </article></template>
+</body>
+</html>

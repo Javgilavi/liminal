@@ -1,0 +1,166 @@
+# Component-replacement demo. The left arm is the helper; the right arm performs
+# removal and insertion. The lid stays open, so closing it is intentionally absent.
+name: replace_component
+description: Open the box, clear the cable if necessary, and replace the faulty component.
+goal: replacement_in_slot
+
+# YAML anchors keep the recovery-aware main-arm sequence identical in both access
+# branches. parse_task compiles each reference into independent behavior-tree nodes.
+subtrees:
+  right_recovery: &right_recovery
+    sequence:
+      - skill: {arm: right, name: home}
+      - inspect:
+          predicates: [main_arm_home]
+          cameras: [top]
+          definitions:
+            main_arm_home: The right arm is at its configured home pose and clear of the box.
+          timeout_s: 10
+      - check: main_arm_home
+  left_recovery: &left_recovery
+    sequence:
+      - skill: {arm: left, name: home}
+      - inspect:
+          predicates: [helper_arm_home]
+          cameras: [top]
+          definitions:
+            helper_arm_home: The left arm is at its configured home pose and clear of the box.
+          timeout_s: 10
+      - check: helper_arm_home
+  main_work: &main_work
+    fallback:
+      - check: replacement_in_slot
+      - sequence:
+          - fallback:
+              - check: faulty_component_in_red_cup
+              - retry:
+                  attempts: 2
+                  recovery: *right_recovery
+                  do:
+                    skill:
+                      arm: right
+                      name: remove_to_red_cup
+                      target: faulty_component
+                      prompt: Remove the faulty component from the box and place it fully inside the red cup
+                      success: faulty_component_in_red_cup
+                      timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
+                      zones: [box]
+          - retry:
+              attempts: 2
+              recovery: *right_recovery
+              do:
+                skill:
+                  arm: right
+                  name: green_cup_to_slot
+                  target: green_replacement
+                  prompt: Pick the green replacement from its cup and seat it fully in the empty box slot
+                  success: replacement_in_slot
+                  timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
+                  zones: [box]
+
+tree:
+  sequence:
+    - inspect:
+        predicates: [lid_open]
+        cameras: [top]
+        definitions:
+          lid_open: The box lid is raised far enough that the interior and component access area are visible.
+        context: Determine whether the box must be opened before component replacement.
+        timeout_s: 10
+    - fallback:
+        - check: lid_open
+        - retry:
+            attempts: 2
+            recovery: *left_recovery
+            do:
+              skill:
+                arm: left
+                name: open_lid
+                target: lid
+                prompt: Grasp the box lid edge and raise it until the component area is fully exposed
+                success: lid_open
+                timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
+                zones: [box]
+    - inspect:
+        predicates: [access_clear, access_blocked, faulty_component_in_red_cup, replacement_in_slot]
+        cameras: [top]
+        definitions:
+          access_clear: No cable or obstacle crosses the right arm's route into the component grasp area.
+          access_blocked: A cable or obstacle crosses or obstructs the right arm's route into the component area.
+          faulty_component_in_red_cup: The faulty component is visibly resting fully inside the red cup.
+          replacement_in_slot: The green replacement is visibly seated in the intended box slot.
+        exclusive_groups:
+          - [access_clear, access_blocked]
+        context: Inspect access for the right main arm and determine which replacement subgoals are already complete.
+        timeout_s: 10
+    - fallback:
+        # Unobstructed route: the helper arm is not needed after opening the lid.
+        - sequence:
+            - check: access_clear
+            - *main_work
+            - skill: {arm: right, name: home}
+            - inspect:
+                predicates: [main_arm_home]
+                cameras: [top]
+                definitions:
+                  main_arm_home: The right main arm is at its safe home pose and clear of the box.
+                timeout_s: 10
+
+            - check: main_arm_home
+
+        # Obstructed route: clear and hold the cable while the right arm works.
+        - sequence:
+            - check: access_blocked
+            - retry:
+                attempts: 2
+                recovery:
+                  sequence:
+                    - *right_recovery
+                    - *left_recovery
+                do:
+                  sequence:
+                    - skill:
+                        arm: left
+                        name: clear_cable_to_hold
+                        target: cable
+                        prompt: Grasp the cable and move it clear of the box opening and the right arm's work corridor
+                        success: cable_secured_clear
+                        timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
+                        zones: [box]
+                    - while:
+                        arm: left
+                        maintain: cable_secured_clear
+                        until: replacement_in_slot
+                        do: *main_work
+            - skill: {arm: right, name: home}
+            - inspect:
+                predicates: [main_arm_home]
+                cameras: [top]
+                definitions:
+                  main_arm_home: The right main arm is at its safe home pose and clear of the box.
+                timeout_s: 10
+            - check: main_arm_home
+            - retry:
+                attempts: 2
+                recovery: *left_recovery
+                do:
+                  skill:
+                    arm: left
+                    name: restore_cable
+                    target: cable
+                    prompt: Return the cable to its resting route outside the work corridor and release it
+                    success: cable_restored
+                    timeout_s: 240  # Includes cold checkpoint load; motion still uses bounded execution windows.
+                    zones: [box]
+            - inspect:
+                predicates: [cable_secured_clear, cable_restored]
+                cameras: [top]
+                definitions:
+                  cable_secured_clear: The left helper arm still holds the cable away from the box and work corridor.
+                  cable_restored: The helper released the cable and it is back in its resting route outside the corridor.
+                exclusive_groups:
+                  - [cable_secured_clear, cable_restored]
+                timeout_s: 10
+            - check: "!cable_secured_clear"
+            - check: cable_restored
+    - check: replacement_in_slot

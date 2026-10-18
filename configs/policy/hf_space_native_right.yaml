@@ -1,0 +1,37 @@
+# Experimental native-coordinate inference matching HF Space d7da38e.
+# Start without --execute; this profile has a 120-second execution deadline.
+arm: right
+expected_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
+prompt: Pick up the red pen.
+duration_s: 120.0
+hold_on_duration: true
+gripper_clamping: true
+inference:
+  n_action_steps: 16
+  num_inference_steps: 4
+  guidance_scale: 3.0
+  guidance_scale_action: null
+  sampler_shift: 6.93
+  seed: 42
+stall_detection:
+  window_s: 1.0
+  min_load: 0.4
+  min_error: 0.75
+  min_progress: 0.1
+scene_key: top
+wrist_camera_id: wrist_a
+wrist_device: /dev/v4l/by-path/pci-0000:06:00.3-usb-0:1.2:1.0-video-index0
+wrist_rotation: 180
+camera_verified: true
+units_verified: true
+coordinate_mapping: hf_space_native
+joint_scale: [1, 1, 1, 1, 1, 1]
+joint_offset: [0, 0, 0, 0, 0, 0]
+normalization_profile: hf_space_native
+checkpoint: /liminal/models/so101-hf-space-native-20261017
+vm: prd-inf-vm-01
+zone: europe-west1-b
+project: motion-mvp
+official_lerobot: true
+worker: /liminal/scripts/flux_lerobot_worker.py
+python: /liminal/train-env/bin/python

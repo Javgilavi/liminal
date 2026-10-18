@@ -16,20 +16,35 @@ collaboration patterns:
 
 ```mermaid
 flowchart TB
-    UI[ui: CLI / HTTP / voice] --> P
-    P[planner: template | LLM | Gemini ER | bimanual obstacle] -->|task YAML| C[task_spec compiler]
-    C --> BT[behavior tree executor]
-    BT <--> W[(world state + event log)]
-    PER[perception: colour zones, VLM verifier, sim ground truth] --> W
-    BT --> S[safety supervisor]
-    S --> R[skill router]
-    R -->|hold, release, home| PRIM[primitive backend]
-    R -->|learned skills| POL[FLUX 3 Action / scripted / mock]
-    PRIM --> A1[left arm]
-    PRIM --> A2[right arm]
-    POL --> A1
-    POL --> A2
+    UI[CLI or operator UI] --> C[Task YAML compiler]
+    P[Template or LLM planner] -->|proposed task YAML| C
+    C --> BT[Behavior tree: sequencing, prerequisites, recovery]
+    BT -->|claim arms and zones| S[SafetySupervisor]
+    BT --> R[SkillRouter]
+    R -->|hold, release, home, gripper| PRIM[PrimitiveBackend]
+    R -->|bounded manipulation| F[Per-arm FluxPolicyBackend: independent left / right instances]
+    REG[Skill-to-checkpoint registry] -->|validated bundle and identity| F
+    F --> E[Per-arm LeRobotEngine: saved processors and LoRA-adapted weights]
+    E -->|predicted action chunk| F
+    F -->|each position command| S
+    PRIM -->|position commands| S
+    S --> A[Arm drivers: mock or calibrated hardware]
+    PRIM -.->|local hold / release| A
+    A -->|measured state and committed command| F
+    CAM[Cameras] -->|fresh observation windows| F
+    CAM --> I[SceneInspector]
+    F -->|inspect progress| I
+    BT -->|inspect prerequisites and refresh invariants| I
+    I --> W[(WorldState: timestamped evidence and event log)]
+    W -->|verified success and invariant monitoring| BT
+    W -->|continue, finish or abort| F
 ```
+
+The arrows distinguish policy outputs from motor writes: predicted actions return
+to the bounded executor, and every policy position command passes through the
+supervisor. Primitive hold/release operations use the driver's local hold contract.
+See [the showcase runtime](showcase-runtime.md) for the configured runtime and
+validation limits.
 
 | Module | Owns | Key file |
 |--------|------|----------|
@@ -61,20 +76,24 @@ flowchart TB
 
 FLUX is a learned manipulation backend for bounded skills. It's not the coordinator.
 
-- One model instance, two per-arm sessions. Each arm has its **own** observation
-  history (scene + its wrist camera + its joint state).
-- **Single-flight inference** behind one lock. While FLUX serves one arm, the other
-  arm sits on its hold controller, which gives simultaneous physical collaboration
-  without two concurrent model calls.
-- Action chunks run through `SafetySupervisor.send()` at `control_hz`; the skill
-  exits early as soon as its `success` predicate holds.
-- Released checkpoint is single-arm 6-D. Two embodiment options ([PLAN.md](../PLAN.md)):
-  **A** per-arm policies (A1 shared model + optional per-arm LoRA, A2 one instance per
-  arm via `SkillRouter.arm_policies`) or **B** one bimanual 12-D fine-tune driving the
-  `both` arm group (state and images concatenated in, action split back per arm in
-  `arm_groups` order). The backend picks the behaviour from `action_dim` and rejects mismatches.
-- Planning-note numbers, all `VERIFY`: 7B world-action model, scene + wrist cameras,
-  42-step chunks, 32 executed at 30 Hz, 8-frame history, ~32 GB VRAM in BF16, LoRA recipe ~10k steps.
+- The selected dual-arm profiles use two independent FLUX instances. Each has its
+  own execution and inference locks, checkpoint state and history; inference can
+  overlap across arms when the tree allows it. Local holding needs no VLA calls.
+- Each skill selects a complete checkpoint bundle through configuration. Pinned
+  hashes, processor provenance, shared-base identity and driver coordinate contracts
+  are checked before motion. LoRA weights are merged during export.
+- Measured state, committed commands and camera images form fresh per-target
+  history windows. Model and processor state reset at skill boundaries.
+- The saved preprocessor, `Flux3Policy.predict_action_chunk` and saved postprocessor
+  produce absolute position chunks. Every executed action uses
+  `SafetySupervisor.send()`; perception determines whether the skill succeeded.
+- Task LoRA retains the existing 6-D action head. The initial unified XLeRobot
+  12-D embodiment fine-tune was superseded. Group execution remains covered by
+  compatibility mocks; a real 12-D bundle is not validated. Shared-model execution
+  remains an explicit serialized fallback, not the selected dual-arm profile.
+- The showcase profile uses eight observations, 42 predicted actions, and up to
+  16 executed actions per window at 30 Hz. Hardware timing, model quality and
+  loaded-gripper reliability remain deployment validation items.
 
 ## Safety model
 
@@ -82,8 +101,9 @@ FLUX is a learned manipulation backend for bounded skills. It's not the coordina
 - **Zones:** skills declare shared zones (`zones: [box]`). Only one *moving* arm per zone.
   A holding arm doesn't take the lock, so plan holds to stay clear of the other arm's path.
 - **Limits:** clip to joint limits and max per-step delta; reject NaN/inf.
-- **E-stop:** CLI Ctrl-C, `POST /estop`, any `ArmConflict`/`EmergencyStop`. Freezes
-  all arms in place.
+- **E-stop:** CLI Ctrl-C, `POST /estop`, any `ArmConflict`/`EmergencyStop`.
+  The SO101 emergency path disables torque; a normal skill stop parks the arm
+  while preserving the gripper's existing closing goal. These are distinct operations.
 - **Force:** SO-101 + FLUX give joint *position* targets, not torque. Holding is
   position holding, so use light lids and low-force contacts. Torque-regulated tasks
   (e.g. unscrewing caps) are out of scope.

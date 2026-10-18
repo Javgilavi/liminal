@@ -1,7 +1,16 @@
 # TASK.md: workstreams, milestones, acceptance
 
+**Current direction:** The initial plan was to fine-tune a unified bimanual XLeRobot embodiment
+(12-D actions). That plan was superseded by task LoRA fine-tuning of the existing 6-D SO-101 policy,
+with two independent FLUX instances, one per arm, coordinated by the real skill-runtime harness
+(behavior tree, checkpoint registry, perception and safety).
+
+The hour-by-hour checklist below records the original hackathon allocation; it is
+not a current deployment checklist. Original bimanual fine-tuning milestones are
+superseded, not outstanding work. Current execution details: [runtime guide](docs/showcase-runtime.md).
+
 30-hour plan for five people on two SO-101 arms (→ bimanual XLeRobot). Strategy and the
-FLUX option A (per-arm) vs option B (bimanual fine-tune) decision: [PLAN.md](PLAN.md). One owner
+Original FLUX option comparison and subsequent decision: [PLAN.md](PLAN.md). One owner
 per workstream; everyone codes against the shared interfaces from **hour 2**.
 Fill in owners:
 
@@ -110,7 +119,7 @@ Brief: [docs/research/03_long_horizon_orchestration.md](docs/research/03_long_ho
 **Needs:** skills from WS1, cameras from WS5.
 **Done when:** a ≥4-subtask task runs on hardware with at least one recovered failure.
 
-## WS4: Simulation + bimanual XLeRobot embodiment adaptation
+## WS4: Original simulation + embodiment adaptation plan (superseded)
 
 **Goal:** a sim with the same `Arm` API for orchestration testing, then a first
 embodiment fine-tune toward bimanual XLeRobot.

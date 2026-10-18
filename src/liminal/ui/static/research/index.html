@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Liminal: a dual-arm research workbench for language-guided manipulation, real camera observations and a measured-joint MuJoCo twin."
+    />
+    <title>Liminal — Reality in the loop</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/style.css" />
+    <script type="importmap">
+      { "imports": { "three": "/assets/vendor/three.module.js" } }
+    </script>
+    <script type="module" src="/assets/app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#live">Skip to live lab</a>
+    <header class="site-header">
+      <a class="wordmark" href="#"
+        ><svg viewBox="0 0 28 28" aria-hidden="true">
+          <path d="M5 6v16h18" />
+          <circle cx="5" cy="6" r="2" />
+          <circle cx="23" cy="22" r="2" /></svg
+        >liminal<span class="wordmark-dot">.</span></a
+      >
+      <nav aria-label="Main navigation">
+        <a href="#demonstrations">Demonstrations</a><a href="#live">Live lab</a
+        ><a href="#system">The system</a>
+      </nav>
+      <a
+        class="header-link"
+        href="https://github.com/oscardvs/haller_ws"
+        target="_blank"
+        rel="noopener"
+        >Hardware platform <span>↗</span></a
+      >
+    </header>
+    <main>
+      <section class="intro">
+        <p class="eyebrow">
+          <span class="small-line"></span> AN EMBODIED ROBOTICS WORKBENCH
+        </p>
+        <h1>Reality in the <em>loop.</em></h1>
+        <p class="subtitle">
+          Language-guided manipulation.<br />Two arms. One shared view of the
+          world.
+        </p>
+        <p class="intro-copy">
+          Explore the Haller tabletop through Liminal, replay a manipulation, and bring real
+          observations<br class="desktop" />
+          into an interactive MuJoCo twin.
+        </p>
+        <div class="intro-actions">
+          <a class="button primary" href="#live"
+            >Enter the live lab <span>↗</span></a
+          ><a class="button light" href="#demonstrations"
+            >Watch the demonstration <span>↓</span></a
+          >
+        </div>
+        <p class="project-line">
+          SO-101 × 2 <span>/</span> FLUX 3 Action <span>/</span> MuJoCo
+        </p>
+      </section>
+      <section
+        class="hero-media"
+        aria-label="Physical setup and interactive digital twin"
+      >
+        <figure class="real-setup">
+          <img
+            src="/assets/setup.png"
+            alt="The real green Haller dual-arm rig, white box and markers on a black mat"
+          />
+          <figcaption>
+            <span class="micro">01 / THE PHYSICAL SETUP</span
+            ><span>Reference capture</span>
+          </figcaption>
+        </figure>
+        <div class="hero-twin">
+          <div
+            class="viewer"
+            id="hero-view"
+            aria-label="Interactive 3D Haller model; drag to rotate"
+          >
+            <div class="viewer-loading">Loading the Haller CAD model…</div>
+          </div>
+          <div class="viewer-top">
+            <span class="tag"><i></i> INTERACTIVE TWIN</span
+            ><button
+              class="icon-button reset-view"
+              data-view="hero"
+              aria-label="Reset overview camera"
+            >
+              ↺
+            </button>
+          </div>
+          <div class="viewer-bottom">
+            <span
+              >Same embodiment.<br /><strong>A new point of view.</strong></span
+            ><span class="orbit-hint"
+              >↔ Drag to orbit <span>·</span> Scroll to zoom</span
+            >
+          </div>
+        </div>
+      </section>
+      <div class="caption-row">
+        <span>Real setup → CAD reconstruction → synchronized joint poses</span
+        ><span>Scene geometry estimated from the setup video</span>
+      </div>
+      <section class="section demo-section" id="demonstrations">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">01 / DEMONSTRATIONS</p>
+            <h2>See the motion.<br /><em>Explore the moment.</em></h2>
+          </div>
+          <p>
+            Watch a recorded manipulation, then move around the same scene. The
+            replay uses saved MuJoCo poses, so the camera angle is yours to
+            choose.
+          </p>
+        </div>
+        <div class="demo-grid">
+          <div class="video-panel">
+            <div class="panel-label">
+              <span><i class="dot"></i> RECORDED SIMULATION</span
+              ><span>01 — GREEN MARKER</span>
+            </div>
+            <video
+              id="demo-video"
+              poster="/assets/demo-poster.jpg"
+              controls
+              playsinline
+              preload="metadata"
+              src="/assets/demonstration.mp4"
+              aria-label="Scripted simulated marker placement demonstration"
+            ></video>
+            <div class="panel-footer">
+              <span
+                >“Pick up the green marker and place it inside the box.”</span
+              ><span>14 s</span>
+            </div>
+          </div>
+          <div class="replay-panel">
+            <div class="panel-label">
+              <span>FREE-VIEWPOINT REPLAY</span>
+              <div class="view-presets">
+                <button class="preset active" data-camera="perspective">
+                  Perspective</button
+                ><button class="preset" data-camera="top">Top</button
+                ><button class="preset" data-camera="front">Front</button>
+              </div>
+            </div>
+            <div
+              class="viewer"
+              id="replay-view"
+              aria-label="Rotatable synchronized simulation replay"
+            ></div>
+            <div class="replay-controls">
+              <button
+                id="play-replay"
+                class="play-button"
+                aria-label="Play recorded replay"
+              >
+                ▶</button
+              ><input
+                id="replay-time"
+                type="range"
+                min="0"
+                max="14"
+                step="0.0333"
+                value="0"
+                aria-label="Recorded simulation time"
+              /><span id="replay-clock">00.0 / 14.0 s</span>
+            </div>
+          </div>
+        </div>
+        <p class="evidence-note">
+          <span>ABOUT THIS CLIP</span> A scripted expert in simulation, with the
+          left arm parked and the lid held open by a fixture. This is a
+          demonstration for training, not a real-robot or learned-policy success
+          claim.
+        </p>
+      </section>
+      <section class="live-section" id="live">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">02 / THE LIVE LAB</p>
+            <h2>Your words.<br /><em>The robot’s world.</em></h2>
+          </div>
+          <p>
+            A single place for the instruction, real camera observations and
+            measured robot pose. Haller keeps ownership of the hardware.
+          </p>
+        </div>
+        <div class="lab-shell">
+          <div class="lab-header">
+            <div class="lab-title">
+              <span class="status-dot" id="connection-dot"></span
+              ><strong>Liminal / operator session</strong
+              ><span id="connection-label">Waiting for controller</span>
+            </div>
+            <a
+              id="controller-link"
+              href="http://127.0.0.1:8000"
+              target="_blank"
+              rel="noopener"
+              >Open Haller controls ↗</a
+            >
+          </div>
+          <div class="lab-views">
+            <div class="camera-panel">
+              <div class="lab-panel-header">
+                <span>REAL OBSERVATION</span
+                ><select id="camera-select" aria-label="Real robot camera">
+                  <option value="top">Scene / mast camera</option>
+                  <option value="wrist_a">Wrist A</option>
+                  <option value="wrist_b">Wrist B</option>
+                </select>
+              </div>
+              <div class="camera-image">
+                <img id="real-camera" alt="Selected real robot camera" hidden />
+                <div id="camera-empty">
+                  <span class="camera-glyph">⌑</span
+                  ><strong>The robot’s view belongs here.</strong>
+                  <p>
+                    Real camera frames appear when<br />the Haller controller is
+                    connected.
+                  </p>
+                  <span class="offline-label">NO CAMERA SIGNAL</span>
+                </div>
+                <span class="camera-status" id="camera-status"
+                  >Disconnected</span
+                >
+              </div>
+            </div>
+            <div class="live-twin-panel">
+              <div class="lab-panel-header">
+                <span>MEASURED-JOINT TWIN</span
+                ><button
+                  class="icon-button reset-view"
+                  data-view="live"
+                  aria-label="Reset live twin camera"
+                >
+                  ↺
+                </button>
+              </div>
+              <div
+                class="viewer live-viewer"
+                id="live-view"
+                aria-label="Measured joint digital twin"
+              >
+                <div class="viewer-loading">Loading CAD…</div>
+              </div>
+              <p class="twin-scope">
+                Arms mirror telemetry. Scene objects are currently untracked.
+              </p>
+            </div>
+          </div>
+          <div class="lab-metrics">
+            <div>
+              <span>CONTROLLER</span
+              ><strong id="metric-controller">Offline</strong>
+            </div>
+            <div>
+              <span>TELEMETRY</span><strong id="metric-rate">— Hz</strong>
+            </div>
+            <div>
+              <span>SAMPLE AGE</span><strong id="metric-age">— ms</strong>
+            </div>
+            <div>
+              <span>POLICY TARGET</span
+              ><strong id="metric-arm">No profile</strong>
+            </div>
+          </div>
+          <form id="prompt-form">
+            <label for="prompt">Give the robot an instruction</label>
+            <div class="prompt-row">
+              <textarea id="prompt" rows="2" maxlength="500" required>
+Pick up the green marker and place it inside the white box.</textarea
+              ><button
+                type="submit"
+                id="run-button"
+                class="button primary"
+                disabled
+              >
+                Predict actions <span>↗</span>
+              </button>
+            </div>
+            <div class="prompt-options">
+              <label class="check-label"
+                ><input type="checkbox" id="execute" /> Execute on the real
+                robot</label
+              ><label class="duration-label"
+                >Trial length
+                <select id="duration">
+                  <option value="20">20 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">60 seconds</option>
+                </select></label
+              ><button
+                type="button"
+                id="stop-button"
+                class="stop-button"
+                disabled
+              >
+                ■ Stop this trial
+              </button>
+            </div>
+            <label class="check-label engage-check" id="engage-label" hidden
+              ><input type="checkbox" id="engage" /> I have selected MANUAL and
+              engaged the selected arm in Haller.</label
+            >
+            <p id="run-message" class="run-message" role="status">
+              Observation only by default. A configured rig profile and fresh
+              telemetry are required to start FLUX.
+            </p>
+          </form>
+          <details class="joint-details">
+            <summary>
+              Inspect measured joints <span>Degrees · gripper %</span>
+            </summary>
+            <div id="joint-values" class="joint-values">
+              Waiting for measured joint positions.
+            </div>
+          </details>
+        </div>
+        <p class="lab-footnote">
+          Opening this page does not engage motors. Predicting actions and
+          running them are separate choices. Use Haller’s controls for the
+          hardware stop.
+        </p>
+      </section>
+      <section class="section system-section" id="system">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">03 / INSIDE THE LOOP</p>
+            <h2>One observation.<br /><em>Two ways to see it.</em></h2>
+          </div>
+          <p>
+            The mirror follows what the robot measures, rather than assuming
+            every predicted command was executed exactly.
+          </p>
+        </div>
+        <div class="pipeline">
+          <article>
+            <span class="step-number">01</span>
+            <h3>Observe</h3>
+            <p>
+              Haller streams native joint positions and camera snapshots from
+              the connected rig.
+            </p>
+            <span class="pipeline-type">REAL ROBOT → TELEMETRY</span>
+          </article>
+          <article>
+            <span class="step-number">02</span>
+            <h3>Condition & predict</h3>
+            <p>
+              The existing FLUX runner combines the instruction, scene and wrist
+              observations into action chunks.
+            </p>
+            <span class="pipeline-type">PROMPT + CAMERAS → ACTIONS</span>
+          </article>
+          <article>
+            <span class="step-number">03</span>
+            <h3>Act & mirror</h3>
+            <p>
+              Guarded commands go to Haller. Measured joints update MuJoCo
+              forward kinematics for the 3D view.
+            </p>
+            <span class="pipeline-type">MEASURED POSE → DIGITAL TWIN</span>
+          </article>
+        </div>
+        <div class="scope-note">
+          <span class="scope-symbol">↗</span>
+          <div>
+            <h3>A twin that tells you what it knows.</h3>
+            <p>
+              Joint mirroring is implemented. Matching object motion, contact
+              forces and real camera geometry still needs object tracking and
+              physical calibration. A visually synchronized robot is the
+              starting point for a calibrated digital twin.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <a class="wordmark" href="#">liminal<span class="wordmark-dot">.</span></a
+      ><span>A workspace for embodied experiments.</span>
+      <div>
+        <a
+          href="https://zhexiluo.github.io/DexMimic/"
+          target="_blank"
+          rel="noopener"
+          >Presentation reference ↗</a
+        ><a
+          href="https://github.com/oscardvs/haller_ws"
+          target="_blank"
+          rel="noopener"
+          >Haller hardware ↗</a
+        >
+      </div>
+    </footer>
+    <noscript
+      >This interactive research page requires JavaScript. Haller hardware
+      controls remain available in the controller.</noscript
+    >
+  </body>
+</html>

@@ -43,3 +43,11 @@ whether WHILE was used where needed. Record results here.
 - Code as Policies (Liang et al., 2022); Inner Monologue (Huang et al., 2022): closed-loop feedback to the LLM.
 - Behavior trees in robotics: Colledanchise & Ögren, *Behavior Trees in Robotics and AI*; py_trees; BehaviorTree.CPP.
 - Gemini Robotics / Gemini Robotics-ER (Google DeepMind): embodied reasoning models.
+
+## Live action-level hybrid exception
+
+The standalone live runners now have an optional Claude gate at every FLUX chunk
+boundary: student prefix, Cartesian edit, fixed EEF target, or stop. This is separate
+from task-tree planning and does not use a recovery skill allowlist. The abandoned
+skill-recovery prototype and its configuration have been removed. See
+[the live hybrid contract and enablement instructions](../official-inference.md#optional-action-level-claude-hybrid-controller).

@@ -1,0 +1,161 @@
+{
+  "validation": "symbolic only; accelerated timing, 4 predicted / 2 executed actions; deployment uses 42 / 16",
+  "results": [
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "green_pen",
+        "red_pen",
+        "yellow_boxcutter"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_green_pen_in_slot",
+        "put_red_pen_in_slot",
+        "put_yellow_boxcutter_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "put_green_pen_in_slot",
+        "red_pen_raw_10000",
+        "put_yellow_boxcutter_in_slot"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "green_pen",
+        "yellow_boxcutter",
+        "red_pen"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot",
+        "put_red_pen_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot",
+        "red_pen_raw_10000"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "red_pen",
+        "green_pen",
+        "yellow_boxcutter"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_red_pen_in_slot",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "red_pen_raw_10000",
+        "put_green_pen_in_slot",
+        "put_yellow_boxcutter_in_slot"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "red_pen",
+        "yellow_boxcutter",
+        "green_pen"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_red_pen_in_slot",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "red_pen_raw_10000",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "yellow_boxcutter",
+        "green_pen",
+        "red_pen"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot",
+        "put_red_pen_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "put_green_pen_in_slot",
+        "red_pen_raw_10000"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    },
+    {
+      "evidence": "symbolic simulation; no learned inference or physical grasp validation",
+      "placement_order": [
+        "yellow_boxcutter",
+        "red_pen",
+        "green_pen"
+      ],
+      "status": "success",
+      "goal_verified": true,
+      "atomic_skills": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "put_red_pen_in_slot",
+        "put_green_pen_in_slot"
+      ],
+      "checkpoint_sessions": [
+        "open_box",
+        "put_yellow_boxcutter_in_slot",
+        "red_pen_raw_10000",
+        "put_green_pen_in_slot"
+      ],
+      "commands": {
+        "left": 6,
+        "right": 2
+      }
+    }
+  ]
+}

@@ -7,13 +7,14 @@ physically unsafe. Responsibilities:
 * workspace zones - only one *moving* arm inside a shared zone at a time
                     (a static, holding arm does not take the zone lock)
 * action limits   - clip to joint limits and max per-step delta, reject NaN
-* e-stop          - freeze all arms, make every running node fail fast
+* e-stop          - latch a stop, release physical motors, fail running nodes fast
 """
 
 from __future__ import annotations
 
 import asyncio
 import math
+import threading
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ class SafetySupervisor:
         self._owners: dict[str, str] = {}
         self._zones: dict[str, asyncio.Lock] = {}
         self._estopped = False
+        self._io_lock = threading.RLock()
 
     # -- ownership ---------------------------------------------------------------------
 
@@ -81,8 +83,12 @@ class SafetySupervisor:
 
     def validate(self, arm: str, target: JointPositions, current: JointPositions | None = None) -> JointPositions:
         self.check()
+        if len(target) != self.arms[arm].num_joints:
+            raise ValueError(f"wrong action length for {arm}")
         if any(math.isnan(x) or math.isinf(x) for x in target):
             raise ValueError(f"non-finite action for {arm}: {target}")
+        if current is not None and (len(current) != len(target) or not all(math.isfinite(x) for x in current)):
+            raise ValueError(f"invalid position feedback for {arm}")
         lim = self.limits.get(arm)
         if lim is None:
             return list(target)
@@ -93,23 +99,49 @@ class SafetySupervisor:
 
     def send(self, arm: str, target: JointPositions) -> JointPositions:
         """Validate and send one action. Use this instead of arm.send_action directly."""
-        a = self.arms[arm]
-        safe = self.validate(arm, target, a.read_state())
-        a.send_action(safe)
-        return safe
+        with self._io_lock:
+            self.check()
+            a = self.arms[arm]
+            try:
+                current = a.read_state()
+            except Exception:
+                self.estop()
+                raise
+            safe = self.validate(arm, target, current)
+            try:
+                a.send_action(safe)
+            except Exception:
+                self.estop()
+                raise
+            return safe
 
     # -- e-stop ------------------------------------------------------------------------
 
+    def set_torque(self, arm: str, enabled: bool) -> None:
+        """Serialize engagement with E-stop so a queued request cannot re-arm it."""
+        with self._io_lock:
+            if enabled:
+                self.check()
+            self.arms[arm].set_torque(enabled)
+
     def estop(self) -> None:
         self._estopped = True
-        for a in self.arms.values():
-            try:
-                a.stop()
-            except Exception:  # noqa: BLE001, S110 - keep stopping the others
-                pass
+        with self._io_lock:
+            self._estopped = True
+            for a in self.arms.values():
+                try:
+                    # A physical arm may provide torque release; generic Arm.stop
+                    # retains its freeze-in-place contract for skill timeouts.
+                    emergency = getattr(a, "emergency_stop", None)
+                    (emergency or a.stop)()
+                except Exception:  # keep stopping the other arm
+                    import logging
+
+                    logging.getLogger(__name__).exception("e-stop failed on %s; cut motor power", a.name)
 
     def reset_estop(self) -> None:
-        self._estopped = False
+        with self._io_lock:
+            self._estopped = False
 
     @property
     def estopped(self) -> bool:

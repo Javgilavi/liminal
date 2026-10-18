@@ -1,0 +1,758 @@
+{
+  "schema_version": 1,
+  "scope": "All recorded trials reporting the official LeRobot FLUX policy/processors in this source folder",
+  "interpretation": "Execution requests, command delivery and process completion are not manipulation scores. No independent real-robot task-success labels were recorded.",
+  "trials": [
+    {
+      "run_id": "20261017-170213-official",
+      "execute_requested": false,
+      "prompt": "Grasp the white cup.",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released (not explicitly recorded by this runner version)",
+      "normalization_revision": null,
+      "coordinate_mapping": null,
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "observation_only_passed_task_success_unverified",
+      "stop_reason": "plan refused: step 6, elbow_flex=98.86, calibrated [-98.55, 98.55]; targets were not clipped",
+      "plans": 1,
+      "commands": 0,
+      "gpu_prediction_seconds": [],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "874ec4c45d131c7613c39734eab955bf2ec3ddeb593b2f750d8672bcafa341c6",
+        "events.jsonl": "91d95b77bae3255c51b69bd4a645f66aafad666155889a0dfcce7d740ddca520"
+      }
+    },
+    {
+      "run_id": "20261017-171130-official",
+      "execute_requested": true,
+      "prompt": "Grasp the white cup.",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released (not explicitly recorded by this runner version)",
+      "normalization_revision": null,
+      "coordinate_mapping": null,
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "plan refused: step 6, elbow_flex=98.63, calibrated [-98.55, 98.55]; targets were not clipped",
+      "plans": 1,
+      "commands": 0,
+      "gpu_prediction_seconds": [],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "56f9bace37df58e03a38ba85832687258d61db9d64da911bd4e61623e1bd7427",
+        "events.jsonl": "132c0d64ffa6b2568476e2f1f341d8d04bb67fb50fffc99f95cc970e4d50f80b"
+      }
+    },
+    {
+      "run_id": "20261017-171741",
+      "execute_requested": false,
+      "prompt": "Grasp the white cup.",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released (not explicitly recorded by this runner version)",
+      "normalization_revision": null,
+      "coordinate_mapping": null,
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "observation_only_passed",
+      "stop_reason": null,
+      "plans": 1,
+      "commands": 0,
+      "gpu_prediction_seconds": [
+        0.962
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "578d0183443904bf6dea7fdc6216c8e654ac3487eae7959c04e3cf0023cbfb91",
+        "events.jsonl": "3742378e472a001a4664d56af0d9d9895f2bb841b446b9991469e591f2c1f817",
+        "plans.jsonl": "a1a179bf76bbb261e7809def511b71b7b169f04616c558271d5e3279e07cb356",
+        "submitted-actions.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "run_id": "20261017-171921",
+      "execute_requested": true,
+      "prompt": "Grasp the white cup.",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released (not explicitly recorded by this runner version)",
+      "normalization_revision": null,
+      "coordinate_mapping": null,
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "plan refused: step 22, wrist_flex=99.17, calibrated [-98.48, 98.48]; targets were not clipped",
+      "plans": 3,
+      "commands": 64,
+      "gpu_prediction_seconds": [
+        0.962,
+        0.744,
+        0.739
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "9df599be6e1d8e9ee392c8d256954882c55c4e162aa69671d5412e23600057c4",
+        "events.jsonl": "27c44f62ae1cd9f89ebfe5591b94f1b8d33f38dbd6e8cac99c4121eb6487278c",
+        "plans.jsonl": "4accca123bfa6a4fd19de29593fd05a9c992d2b78b47454816a9a9543eed73bc",
+        "submitted-actions.jsonl": "78d06cf243696e749d52ea177868eeeb25c5420b586794983a3d7a5821e5c736"
+      }
+    },
+    {
+      "run_id": "20261017-173436",
+      "execute_requested": false,
+      "prompt": "Grasp the white cup.",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released (not explicitly recorded by this runner version)",
+      "normalization_revision": null,
+      "coordinate_mapping": null,
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "observation_only_passed",
+      "stop_reason": null,
+      "plans": 1,
+      "commands": 0,
+      "gpu_prediction_seconds": [
+        0.965
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "36664ae1300a99555577ab428b9402de1b411a6664245e341ffc2ebcf552eefd",
+        "events.jsonl": "68be552074c03d5b34e559101108ef553ae9231a28145ec8fb4f0792167fd8e8",
+        "plans.jsonl": "c640520ac444b938cf1a90c11777ac8b0de55569de4e5d88c22d406cd306bea6",
+        "submitted-actions.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "run_id": "20261017-173910",
+      "execute_requested": false,
+      "prompt": "Grasp the white cup.",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released (not explicitly recorded by this runner version)",
+      "normalization_revision": null,
+      "coordinate_mapping": null,
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "observation_only_passed",
+      "stop_reason": null,
+      "plans": 1,
+      "commands": 0,
+      "gpu_prediction_seconds": [
+        0.964
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "fa93db138b67a8ecd4c8691d199f3e4fd6e02c156a76d96d1b430057651a0f80",
+        "events.jsonl": "0675a916c5eefcb85aab183c220d281f764c6e15bcddb7f5e75940dfee1c7567",
+        "plans.jsonl": "0ec46d5f17face15165bcfb43e0d34f4768d0649d41eff86fba5b86a57cc77fc",
+        "submitted-actions.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "run_id": "20261017-223645",
+      "execute_requested": true,
+      "prompt": "Grasp the white cup",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released",
+      "normalization_revision": null,
+      "coordinate_mapping": {
+        "name": "configured",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "plan refused: step 11, wrist_flex=98.57, calibrated [-98.48, 98.48]; targets were not clipped",
+      "plans": 3,
+      "commands": 64,
+      "gpu_prediction_seconds": [
+        0.962,
+        0.742,
+        0.739
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "0bddaece15309e547ac5c1e456ff903ffd9a340cf4b501a5b46baa82604e8c5e",
+        "events.jsonl": "ba71d65ea34e19d6368a0eebc4753238cbf029c8f9ad97349baa1b9f6dd71593",
+        "plans.jsonl": "41f2ed80df870a1df1bdb9cb3edc167b3289985add34bb597483762092812a55",
+        "submitted-actions.jsonl": "16e67851d68a087e370978f4b500d5f37d4180d0a2a0d3b4f4a6f07e55f687d1"
+      }
+    },
+    {
+      "run_id": "20261017-223818",
+      "execute_requested": true,
+      "prompt": "Grasp the white cup",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released",
+      "normalization_revision": null,
+      "coordinate_mapping": {
+        "name": "configured",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "plan refused: step 19, wrist_flex=98.59, calibrated [-98.48, 98.48]; targets were not clipped",
+      "plans": 2,
+      "commands": 32,
+      "gpu_prediction_seconds": [
+        0.962,
+        0.743
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "b7a2a3a9f8a617a4c4986bb1fa4833773c0ba7008d30ed0682d022e4241a9a4c",
+        "events.jsonl": "bfc0d0ee22de976e33599ac85bf7214aa61c93220c5116d9deb1b66156736a2e",
+        "plans.jsonl": "8cf0431e54a29d0f62c32bb2d2cf3d1aa2e56dbfb1266e1a752b111e158e7224",
+        "submitted-actions.jsonl": "a6a2516a5a61603cf9db3cf2e12b9af773f6b3605301b52ac9215c944287d546"
+      }
+    },
+    {
+      "run_id": "20261017-224828",
+      "execute_requested": true,
+      "prompt": "Grasp the black marker and put in the cardboard box",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101",
+      "normalization_profile": "released",
+      "normalization_revision": null,
+      "coordinate_mapping": {
+        "name": "configured",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "telemetry failed: possible stall on elbow_flex: load 60%, error 19.16, movement <0.1 for 1.04s",
+      "plans": 2,
+      "commands": 64,
+      "gpu_prediction_seconds": [
+        0.963,
+        0.744
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "ce13141f61094ee3bef715847a02328c041c94b66dbc923bc2ed80c4cefaf8df",
+        "events.jsonl": "90e45a6ecfa0b4bf99713e39971629332cc87f4c2c167071b9f1bfe0456efe86",
+        "plans.jsonl": "84bec305f54738e968135ef40da93c9218894501c7cc0894968a177ea4d1e155",
+        "submitted-actions.jsonl": "c21e6839903820e4379a0bc28e5f44d5e6990637459f0f577c9916dc1655b4b8"
+      }
+    },
+    {
+      "run_id": "20261017-225546",
+      "execute_requested": true,
+      "prompt": "put the red marker into the cardboard box",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101-hf-space-native-20261017",
+      "normalization_profile": "hf_space_native",
+      "normalization_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "coordinate_mapping": {
+        "name": "hf_space_native",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "plan refused: step 31, wrist_flex=99.98, calibrated [-98.48, 98.48]; targets were not clipped",
+      "plans": 5,
+      "commands": 128,
+      "gpu_prediction_seconds": [
+        0.963,
+        0.742,
+        0.739,
+        0.741,
+        0.738
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "99f9c366880222bb5dba0acdf698de33532cde5b2ff6ed6cc9fefdba9abec972",
+        "events.jsonl": "d5333146be117fcb4fc6514fb186e87b0721d1b342ca16d8be9fe5e256fe4bc1",
+        "plans.jsonl": "2d947b85f03dc15a6f8d72e7885e2a8223fbf19b70021d9585ba452928b22935",
+        "submitted-actions.jsonl": "31b7ecf1e5cda12663722ecbbb9905957e49ad1789350ec18241a579c6df2d5c"
+      }
+    },
+    {
+      "run_id": "hf-space-20261017-220821",
+      "execute_requested": true,
+      "prompt": "Pick up the red marker",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101-hf-space-native-20261017",
+      "normalization_profile": "hf_space_native",
+      "normalization_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "coordinate_mapping": {
+        "name": "hf_space_native",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "duration_reached_task_success_unverified",
+      "stop_reason": null,
+      "plans": 1,
+      "commands": 32,
+      "gpu_prediction_seconds": [
+        0.964
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "66491d35449e6b46e7174a29fd1ffbd561df7afcfe633115932cd03df2e6b5b3",
+        "events.jsonl": "fdd2fed10989716dd1b35fe111310b16c8bb024587464559257bd13738908654",
+        "plans.jsonl": "e92413dca365113787fe090482ae71c58752b9b87417ad9fc8a1330328e6eb2a",
+        "submitted-actions.jsonl": "7581d769198555c848fa9446eda97dc3b7d895eecb28e1e7f51d190f4b870656"
+      }
+    },
+    {
+      "run_id": "hf-space-20261017-221149",
+      "execute_requested": true,
+      "prompt": "Pick up the red marker",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101-hf-space-native-20261017",
+      "normalization_profile": "hf_space_native",
+      "normalization_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "coordinate_mapping": {
+        "name": "hf_space_native",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "failed",
+      "stop_reason": "selected arm stopped or torque disabled; refusing to re-engage",
+      "plans": 1,
+      "commands": 0,
+      "gpu_prediction_seconds": [
+        0.962
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "bad681eed8dc4ad3ac6dc34af2e21b5f111673567fcdb1334675f24ba322669f",
+        "events.jsonl": "74427ac6380d954d46610ce411970220a43a288c8371d030c657e6b392133384",
+        "plans.jsonl": "891d59623d42ba4f61a5a6db38d5e9656e330f4891a6ccc8c007a23f2d38b826",
+        "submitted-actions.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "run_id": "hf-space-20261017-221736",
+      "execute_requested": true,
+      "prompt": "Pick up the red marker",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101-hf-space-native-20261017",
+      "normalization_profile": "hf_space_native",
+      "normalization_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "coordinate_mapping": {
+        "name": "hf_space_native",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "duration_reached_task_success_unverified",
+      "stop_reason": null,
+      "plans": 30,
+      "commands": 943,
+      "gpu_prediction_seconds": [
+        0.966,
+        0.744,
+        0.739,
+        0.742,
+        0.738,
+        0.741,
+        0.738,
+        0.74,
+        0.738,
+        0.74,
+        0.737,
+        0.739,
+        0.738,
+        0.739,
+        0.736,
+        0.739,
+        0.736,
+        0.74,
+        0.736,
+        0.739,
+        0.736,
+        0.74,
+        0.737,
+        0.739,
+        0.737,
+        0.739,
+        0.737,
+        0.739,
+        0.737,
+        0.74
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "dccfe162b9c464cd1af9f5d15d8288512e6a80b4aad803cc58c2091831233472",
+        "events.jsonl": "6f41717e26c62b651bebaaa815bf419ad87c4c9c142df2f05ac9598d037b4a61",
+        "plans.jsonl": "649862eaad97fd6c445676b5ba25908bbe700fc499252aac992a9b35e35dad9f",
+        "submitted-actions.jsonl": "d70c30e7473dd87c3ac5e64bab5dfafb74bcc55e0f1d2010c9456d89e283a304"
+      }
+    },
+    {
+      "run_id": "hf-space-20261017-222134",
+      "execute_requested": true,
+      "prompt": "grasp the white cup",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101-hf-space-native-20261017",
+      "normalization_profile": "hf_space_native",
+      "normalization_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "coordinate_mapping": {
+        "name": "hf_space_native",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "plan refused: step 12, wrist_flex=98.63, calibrated [-98.48, 98.48]; targets were not clipped",
+      "plans": 22,
+      "commands": 672,
+      "gpu_prediction_seconds": [
+        0.964,
+        0.743,
+        0.74,
+        0.74,
+        0.739,
+        0.74,
+        0.739,
+        0.74,
+        0.738,
+        0.74,
+        0.738,
+        0.74,
+        0.737,
+        0.739,
+        0.738,
+        0.74,
+        0.738,
+        0.739,
+        0.737,
+        0.74,
+        0.737,
+        0.739
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "c387ff08150e0b54669f4755b076af3dd3901cb884956329df169d1ed14875d5",
+        "events.jsonl": "9e3ff202237aff74a584b5589e2eee25ae0741d049017ef366aaf24db1336e2d",
+        "plans.jsonl": "463b7de0b27fdd2b996dd6927be952ff42f32cd34ebc8c3d7bc31c50a08843e3",
+        "submitted-actions.jsonl": "810e00379fe20934d5c30f14f147793ccbc2ab7ec580c98a4d563ebe04c6054c"
+      }
+    },
+    {
+      "run_id": "hf-space-20261017-223402",
+      "execute_requested": true,
+      "prompt": "pick up the white cup",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101-hf-space-native-20261017",
+      "normalization_profile": "hf_space_native",
+      "normalization_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "coordinate_mapping": {
+        "name": "hf_space_native",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "stopped",
+      "stop_reason": "telemetry failed: possible stall on wrist_roll: load 60%, error 10.10, movement <0.1 for 1.03s",
+      "plans": 40,
+      "commands": 1280,
+      "gpu_prediction_seconds": [
+        0.962,
+        0.744,
+        0.74,
+        0.742,
+        0.739,
+        0.741,
+        0.739,
+        0.74,
+        0.739,
+        0.74,
+        0.738,
+        0.741,
+        0.738,
+        0.74,
+        0.737,
+        0.74,
+        0.738,
+        0.74,
+        0.737,
+        0.739,
+        0.737,
+        0.739,
+        0.737,
+        0.739,
+        0.737,
+        0.739,
+        0.736,
+        0.738,
+        0.737,
+        0.739,
+        0.737,
+        0.738,
+        0.737,
+        0.738,
+        0.737,
+        0.738,
+        0.736,
+        0.738,
+        0.736,
+        0.738
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "dfb9af938bbdc8cfa727af9c205d4c1293444e21f8b2917947b8ccc0af01b46d",
+        "events.jsonl": "1c88e68fbab0a437dbeb714118a34834a41de573997637329799962a902834fd",
+        "plans.jsonl": "b66a4ac0dca6ea68a25ece0755df047f08c33880f18ef3b3fc0d8b0ba3ac2c48",
+        "submitted-actions.jsonl": "278c4292c1c77d4c02634c689b8297824d2ac52b76e3a51a0d67a7ec21ebc1f7"
+      }
+    },
+    {
+      "run_id": "hf-space-native-20261017-observe",
+      "execute_requested": false,
+      "prompt": "Pick up the red pen.",
+      "integration": "lerobot.Flux3Policy + saved pre/post processors",
+      "checkpoint": "/liminal/models/so101-hf-space-native-20261017",
+      "normalization_profile": "hf_space_native",
+      "normalization_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+      "coordinate_mapping": {
+        "name": "hf_space_native",
+        "joint_order": [
+          "shoulder_pan",
+          "shoulder_lift",
+          "elbow_flex",
+          "wrist_flex",
+          "wrist_roll",
+          "gripper"
+        ],
+        "robot_to_model_scale": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "robot_to_model_offset": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "source_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+      "status": "observation_only_passed",
+      "stop_reason": "plan refused: step 0, gripper=102.78, calibrated [0.00, 100.00]; targets were not clipped",
+      "plans": 1,
+      "commands": 0,
+      "gpu_prediction_seconds": [
+        0.96
+      ],
+      "manipulation_success": null,
+      "evidence_sha256": {
+        "report.json": "0d7558324e87359d425347435f94b017a9dcd0518a6261dd61f84f751e25afd4",
+        "events.jsonl": "ecdcb34f336c225ce3b34fce170116521304693a6cbfbdcf74809b91d6da1b45",
+        "plans.jsonl": "d6816dad412fb5ee65f600acfea03beac45d5a26b2b7f6302c862b6a51180349",
+        "submitted-actions.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  ]
+}

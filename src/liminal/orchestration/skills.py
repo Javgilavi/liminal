@@ -48,6 +48,8 @@ class PrimitiveBackend:
             if skill.params.get("open_gripper", True):
                 await self._move_gripper(arm_name, self.gripper_open, ctx)
         elif skill.name == "home":
+            if arm_name not in self.home_poses and getattr(arm, "joint_limits", None) is not None:
+                raise ValueError(f"{arm_name}: no measured home pose configured")
             arm.release_hold()
             await self._move_to(arm_name, self.home_poses.get(arm_name, [0.0] * arm.num_joints), ctx)
         elif skill.name == "open_gripper":
@@ -69,7 +71,7 @@ class PrimitiveBackend:
 
 
 class SkillRouter:
-    """`arm_policies` gives an arm its own policy backend (option A2 in PLAN.md: one
+    """`arm_policies` gives an arm its own policy backend (current architecture: one
     FLUX instance per arm). Arms not listed use the shared `policy`."""
 
     def __init__(self, policy: SkillBackend, primitives: SkillBackend | None = None,
