@@ -52,6 +52,7 @@ def create_research_app(
     job = {"state": "idle", "task": None, "error": None, "output": None}
     task = None
     lock = asyncio.Lock()
+    loopback_hosts = {"127.0.0.1", "localhost", "::1", "testserver"}
     stopped = asyncio.Event()
     cfg = None
     if profile:
@@ -135,6 +136,10 @@ def create_research_app(
 
     @app.middleware("http")
     async def paired_origin(request: Request, call_next):
+        if request.url.hostname not in loopback_hosts:
+            return Response("Use the loopback companion address", status_code=400)
+        if request.headers.get("sec-fetch-site") == "cross-site" and not request.headers.get("origin"):
+            return Response("Cross-site embedding is disabled", status_code=403)
         origin = request.headers.get("origin")
         external = origin and urlsplit(origin).netloc != request.headers.get("host")
         if external:
@@ -155,7 +160,7 @@ def create_research_app(
     def pair(request: Request):
         if site_url is None:
             raise HTTPException(409, "Restart the companion with --site-url https://javgilavi.github.io/liminal/")
-        if request.url.hostname not in ("127.0.0.1", "localhost", "::1", "testserver") or (
+        if request.url.hostname not in loopback_hosts or (
             request.client and request.client.host not in ("127.0.0.1", "::1", "testclient")
         ):
             raise HTTPException(403, "Pair from the robot-side machine using its loopback address")
@@ -195,6 +200,9 @@ def create_research_app(
 
     @app.websocket("/ws/twin")
     async def updates(websocket: WebSocket):
+        if websocket.url.hostname not in loopback_hosts:
+            await websocket.close(code=1008)
+            return
         origin = websocket.headers.get("origin")
         external = origin and urlsplit(origin).netloc != websocket.headers.get("host")
         if external:

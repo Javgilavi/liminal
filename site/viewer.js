@@ -1,8 +1,10 @@
 import * as T from "three";
 import { OrbitControls } from "./assets/vendor/OrbitControls.js";
-const views=[], meshCache=new Map();
-const quaternion=a=>new T.Quaternion(a[1],a[2],a[3],a[0]);
-const unpack=(b,A)=>new A(Uint8Array.from(atob(b),c=>c.charCodeAt(0)).buffer);
+const views = [],
+  meshCache = new Map();
+const quaternion = (a) => new T.Quaternion(a[1], a[2], a[3], a[0]);
+const unpack = (b, A) =>
+  new A(Uint8Array.from(atob(b), (c) => c.charCodeAt(0)).buffer);
 export class TwinView {
   constructor(element, data, dark = false) {
     this.element = element;
@@ -156,6 +158,22 @@ export class TwinView {
     }
   }
 }
-export function drawViews(){views.forEach(v=>v.draw())}
+export function drawViews() {
+  views.forEach((v) => v.draw());
+}
 let scenePromise;
-export function loadScene(){return scenePromise??=fetch(new URL("./assets/scene.json.gz",import.meta.url)).then(async r=>{if(!r.ok)throw new Error("Scene unavailable");const bytes=new Uint8Array(await r.arrayBuffer());if(bytes[0]===31&&bytes[1]===139){const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));return new Response(stream).json()}return JSON.parse(new TextDecoder().decode(bytes))})}
+export function loadScene() {
+  return (scenePromise ??= fetch(
+    new URL("./assets/scene.json.gz", import.meta.url),
+  ).then(async (r) => {
+    if (!r.ok) throw new Error("Scene unavailable");
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes[0] === 31 && bytes[1] === 139) {
+      const stream = new Blob([bytes])
+        .stream()
+        .pipeThrough(new DecompressionStream("gzip"));
+      return new Response(stream).json();
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }));
+}

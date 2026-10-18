@@ -180,3 +180,18 @@ def test_public_lab_rejects_unpaired_websocket(companion):
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/ws/twin", headers={"Origin": "https://javgilavi.github.io"}):
             pass
+
+
+def test_companion_rejects_rebound_hosts_and_cross_site_camera_embedding(companion):
+    client, runner = companion
+    assert client.get("/api/state", headers={"Host": "attacker.example"}).status_code == 400
+    assert (
+        client.post(
+            "/api/run",
+            headers={"Host": "attacker.example", "Origin": "http://attacker.example"},
+            json={"prompt": "Pick pen"},
+        ).status_code
+        == 400
+    )
+    assert client.get("/api/cameras/top", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    runner.assert_not_called()
