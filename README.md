@@ -31,9 +31,21 @@ true*, and *whether the goal really happened*.
   a MuJoCo twin of the Haller, also shown inside the orchestrator HMI. See [docs/research-ui.md](docs/research-ui.md).
 - **Per-skill FLUX LoRAs** (rank 32, each skill normalized on its own demos): the red pen went 3/5, then 2/3, real
   inserts. Stock zero-shot FLUX went 0/16.
-- **Public models and data:** Hugging Face
-  [Oskrt/flux-3-action-so101-haller-*-lora](https://huggingface.co/Oskrt) (every checkpoint) and the
-  [Oskrt/haller_*](https://huggingface.co/Oskrt) datasets.
+- **Public models (every checkpoint, under `checkpoints/<run>/<step>/{raw,ema}`):**
+  - [Oskrt/flux-3-action-so101-haller-pen-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora): red
+    pen. The demo runs `checkpoints/lora_pen84/005000/raw`; the repo root is the RAW 10k adapter.
+  - [Oskrt/flux-3-action-so101-haller-green-pen-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-green-pen-lora):
+    green pen (root = the served RAW 5k).
+  - [Oskrt/flux-3-action-so101-haller-yellow-cutter-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-yellow-cutter-lora):
+    yellow cutter (root = the served augmented RAW 5k).
+  - [Oskrt/flux-3-action-so101-haller-open-box-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-open-box-lora):
+    open box (trained, but not used in the demo; the box step is a scripted replay).
+- **Public datasets** (LeRobot v3, VR teleoperation on the Haller):
+  [open the box](https://huggingface.co/datasets/Oskrt/haller_open_the_box),
+  [green pen](https://huggingface.co/datasets/Oskrt/haller_put_the_green_pen_in_the_green_slot),
+  [yellow cutter](https://huggingface.co/datasets/Oskrt/haller_put_the_yellow_cutter_in_the_yellow_slot),
+  [red pen](https://huggingface.co/datasets/Oskrt/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box),
+  [take the red pen out](https://huggingface.co/datasets/Oskrt/haller_take_the_red_pen_out_of_its_slot).
 - **Where things are:**
   - [ws4/pitch/README_submission.md](ws4/pitch/README_submission.md): the full write-up and numbers.
   - [ws4/](ws4/): the FLUX skill pipeline, safety runner and Claude orchestrator.
