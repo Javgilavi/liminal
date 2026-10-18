@@ -28,9 +28,14 @@ not FLUX; green pen and cutter = FLUX 3 Action LoRAs; the green-pen policy also 
 
 - **Full 4-skill chain on the real Haller**, planned by Claude with a camera check after every step:
   **2 of 3 runs finished 4/4** with no human touch during the run (208.6 s and 302.2 s).
-  - The box is opened by a **scripted replay of a recorded demo**, not FLUX.
-  - The green pen and cutter are placed by their own **FLUX 3 Action LoRAs**.
-  - In the filmed runs, the green-pen policy also slotted the red pen on its way home.
+  - **Box:** opened by a **scripted replay of a recorded demo**, not FLUX (at 12:05 it missed twice; Claude replanned and
+    the third replay opened it).
+  - **Green pen:** placed by its **FLUX 3 Action LoRA** (about 55 to 58 s).
+  - **Yellow cutter:** placed by its **FLUX 3 Action LoRA** (at 12:05 on the second attempt, 45.6 s).
+  - **Red pen:** in both 4/4 runs the green-pen policy picked up the red pen and slotted it on its way home, with no
+    human touch. The red-pen step's camera check then found it already in place (2.8 s and 3.8 s), so the red-pen LoRA
+    had nothing left to do. On its own, the red-pen LoRA made 3 of 5 and then 2 of 3 real inserts, plus one HMI insert
+    confirmed by Claude in 33 s.
   - Demo mode: keep-out zones and stall/load stops were off. Joint limits, 1 deg per tick, a 60 % torque cap and the
     e-stop stayed on.
 - **Behavior-tree harness on the real robot** (Stanislaw Sufin, Simone Utili): the task-YAML behavior tree drove the
