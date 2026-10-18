@@ -15,7 +15,7 @@ Its `00_highlights/` is mirrored here.
 
 | File | What it shows |
 |---|---|
-| `liminal_launch_16x9.mp4`, `liminal_launch_9x16.mp4` | The 30 s launch video (1920x1080 and 1080x1920, original synthesized score). Built from the clips below by [`video/`](../video/README.md), which lists every shot and source timestamp; simulated shots carry a `SIM` tag. |
+| `liminal_launch_16x9.mp4`, `liminal_launch_9x16.mp4` | The 48 s launch video (1920x1080 and 1080x1920, original synthesized score): history book, the real rig, its twin running `lid_hold_insert`, the real red-pen insert. Built by [`video/`](../video/README.md), which lists every shot and source timestamp; simulated shots carry a `SIM` tag. |
 
 ## `real_robot/`
 
@@ -23,6 +23,7 @@ Its `00_highlights/` is mirrored here.
 |---|---|
 | `haller_tabletop_real_scene_2026-10-18.mp4` | The real Haller tabletop (tower, two SO-101 arms, D455, round table, mat, box, markers, cutter). The reference the digital twin was measured from. |
 | `haller_xlerobot_station.jpg`, `haller_rig_overview.jpg`, `haller_gripper_closeup.jpg` | The XLeRobot station with the two arms, an overview frame of the rig, and a close-up of the gripper. |
+| `haller_rig_front.jpg`, `haller_rig_front_cutout.png` | The team's front photo of the rig (tower, D455, both arms, box, markers, cutter), and the rig cut out of it with BiRefNet for the launch video. |
 | `haller_head_camera_view.jpg`, `haller_preflight_check_2026-10-18.jpg` | The D455 head-camera view, and a preflight check frame taken before a real-arm run. |
 | `haller_head_camera_pen_grasp_demo.jpg` | Head camera during a recorded VR teleoperation demo: the robot's left arm holds the red pen over the open box. |
 | `red_pen_demo_start_{head,wrist}_camera.png` | Start frame of a red-pen demo from both policy cameras (the wrist camera is rotated 180 at capture). |

@@ -145,13 +145,17 @@ def impact() -> np.ndarray:
 beats = np.arange(0, DUR, BEAT)
 chords = [[57, 60, 64, 67], [53, 57, 60, 64], [48, 52, 55, 59], [55, 59, 62, 66]]  # Am7 Fmaj7 Cmaj7 G(add#11)
 roots = [45, 41, 48, 43]
-
-hero, imag, diagram, tryit, end = (SHOTS[k] for k in ("hero", "imagination", "diagram", "tryIt", "end"))
+book, reveal, sim, hero, imag, diagram, end = (
+    SHOTS[k] for k in ("book", "reveal", "sim", "hero", "imagination", "diagram", "end"))
+BOOK = CFG["book"]
+flips = [BOOK["coverOpenAt"] + i * BOOK["flipEvery"] for i in range(len(BOOK["pages"]))]
 
 
 def section(t: float) -> str:
-    if t < SHOTS["problem"]["start"]:
-        return "intro"
+    if t < reveal["start"]:
+        return "book"
+    if t < sim["start"]:
+        return "reveal"
     if imag["start"] <= t < imag["end"]:
         return "break"
     if t >= end["start"]:
@@ -159,57 +163,83 @@ def section(t: float) -> str:
     return "groove"
 
 
+def music_box(note: int) -> np.ndarray:
+    n = int(0.9 * SR)
+    t = np.arange(n) / SR
+    f = midi(note)
+    s = np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * 2 * f * t) + 0.12 * np.sin(2 * np.pi * 4.01 * f * t)
+    return s * env(n, 0.002, 0.35) * 0.09
+
+
+def page_flip() -> np.ndarray:
+    n = int(0.45 * SR)
+    t = np.arange(n) / SR
+    noise = lowpass(highpass(RNG.standard_normal(n), 1200), 7000)
+    shape = np.sin(np.pi * np.clip(t / 0.4, 0, 1)) ** 2 * (1 + 0.6 * np.sin(2 * np.pi * 9 * t))
+    return noise * shape * 0.16
+
+
 for t in beats:
     sec = section(t)
-    bar = int(t // (4 * BEAT))
-    if sec == "groove" or (sec == "intro" and t >= SHOTS["hookReveal"]["start"]):
-        place("drums", t, kick(1.0 if sec == "groove" else 0.75))
-        if sec == "groove":
-            place("drums", t + BEAT / 2, hat(open_=(int(t / BEAT) % 4 == 3)), pan=0.25)
-            place("drums", t + BEAT / 4, hat(gain=0.45), pan=-0.3)
-            place("drums", t + 3 * BEAT / 4, hat(gain=0.45), pan=-0.3)
-            if int(round(t / BEAT)) % 2 == 1:
-                place("drums", t, clap(), pan=0.05)
+    if sec == "groove":
+        place("drums", t, kick())
+        place("drums", t + BEAT / 2, hat(open_=(int(t / BEAT) % 4 == 3)), pan=0.25)
+        place("drums", t + BEAT / 4, hat(gain=0.45), pan=-0.3)
+        place("drums", t + 3 * BEAT / 4, hat(gain=0.45), pan=-0.3)
+        if int(round(t / BEAT)) % 2 == 1:
+            place("drums", t, clap(), pan=0.05)
+    elif sec == "book" and t >= flips[4]:
+        # The pulse arrives as the history reaches learned, two-handed arms.
+        place("drums", t, kick(0.55))
+        place("drums", t + BEAT / 2, hat(gain=0.6), pan=0.2)
 
-# Bass: off-beat eighths on the chord root, out for the intro and the breakdown.
+# Bass: off-beat eighths on the chord root in the grooves, a held sub under the reveal.
 for t in beats:
-    if section(t) != "groove":
-        continue
     root = roots[int(t // (4 * BEAT)) % 4]
-    place("bass", t + BEAT / 2, bass_note(root, BEAT / 2 * 0.95))
-    if int(t / BEAT) % 4 == 3:
-        place("bass", t + 3 * BEAT / 4, bass_note(root + 12, BEAT / 4 * 0.9))
+    if section(t) == "groove":
+        place("bass", t + BEAT / 2, bass_note(root, BEAT / 2 * 0.95))
+        if int(t / BEAT) % 4 == 3:
+            place("bass", t + 3 * BEAT / 4, bass_note(root + 12, BEAT / 4 * 0.9))
+place("bass", reveal["start"], bass_note(33, reveal["end"] - reveal["start"]) * 0.8)
 
 # Pad: one chord per bar for the whole piece, held into the end card.
 bar_len = 4 * BEAT
 for b in range(int(np.ceil(DUR / bar_len))):
     t = b * bar_len
     length = bar_len + 0.3 if t + bar_len < end["start"] else DUR - t + 2.5
-    place("pad", t, pad_chord(chords[b % 4], length))
+    place("pad", t, pad_chord(chords[b % 4], length) * (0.7 if t < reveal["start"] else 1.0))
     if t + bar_len >= end["start"]:
         break
 
-# Arp: sixteenths through the chord, opening the filter across the hero and how-it-works sections.
+# Music box under the book: one note per beat, walking the chord tones.
+for k, t in enumerate(beats):
+    if section(t) != "book" or t < 0.5:
+        continue
+    chord = chords[int(t // bar_len) % 4]
+    place("arp", t, music_box(chord[[0, 2, 1, 3][k % 4]] + 24), pan=0.3 * np.sin(k))
+for t in flips:
+    place("fx", t, page_flip(), pan=0.15)
+
+# Arp: sixteenths through the chord from the twin to the end card, the filter opening as it goes.
 step = BEAT / 4
 pattern = [0, 2, 1, 3, 2, 1, 3, 2]
-t = hero["start"]
+t = sim["start"]
 k = 0
 while t < end["start"]:
     sec = section(t)
     chord = chords[int(t // bar_len) % 4]
     note = chord[pattern[k % len(pattern)]] + 12
-    progress = (t - hero["start"]) / (end["start"] - hero["start"])
+    progress = (t - sim["start"]) / (end["start"] - sim["start"])
     cutoff = 900 + 3200 * progress if sec != "break" else 2600
     place("arp", t, pluck(note, cutoff) * (1.0 if k % 4 == 0 else 0.7), pan=0.35 * np.sin(k * 0.7))
     t += step
     k += 1
 
 # FX: risers into the big cuts, impacts on them.
-for cut in (SHOTS["hookReveal"]["start"], hero["start"], diagram["start"], end["start"]):
+for cut in (reveal["start"], sim["start"], hero["start"], diagram["start"], end["start"]):
     place("fx", cut, impact())
-for cut, length in ((hero["start"], 1.5), (diagram["start"], 1.5), (end["start"], 2.0)):
+for cut, length in ((reveal["start"], 1.5), (sim["start"], 1.0), (hero["start"], 1.5), (end["start"], 2.0)):
     place("fx", cut - length, riser(length), pan=0.0)
-place("fx", 0.0, riser(SHOTS["hookReveal"]["start"]) * 0.8)
 
 # --- mix ----------------------------------------------------------------------------------------
 

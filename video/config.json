@@ -1,10 +1,9 @@
 {
   "_readme": "All text, colours and timings for the Liminal launch video. Times are seconds on the 30 fps timeline; the beat grid is 120 BPM (one beat = 0.5 s), so keep cuts on multiples of 0.5.",
   "fps": 30,
-  "durationSec": 30,
+  "durationSec": 48,
   "bpm": 120,
   "music": "music.wav",
-
   "colors": {
     "bg": "#060807",
     "surface": "#0E1312",
@@ -15,12 +14,8 @@
     "accent": "#3EE3A3"
   },
   "grade": "contrast(1.07) saturate(0.88) brightness(0.96) sepia(0.06) hue-rotate(-4deg)",
-
   "text": {
     "wordmark": "LIMINAL",
-    "hookSub": "dual-arm  ·  SO-101  ·  FLUX 3 Action",
-    "problem": "One arm can't do everything.",
-    "tagline": ["Two arms.", "Explicit dependencies."],
     "heroLabel": "Real robot",
     "prompt": "put the red pen in its slot…",
     "policyChip": "FLUX 3 Action + task LoRA",
@@ -34,80 +29,403 @@
     "actualLabel": "Actual",
     "imagineCaption": "Imagine, then act.",
     "howLabel": "How it works",
-    "uiLabel": "Live UI · MuJoCo arms",
-    "twinRealLabel": "Haller rig",
-    "twinSimLabel": "MuJoCo twin",
-    "twinLabel": "Digital twin",
-    "twinCaption": "Twin measured from the real rig.",
     "tryLabel": "Try it",
-    "commands": ["uv sync --extra dev", "uv run liminal run configs/tasks/lid_hold_insert.yaml"],
-    "commandOutput": ["\"status\": \"success\",", "\"goal_verified\": true,"],
+    "commands": [
+      "uv sync --extra dev",
+      "uv run liminal run configs/tasks/lid_hold_insert.yaml"
+    ],
+    "commandOutput": [
+      "\"status\": \"success\",",
+      "\"goal_verified\": true,"
+    ],
     "tryCaption": "Runs on mock arms. No hardware.",
-    "endTagline": "Two arms, explicit dependencies.",
+    "endTagline": "Dual-arm orchestration for FLUX 3 Action.",
     "event": "ERH Physical AI Hackathon · Oct 2026",
     "track": "Imagine Then Act track",
     "result": "",
     "team": "",
-    "repo": "github.com/Javgilavi/liminal"
+    "repo": "github.com/Javgilavi/liminal",
+    "revealSub": "Dual-arm orchestration for FLUX 3 Action",
+    "twinChip": "Digital twin · MuJoCo",
+    "twinCaption": "Some tasks need two hands.",
+    "simTag": "Haller twin · scripted"
   },
-
   "shots": {
-    "hookMacro":   { "start": 0.0,  "end": 1.5 },
-    "hookReveal":  { "start": 1.5,  "end": 3.0 },
-    "problem":     { "start": 3.0,  "end": 6.0, "swapAt": 4.5 },
-    "hero":        { "start": 6.0,  "end": 14.5 },
-    "imagination": { "start": 14.5, "end": 16.0 },
-    "diagram":     { "start": 16.0, "end": 19.5 },
-    "ui":          { "start": 19.5, "end": 21.0 },
-    "twin":        { "start": 21.0, "end": 23.0 },
-    "tryIt":       { "start": 23.0, "end": 26.0 },
-    "end":         { "start": 26.0, "end": 30.0 }
+    "book": {
+      "start": 0.0,
+      "end": 14.0
+    },
+    "reveal": {
+      "start": 14.0,
+      "end": 18.0
+    },
+    "sim": {
+      "start": 18.0,
+      "end": 26.0
+    },
+    "hero": {
+      "start": 26.0,
+      "end": 34.5
+    },
+    "imagination": {
+      "start": 34.5,
+      "end": 36.0
+    },
+    "diagram": {
+      "start": 36.0,
+      "end": 40.5
+    },
+    "tryIt": {
+      "start": 40.5,
+      "end": 43.5
+    },
+    "end": {
+      "start": 43.5,
+      "end": 48.0
+    }
   },
-
   "hero": {
     "_source": "media/real_robot/flux_red_pen_runs/red_pen_insert_flux_lora_raw5k_layout_C_48s.mp4 (source seconds)",
     "segments": [
-      { "from": 2.0,  "to": 14.0, "speed": 4 },
-      { "from": 29.0, "to": 40.0, "speed": 2 }
+      {
+        "from": 2.0,
+        "to": 14.0,
+        "speed": 4
+      },
+      {
+        "from": 29.0,
+        "to": 40.0,
+        "speed": 2
+      }
     ],
     "trackFrom": 3.5,
     "trackUntil": 33.3,
     "slotShowFrom": 33.0,
     "releasedAt": 38.0,
-    "statFrom": 11.5,
-    "slotBox": [0.49, 0.44, 0.575, 0.71]
+    "statFrom": 31.5,
+    "slotBox": [
+      0.49,
+      0.44,
+      0.575,
+      0.71
+    ]
   },
-
   "imagination": {
     "_source": "media/real_robot/flux_imagination/red_pen_imagined_vs_actual_lora5k_ep101.mp4",
     "from": 4.6
   },
-
   "diagram": {
     "nodes": [
-      { "id": "goal",     "label": "Goal",           "sub": "task YAML" },
-      { "id": "bt",       "label": "Behavior tree",  "sub": "deterministic" },
-      { "id": "registry", "label": "Skill registry", "sub": "LoRA bundles" },
-      { "id": "fluxL",    "label": "FLUX · left",    "sub": "own instance", "accent": true },
-      { "id": "fluxR",    "label": "FLUX · right",   "sub": "own instance", "accent": true },
-      { "id": "safety",   "label": "Safety",         "sub": "limits · e-stop" },
-      { "id": "arms",     "label": "SO-101 arms",    "sub": "XLeRobot" },
-      { "id": "cams",     "label": "Cameras",        "sub": "head · wrists" },
-      { "id": "vlm",      "label": "Qwen3-VL-4B",    "sub": "perception" },
-      { "id": "world",    "label": "World state",    "sub": "verified ✓", "accent": true }
+      {
+        "id": "goal",
+        "label": "Goal",
+        "sub": "task YAML"
+      },
+      {
+        "id": "bt",
+        "label": "Behavior tree",
+        "sub": "deterministic"
+      },
+      {
+        "id": "registry",
+        "label": "Skill registry",
+        "sub": "LoRA bundles"
+      },
+      {
+        "id": "fluxL",
+        "label": "FLUX · left",
+        "sub": "own instance",
+        "accent": true
+      },
+      {
+        "id": "fluxR",
+        "label": "FLUX · right",
+        "sub": "own instance",
+        "accent": true
+      },
+      {
+        "id": "safety",
+        "label": "Safety",
+        "sub": "limits · e-stop"
+      },
+      {
+        "id": "arms",
+        "label": "SO-101 arms",
+        "sub": "XLeRobot"
+      },
+      {
+        "id": "cams",
+        "label": "Cameras",
+        "sub": "head · wrists"
+      },
+      {
+        "id": "vlm",
+        "label": "Qwen3-VL-4B",
+        "sub": "perception"
+      },
+      {
+        "id": "world",
+        "label": "World state",
+        "sub": "verified ✓",
+        "accent": true
+      }
     ],
     "edges": [
-      ["goal", "bt"], ["bt", "registry"], ["registry", "fluxL"], ["registry", "fluxR"],
-      ["fluxL", "safety"], ["fluxR", "safety"], ["safety", "arms"], ["arms", "cams"],
-      ["cams", "vlm"], ["vlm", "world"], ["world", "bt"]
+      [
+        "goal",
+        "bt"
+      ],
+      [
+        "bt",
+        "registry"
+      ],
+      [
+        "registry",
+        "fluxL"
+      ],
+      [
+        "registry",
+        "fluxR"
+      ],
+      [
+        "fluxL",
+        "safety"
+      ],
+      [
+        "fluxR",
+        "safety"
+      ],
+      [
+        "safety",
+        "arms"
+      ],
+      [
+        "arms",
+        "cams"
+      ],
+      [
+        "cams",
+        "vlm"
+      ],
+      [
+        "vlm",
+        "world"
+      ],
+      [
+        "world",
+        "bt"
+      ]
     ],
     "landscape": {
-      "goal": [110, 230], "bt": [400, 230], "registry": [700, 230], "fluxL": [1000, 140], "fluxR": [1000, 320],
-      "safety": [1300, 230], "arms": [1590, 230], "cams": [1590, 520], "vlm": [1000, 520], "world": [400, 520]
+      "goal": [
+        110,
+        230
+      ],
+      "bt": [
+        400,
+        230
+      ],
+      "registry": [
+        700,
+        230
+      ],
+      "fluxL": [
+        1000,
+        140
+      ],
+      "fluxR": [
+        1000,
+        320
+      ],
+      "safety": [
+        1300,
+        230
+      ],
+      "arms": [
+        1590,
+        230
+      ],
+      "cams": [
+        1590,
+        520
+      ],
+      "vlm": [
+        1000,
+        520
+      ],
+      "world": [
+        400,
+        520
+      ]
     },
     "portrait": {
-      "goal": [250, 90], "bt": [250, 300], "registry": [250, 510], "fluxL": [130, 720], "fluxR": [370, 720],
-      "safety": [250, 930], "arms": [250, 1140], "cams": [750, 1140], "vlm": [750, 720], "world": [750, 300]
+      "goal": [
+        250,
+        90
+      ],
+      "bt": [
+        250,
+        300
+      ],
+      "registry": [
+        250,
+        510
+      ],
+      "fluxL": [
+        130,
+        720
+      ],
+      "fluxR": [
+        370,
+        720
+      ],
+      "safety": [
+        250,
+        930
+      ],
+      "arms": [
+        250,
+        1140
+      ],
+      "cams": [
+        750,
+        1140
+      ],
+      "vlm": [
+        750,
+        720
+      ],
+      "world": [
+        750,
+        300
+      ]
     }
+  },
+  "book": {
+    "_note": "History facts are general knowledge; see video/README.md for the list to double-check before publishing.",
+    "end": 14.0,
+    "coverOpenAt": 2.0,
+    "flipEvery": 1.5,
+    "flipSec": 0.65,
+    "drawSec": 1.0,
+    "diveAt": 13.2,
+    "coverTitle": [
+      "Robot",
+      "Arms"
+    ],
+    "coverSub": "A short history",
+    "coverYears": "1961 — 2026",
+    "runningHead": "A short history of robot arms",
+    "footnote": "Illustrations, not to scale",
+    "pages": [
+      {
+        "year": "1961",
+        "name": "Unimate",
+        "line": "The first industrial robot arm.",
+        "who": "Unimation · General Motors",
+        "art": "unimate"
+      },
+      {
+        "year": "1969",
+        "name": "Stanford Arm",
+        "line": "Electric, and run by a computer.",
+        "who": "Victor Scheinman · Stanford",
+        "art": "stanford"
+      },
+      {
+        "year": "1978",
+        "name": "PUMA",
+        "line": "A programmable arm for assembly.",
+        "who": "Unimation",
+        "art": "puma"
+      },
+      {
+        "year": "2012",
+        "name": "Baxter",
+        "line": "Two arms, safe beside people.",
+        "who": "Rethink Robotics",
+        "art": "baxter"
+      },
+      {
+        "year": "2023",
+        "name": "ALOHA",
+        "line": "Low-cost arms learn two-handed skills.",
+        "who": "Stanford",
+        "art": "aloha"
+      },
+      {
+        "year": "2023",
+        "name": "RT-2",
+        "line": "Vision and language become actions.",
+        "who": "Google DeepMind",
+        "art": "rt2"
+      },
+      {
+        "year": "2024",
+        "name": "SO-100 · SO-101",
+        "line": "Open-source arms anyone can print.",
+        "who": "TheRobotStudio · Hugging Face",
+        "art": "so101"
+      },
+      {
+        "year": "2026",
+        "name": "Liminal",
+        "line": "Two SO-101s, one behavior tree.",
+        "who": "ERH Physical AI Hackathon",
+        "art": "robot"
+      }
+    ]
+  },
+  "reveal": {
+    "callouts": [
+      {
+        "label": "RealSense D455",
+        "at": [
+          0.494,
+          0.094
+        ],
+        "side": "right"
+      },
+      {
+        "label": "SO-101 arm",
+        "at": [
+          0.18,
+          0.6
+        ],
+        "side": "left"
+      },
+      {
+        "label": "SO-101 arm",
+        "at": [
+          0.8,
+          0.55
+        ],
+        "side": "right"
+      },
+      {
+        "label": "Wrist camera",
+        "at": [
+          0.83,
+          0.8
+        ],
+        "side": "right"
+      },
+      {
+        "label": "XLeRobot tower",
+        "at": [
+          0.47,
+          0.4
+        ],
+        "side": "left"
+      }
+    ]
+  },
+  "sim": {
+    "_source": "scripts/render_twin.py: frames are keyframed from the twin's expert IK plans, not a policy rollout",
+    "scanSec": 1.0,
+    "captionFrom": 1.0,
+    "captionTo": 2.6,
+    "hudFrom": 2.6,
+    "taskFile": "configs/tasks/lid_hold_insert.yaml"
   }
 }

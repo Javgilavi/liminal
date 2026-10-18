@@ -1,6 +1,6 @@
 import React from 'react';
-import {AbsoluteFill, staticFile, useCurrentFrame} from 'remotion';
-import {Eyebrow, KenBurns, MaskWords, Typewriter, Wordmark} from '../components/ui';
+import {AbsoluteFill, Img, staticFile, useCurrentFrame} from 'remotion';
+import {Eyebrow, MaskWords, Typewriter, Wordmark} from '../components/ui';
 import {C, MONO, SANS, T, cfg, easeInOut, easeOut, prog, sec, useLayout} from '../theme';
 
 /** 23-26 s: the real quick-start commands and their real output, typed into a terminal card. */
@@ -88,9 +88,9 @@ export const EndCard: React.FC = () => {
   const meta = [T.event, T.track, T.result, T.team].filter(Boolean);
   return (
     <AbsoluteFill style={{opacity: fadeOut}}>
-      <AbsoluteFill style={{opacity: 0.22}}>
-        <KenBurns src={staticFile('station.jpg')} dur={dur} from={1.12} to={1.04} position="50% 40%"
-          filter={`${cfg.grade} blur(14px) brightness(0.5)`} />
+      <AbsoluteFill style={{opacity: 0.2, alignItems: 'center', justifyContent: 'center'}}>
+        <Img src={staticFile('robot_cutout.png')} style={{height: '115%', filter: `${cfg.grade} blur(16px) brightness(0.6)`,
+          transform: `scale(${1.08 - 0.06 * prog(frame, 0, dur, easeInOut)})`}} />
       </AbsoluteFill>
       <AbsoluteFill style={{background: `radial-gradient(ellipse 60% 55% at 50% 50%, rgba(6,8,7,0.2), ${C.bg} 85%)`}} />
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', flexDirection: 'column'}}>

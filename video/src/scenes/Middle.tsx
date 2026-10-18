@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, Img, OffthreadVideo, staticFile, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, OffthreadVideo, staticFile, useCurrentFrame} from 'remotion';
 import {Card, Eyebrow, MaskWords, SourceTag} from '../components/ui';
 import {C, MONO, SANS, T, cfg, easeInOut, easeOut, prog, sec, useLayout} from '../theme';
 
@@ -143,64 +143,6 @@ export const Diagram: React.FC<{dim?: number; startFrame?: number}> = ({dim = 0,
           );
         })}
       </div>
-    </AbsoluteFill>
-  );
-};
-
-/** 19.5-21 s: the live UI's reactive task tree, floating over the dimmed diagram. */
-export const LiveUi: React.FC = () => {
-  const frame = useCurrentFrame();
-  const {portrait} = useLayout();
-  const dur = sec(cfg.shots.ui.end - cfg.shots.ui.start);
-  const w = portrait ? 960 : 1320;
-  const h = Math.round((w * 655) / 1010);
-  const scroll = prog(frame, 0, dur, easeInOut);
-  return (
-    <AbsoluteFill>
-      <Diagram dim={1} startFrame={sec(cfg.shots.diagram.end - cfg.shots.diagram.start)} />
-      <Card x={(portrait ? 1080 : 1920) / 2 - w / 2} y={portrait ? (1920 - h) / 2 : 110} w={w} h={h} rotX={portrait ? 4 : 8}
-        rotY={portrait ? 0 : -4 + 3 * scroll} style={rise(frame, 0, 80)}>
-        <Img src={staticFile('ui_task_tree.png')}
-          style={{width: '100%', position: 'absolute', top: 0, transform: `scale(${1.02 + 0.03 * scroll})`, transformOrigin: '50% 0%'}} />
-        <SourceTag kind="sim" label={T.uiLabel} />
-      </Card>
-    </AbsoluteFill>
-  );
-};
-
-/** 21-23 s: the real rig next to its MuJoCo twin. */
-export const Twin: React.FC = () => {
-  const frame = useCurrentFrame();
-  const {portrait} = useLayout();
-  const dur = sec(cfg.shots.twin.end - cfg.shots.twin.start);
-  const w = portrait ? 900 : 820;
-  const h = Math.round((w * 338) / 600);
-  const gap = portrait ? 50 : 60;
-  const p = prog(frame, 0, dur, easeInOut);
-  const pos = portrait
-    ? [[90, 1920 / 2 - h - gap / 2], [90, 1920 / 2 + gap / 2]]
-    : [[1920 / 2 - w - gap / 2, 1080 / 2 - h / 2], [1920 / 2 + gap / 2, 1080 / 2 - h / 2]];
-  const img = (file: string, dir: number) => (
-    <Img src={staticFile(file)} style={{width: '100%', height: '100%', objectFit: 'cover', filter: cfg.grade,
-      transform: `scale(${1.08 - 0.04 * p}) translateX(${dir * 10 * p}px)`}} />
-  );
-  return (
-    <AbsoluteFill>
-      <div style={{position: 'absolute', left: portrait ? 90 : 120, top: portrait ? 340 : 120, ...rise(frame, 0, 30)}}>
-        <Eyebrow>{T.twinLabel}</Eyebrow>
-      </div>
-      <Card x={pos[0][0]} y={pos[0][1]} w={w} h={h} rotY={portrait ? 0 : 7} style={rise(frame, 0)}>
-        {img('twin_real.png', -1)}
-        <SourceTag kind="real" label={T.twinRealLabel} />
-      </Card>
-      <Card x={pos[1][0]} y={pos[1][1]} w={w} h={h} rotY={portrait ? 0 : -7} style={rise(frame, 4)}>
-        {img('twin_sim.png', 1)}
-        <SourceTag kind="sim" label={T.twinSimLabel} />
-      </Card>
-      <AbsoluteFill style={{justifyContent: 'flex-end', alignItems: 'center', paddingBottom: portrait ? 290 : 150}}>
-        <MaskWords text={T.twinCaption} at={8}
-          style={{fontFamily: SANS, fontWeight: 600, fontSize: portrait ? 56 : 52, letterSpacing: '-0.025em', color: C.text}} />
-      </AbsoluteFill>
     </AbsoluteFill>
   );
 };

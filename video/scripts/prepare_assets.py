@@ -1,9 +1,11 @@
 """Cut, crop and upscale the repo media the video uses into public/ (regenerated, not committed).
 
 Run from video/: python3 scripts/prepare_assets.py
-Every source is a file under ../media, so the video only shows footage the repo documents.
+Every source is a file under ../media or a render of the repo's MuJoCo twin. The twin render needs the twin's
+venv (see ../examples/dual_so101_sim/README.md) and an EGL or OSMesa library.
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -15,8 +17,7 @@ PUBLIC = HERE / "public"
 
 RED_PEN = MEDIA / "real_robot/flux_red_pen_runs/red_pen_insert_flux_lora_raw5k_layout_C_48s.mp4"
 IMAGINATION = MEDIA / "real_robot/flux_imagination/red_pen_imagined_vs_actual_lora5k_ep101.mp4"
-LIVE_UI = MEDIA / "liminal_ui/live_ui_flux_mujoco_session.mp4"
-REAL_VS_SIM = MEDIA / "digital_twin/real_vs_sim/haller_photo_vs_sim.jpg"
+TWIN_PYTHON = HERE.parent / "examples/dual_so101_sim/.venv/bin/python"
 
 # Upscale low-res robot cameras once, here, so the renderer only composites.
 UPSCALE = "scale=iw*3:ih*3:flags=lanczos,unsharp=5:5:0.6:5:5:0.0"
@@ -48,17 +49,10 @@ def main() -> None:
     encode(IMAGINATION, "imag_actual.mp4", f"crop=254:254:266:31,{UPSCALE}")
     encode(IMAGINATION, "imag_imagined.mp4", f"crop=254:254:786:31,{UPSCALE}")
 
-    # Live UI: real FLUX inference on simulated arms. Keep the reactive task tree panel.
-    ff("-ss", "22", "-i", str(LIVE_UI), "-frames:v", "1", "-vf", "crop=1010:655:410:345",
-       str(PUBLIC / "ui_task_tree.png"))
-
-    # haller_photo_vs_sim.jpg is a 2x4 grid of 640x360 tiles; the top row is the real photo and its twin.
-    ff("-i", str(REAL_VS_SIM), "-vf", "crop=592:333:24:30", str(PUBLIC / "twin_real.png"))
-    ff("-i", str(REAL_VS_SIM), "-vf", "crop=592:333:664:30", str(PUBLIC / "twin_sim.png"))
-
     for name, src in {
-        "gripper.jpg": MEDIA / "real_robot/haller_gripper_closeup.jpg",
         "station.jpg": MEDIA / "real_robot/haller_xlerobot_station.jpg",
+        # The team's front photo of the rig, background removed with BiRefNet (rembg birefnet-general).
+        "robot_cutout.png": MEDIA / "real_robot/haller_rig_front_cutout.png",
     }.items():
         shutil.copy(src, PUBLIC / name)
 
@@ -68,6 +62,15 @@ def main() -> None:
     for weight in (400, 500):
         shutil.copy(fonts / f"jetbrains-mono/files/jetbrains-mono-latin-{weight}-normal.woff2",
                     PUBLIC / f"fonts/mono-{weight}.woff2")
+    for style in ("normal", "italic"):
+        shutil.copy(fonts / f"instrument-serif/files/instrument-serif-latin-400-{style}.woff2",
+                    PUBLIC / f"fonts/serif-{style}.woff2")
+
+    # The twin shot: about 15 min per format on a CPU renderer. Skipped when the frames already exist.
+    for folder, w, h in (("twin_16x9", 1920, 1080), ("twin_9x16", 1080, 1920)):
+        if not (PUBLIC / folder / "track.json").exists():
+            cmd = [str(TWIN_PYTHON), str(HERE / "scripts/render_twin.py"), str(PUBLIC / folder), str(w), str(h)]
+            subprocess.run(cmd, check=True, env={**os.environ, "MUJOCO_GL": os.environ.get("MUJOCO_GL", "egl")})
     subprocess.run([sys.executable, "-I", str(HERE / "scripts/generate_music.py")], check=True)
     print("assets ready in", PUBLIC)
 

@@ -2,10 +2,12 @@ import React from 'react';
 import {AbsoluteFill, Audio, staticFile} from 'remotion';
 import './fonts';
 import {Backdrop, FilmFinish, Shot} from './components/ui';
-import {Hero} from './scenes/Hero';
-import {Diagram, Imagination, LiveUi, Twin} from './scenes/Middle';
-import {HookMacro, HookReveal, Problem} from './scenes/Opening';
+import {Book} from './scenes/Book';
 import {EndCard, TryIt} from './scenes/Closing';
+import {Hero} from './scenes/Hero';
+import {Diagram, Imagination} from './scenes/Middle';
+import {Reveal} from './scenes/Reveal';
+import {Sim} from './scenes/Sim';
 import {cfg} from './theme';
 
 const S = cfg.shots;
@@ -14,14 +16,14 @@ export const Main: React.FC = () => (
   <AbsoluteFill style={{background: cfg.colors.bg, overflow: 'hidden'}}>
     {cfg.music && <Audio src={staticFile(cfg.music)} />}
     <Backdrop />
-    <Shot {...S.hookMacro}>
-      <HookMacro />
+    <Shot {...S.book}>
+      <Book />
     </Shot>
-    <Shot {...S.hookReveal} exit="whip">
-      <HookReveal />
+    <Shot {...S.reveal}>
+      <Reveal />
     </Shot>
-    <Shot {...S.problem} enter="whip" exit="whip">
-      <Problem />
+    <Shot {...S.sim} exit="whip">
+      <Sim />
     </Shot>
     <Shot {...S.hero} enter="whip" exit="zoom">
       <Hero />
@@ -29,14 +31,8 @@ export const Main: React.FC = () => (
     <Shot {...S.imagination} enter="zoom" exit="whip">
       <Imagination />
     </Shot>
-    <Shot {...S.diagram} enter="whip">
+    <Shot {...S.diagram} enter="whip" exit="zoom">
       <Diagram />
-    </Shot>
-    <Shot {...S.ui} exit="whip">
-      <LiveUi />
-    </Shot>
-    <Shot {...S.twin} enter="whip" exit="zoom">
-      <Twin />
     </Shot>
     <Shot {...S.tryIt} enter="zoom" exit="fade">
       <TryIt />

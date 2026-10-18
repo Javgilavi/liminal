@@ -9,6 +9,7 @@
     "render": "bash scripts/render.sh"
   },
   "dependencies": {
+    "@fontsource/instrument-serif": "5.2.8",
     "@fontsource/inter": "5.2.8",
     "@fontsource/jetbrains-mono": "5.2.8",
     "@remotion/bundler": "4.0.536",
