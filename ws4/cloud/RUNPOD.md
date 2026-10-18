@@ -698,3 +698,56 @@ Plan (orchestrator, 17 Oct about 22:30 UTC):
 - The friend's RunPod account needs its own network volume (volumes belong to one account and one data center):
   bootstrap (about 11 min with the weight prefetch), ws4/ sync, then `skill_lora.sh prep` with UPLOAD_HOST/PORT on
   that pod and `train`.
+
+### red_pen_lid, 18 Oct: prep only (hold on new pods)
+- Dataset `haller_put_the_red_pen_in_its_slot_lid_held`: 22 episodes, 9,050 frames, same task string as the red pen
+  (the final box position with the lid held). Split: 17 train, 3 held-out (19 to 21), 2 dropped.
+- Raw (129 MB) at `/workspace/skills/red_pen_lid/raw`, uploaded through the open_box pod in 10 s. No pod.
+- Suggested for later: merge it with the 84 pen train takes (`ws4/data/merge_datasets.py`) for one red-pen run,
+  rather than a lid-only LoRA on 17 takes.
+
+### Red-pen continuation from RAW 10k (planned, needs a pod on a teammate's or friend's account)
+- The orchestrator merged the lid-held takes into the Hub pen dataset: Oskrt/haller_put_the_red_pen_in_its_slot_in_the_cardboard_box
+  tag v3.0, 126 episodes (layout E = 104 to 125). Split: 101 train, 15 held-out (the pen's 12 + E 123 to 125),
+  10 dropped. Tag pre-lid-held keeps the original 104.
+- LeRobot continues an adapter directly. With `--policy.path` set to a LoRA checkpoint, `make_policy` loads the base
+  named in adapter_config.json, then `PeftModel.from_pretrained(..., is_trainable=True)`, and `lerobot_train` skips
+  wrapping a new adapter (factory.py 365 to 395, lerobot_train.py 652 to 657). Processors come from that checkpoint,
+  so the B84 normalizers stay unchanged.
+- Recipe on the new volume:
+  1. bootstrap; sync ws4/;
+  2. rebuild B84 at `/workspace/packages/so101_haller_pen_B84` (the adapter's base path) from
+     `~/haller_rescue/pen/a0r_B_final84.json`;
+  3. copy RAW 10k from `~/haller_rescue/pen/checkpoint_010000/pretrained_model`;
+  4. download and convert the v3.0 dataset (side right);
+  5. `real_lora.sh train` with PKG = the RAW 10k dir, STEPS=3000, SAVE=1000;
+  6. eval RAW and EMA on all 15 held-out and on E 123 to 125 alone.
+- About 1 h on one RTX PRO 6000. Fallback: RAW 10k.
+- **With image augmentation** (orchestrator, 18 Oct about 07:10 CEST): live tests show RAW 10k on a knife edge, where a
+  1 px shift or 1 deg tilt of the live wrist frame flips hold and reach. Add `--policy.augment=true` to the train
+  command.
+  - flux3's augment (LeRobot `policies/flux3/f3/packing.py` sample_augmentation / apply_augmentation, used in
+    modeling_flux3.py only while training) is a Cosmos-style 95 % random crop resized back plus colour jitter.
+  - Jitter ranges: brightness 0.3, contrast 0.4, saturation 0.5, hue 0.08.
+  - One draw per window, shared by all cameras and frames, so it does not read as motion.
+  - At 640x480 the crop shifts the view by up to about 32 x 24 px; the release default is off.
+- Results (18 Oct): open_box LoRA ran 23:30 to 01:40 UTC, evals to 02:23; green_pen ran 23:57 to 01:40, evals to
+  01:48. Winners: RAW 5k for both (`ws4/research/skills.md`).
+- Rescue complete in `~/haller_rescue/`: pen 10k RAW + EMA, open_box and green_pen 5k RAW + EMA, each with base
+  normalizers, stats, split, evals and log; act/act_box_020000; copies of `lora_adapter.py` and the serve scripts.
+- The box pod stopped itself after its rescue (02:24 UTC).
+- The green pod's stopper ran out of its 30 min wait first: the box evals took 40 min instead of 10, sharing CPU
+  with rescue rsyncs. Green was then copied through real-serve-6000.
+- `demo_packages.txt`: skill_red_pen (RAW 10k), skill_green_pen (RAW 5k), skill_open_box (RAW 5k); the cutter has
+  no LoRA yet.
+
+### Graded red-pen benchmark set on 8790 (18 Oct about 04:37 CEST)
+- Oscar's order: 5x pen_ema10k, then 5x pen_raw10k, then pen_raw5k if time, after the station moves back to the pen84
+  spot. so101-zeroshot found that the moved station's wrist background makes the policy hold. EMA 10k was the most
+  robust variant on pen84-spot wrist views (26/27 shifts reach).
+- Reload 02:31:41 to 02:38 UTC (`demo_serve.sh` with `PKGS=/workspace/serve/pen_variants_packages.txt`):
+  - names: pen_raw10k, skill_red_pen (alias), pen_raw5k, pen_ema10k, pen_raw12k, skill_green_pen;
+  - 5 distinct models, 81.6 GB; `lora_adapter.py serve` now shares one model across names with the same
+    BASE+ADAPTER;
+  - laptop check: all 6-D, server 0.35 to 0.36 s, the alias bit-identical.
+- My lid-held EMA 10k eval was stopped to free the GPU for the reload; it can be rerun when memory allows.

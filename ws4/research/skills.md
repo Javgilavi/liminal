@@ -52,6 +52,50 @@ started, but the orchestrator stopped the ACT pods for Oscar's RunPod budget (gr
 wants them, on another account. To resume on a pod with this volume: `bash ws4/act/skill_act.sh train green 40000` and `watch green 10000 20000 30000 40000`, the same for
 cutter (about 1 h each on an RTX PRO 4500).
 
+## FLUX 3 Action LoRA per skill (ws4-datasets)
+
+The pen recipe per skill (`ws4/cloud/skill_lora.sh`):
+- base = released `flux-3-action-so101` with B quantiles of the skill's train takes, no joint transforms;
+- LoRA rank/alpha 32, lr 1e-4, batch 2 x 4, 5,000 microsteps, EMA 0.999, text encoder on the GPU;
+- one RTX PRO 6000 per skill.
+
+Same held-out protocol as the pen curve (offline_diag, 200 frames, seed 0, guidance 1, moving frames). The zero-shot rows
+were skipped for budget; the pen's are in `pen_lora.md`. Winner = better arm MAE and 6-joint direction, served as the
+skill's package. Pod and timing details are in `ws4/cloud/RUNPOD.md`.
+
+### Green pen (58 train, held out 63 to 65)
+
+Moving frames: 196 of 200. Run `/workspace/skills/green_pen/lora` on skill-green-pen-6000, 23:57 to 01:40 UTC.
+Eval loss (held-out, live weights): 0.222 at 500, 0.191 at 4,000, 0.186 at 5,000.
+
+| Model | Microsteps | MAE pan, lift, elbow, wflex, roll (deg) (mean); gripper (%) | Direction agreement pan .. gripper (mean) |
+|---|---|---|---|
+| LoRA RAW (winner) | 5,000 | 2.6, 4.7, 4.3, 4.8, 3.4 (3.95); 5.3 | 96, 87, 86, 83, 87, 94 % (89.1) |
+| LoRA EMA | 5,000 | 3.0, 5.7, 6.8, 7.4, 4.2 (5.40); 6.7 | 92, 87, 79, 69, 76, 89 % (82.1) |
+
+- RAW dominates EMA on every joint. As on the pen at 5k, a 0.999 EMA still carries much of the initial adapter.
+- The winner is `skill_green_pen` in `/workspace/serve/demo_packages.txt`: base `so101_haller_green_pen_B` + RAW 5k.
+  The laptop copy is in `~/haller_rescue/green_pen/`.
+
+### Box (59 train, held out P2 36 to 38, P3 72 to 74)
+
+Moving frames: 199 of 200. Run `/workspace/skills/open_box/lora` on skill-open-box-6000, 23:30 to 01:40 UTC.
+Eval loss: 0.342 at 500, 0.286 at 4,000, 0.276 at 5,000.
+
+| Model | Microsteps | MAE pan, lift, elbow, wflex, roll (deg) (mean); gripper (%) | Direction agreement pan .. gripper (mean) |
+|---|---|---|---|
+| LoRA RAW (winner) | 5,000 | 3.3, 7.1, 5.8, 5.5, 3.9 (5.11); 5.7 | 89, 65, 69, 72, 70, 71 % (72.8; arm 73) |
+| LoRA EMA | 5,000 | 3.7, 7.5, 6.2, 6.9, 4.8 (5.82); 8.6 | 84, 64, 68, 72, 62, 96 % (74.6; arm 70) |
+
+- RAW is better on arm MAE, arm direction and gripper MAE; EMA only on gripper direction (96 vs 71 %).
+- Against ACT box 20k (above): lower arm MAE (5.11 vs 5.6 deg), weaker arm direction (73 vs 80 %).
+- The box is the hardest skill for both, and it overfit under ACT.
+- Winner `skill_open_box` = `so101_haller_open_box_B` + RAW 5k. Laptop copy in `~/haller_rescue/open_box/`.
+
+### Yellow cutter
+
+Prep only: the raw data is on the volume, no pod (budget hold).
+
 ## Compute
 
 act-skills-4500 (jklmwivzh1h2i4) 23:26 to 00:41 UTC, act-skills-4500b (93244np4opnv1w) 23:52 to 00:22,

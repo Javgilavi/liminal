@@ -69,6 +69,24 @@ shared training GPU, so only relative. Served with compile on, guidance 1/1 take
 - **Selection mismatch.** LeRobot's eval loss, used to pick the Hub checkpoint, is computed on the live (raw) weights,
   while the Hub and 8790 hold the EMA adapter.
 
+## Lid-held scene: offline check of RAW 10k (18 Oct about 02:20 UTC)
+
+RAW 10k scored 0/5 live in the lid-held red-pen scene, returning hold chunks. The same model offline on the
+lid-held dataset (22 takes, `/workspace/skills/red_pen_lid`), same protocol:
+
+| Takes | Moving frames | Arm MAE (mean, deg) | Hold arm MAE | Direction (6-joint mean) | Path ratio pan .. grip |
+|---|---|---|---|---|---|
+| old held-out (12, layouts A to D) | 181 | 3.15 | 5.61 | 88.6 % | 0.75, 0.86, 0.85, 0.63, 0.61, 1.12 |
+| lid-held held-out 19 to 21 | 199 | 5.57 | 9.24 | 80.2 % | 0.52, 0.64, 0.62, 0.51, 0.40, 1.00 |
+| lid-held all 20 good | 184 | 5.24 | 7.79 | 76.6 % | 0.53, 0.73, 0.78, 0.51, 0.43, 1.49 |
+
+- **From rest, as a live first request:** state at frame 0 repeated 8 ticks, commands = state, both snapshots =
+  frame 0. The model moves 32 to 61 deg (summed arm displacement over the chunk) on all 20 lid-held takes and 34
+  to 66 deg on the 12 old ones; never hold-like.
+- So the scene costs accuracy and about half the motion, but it does not explain hold chunks. The live inputs
+  likely differ from the recorded ones (camera mapping or rotation, state units or calibration, command history,
+  task string or package). The continuation fine-tune on the 126-episode dataset targets the scene shift only.
+
 ## Public checkpoint on the Hub
 
 [Oskrt/flux-3-action-so101-haller-pen-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora) holds
@@ -229,3 +247,31 @@ Runner (no arm runs so far):
 
 Compute: pod `act-train-4500` (id zhkilyhem41c2f, RTX PRO 4500, EUR-IS-1, $0.72/h, on this volume) ran from 20:08:46
 to 23:04 UTC (2.9 h, about $2.10) and is terminated. Everything of ws4-act's lives under `/workspace/act/`.
+
+### ACT on the real arm (18 Oct, about 04:20 CEST)
+
+Five graded attempts on the Haller in the original pen84 scene (layouts A B C D A from the held-out start frames, lid
+hinged open, box arm folded at the tuck), Oscar grading, `SKILL=pen bash ws4/act/eval_act_arm.sh`:
+- Checkpoint ACT pen84 100k (`ws4/.cache/act/act_pen84_100k`), in process on the laptop GPU (70 ms median per chunk,
+  135 ms max), re-planning every 32 commands, 40 s per attempt.
+- Every eval-kit guard: final-split keep-out with the demo envelope, soft limits, 1 deg per tick, ramps to haller
+  home, home check, stall and load freeze, 60 % torque cap.
+- One override (Oscar's, in every trial note): box-arm start tolerance 15 deg instead of 5, because its wrist flex
+  sat at 66 deg vs 78 in the pen84 takes.
+
+| Attempt | Layout | Steps (reach, grasp, insert) | What ACT did |
+|---|---|---|---|
+| 1 | A | 0/3 | dipped and opened/closed the gripper in place (pan near -2 deg) for 40 s, never left the start area |
+| 2 | B | 2/3 | grasped the pen at 13 s, carried it over the box, hovered above the slot gripper closed until timeout |
+| 3 | C | 2/3 | grasped at 7 s, over the box at 12 s, wrist tipping down toward the slot, no release |
+| 4 | D | 2/3 | grasped at 7 s, over the box at 12 s, wrist tipping down toward the slot, no release |
+| 5 | A | 2/3 | grasped at 7 s, over the box at 12 s, hovered above the slot, no release |
+
+- **8 of 15 steps; grasp and carry in 4 of 5; no insert.** For comparison, FLUX raw 10k scored 0/5 holding still in the
+  lid-held scene, and held still on all 24 requests of so101-zeroshot's camera check in this rebuilt pen84 scene.
+- Nothing held ACT back: 0 keep-out or envelope refusals, no stall or load freeze, 0 interventions, every command at
+  most 1.0 deg per tick. The guard count is only the per-tick step limit smoothing fast commands.
+- The failure is the last step: from about 12 s on, ACT creeps over the slot with the gripper closed and never lowers
+  and opens within the 40 s.
+- Session folder `ws4/single_arm/runs/20261018_041957`; trial lines in `ws4/eval/trials.jsonl` (put_pen_in_slot,
+  post_training, ACT-pen84-100k).

@@ -129,17 +129,22 @@ def serve_main(argv: list[str]) -> None:
                     help="server to stop once the models are loaded and folded on the CPU (short swap gap)")
     args = ap.parse_args(argv)
     overrides = {k: json.loads(v) for k, v in (item.split("=", 1) for item in args.override)}
-    loaded = []
+    loaded = {}  # spec -> (base, policy); names with the same BASE+ADAPTER are aliases of one model
+    names = []
     for item in args.package:
         name, spec = item.split("=", 1)
         base, _, adapter = spec.partition("+")
-        loaded.append((name, spec, base, load_policy(base, adapter or None)))
-        print(f"{name}: {spec} loaded on the CPU", flush=True)
+        names.append((name, spec))
+        if spec not in loaded:
+            loaded[spec] = (base, load_policy(base, adapter or None))
+            print(f"{name}: {spec} loaded on the CPU", flush=True)
     if args.replace_pid:
         replace(args.replace_pid)
+    by_spec = {spec: to_backend(policy, base, overrides, args.text_encoder_on_cpu, spec)
+               for spec, (base, policy) in loaded.items()}  # fmt: skip
     backends = {}
-    for name, spec, base, policy in loaded:
-        backends[name] = to_backend(policy, base, overrides, args.text_encoder_on_cpu, spec)
+    for name, spec in names:
+        backends[name] = by_spec[spec]
         print(f"{name}: {spec} -> {backends[name].contract}", flush=True)
     token = os.environ.get("FLUX_TOKEN")
     if args.token_file:
