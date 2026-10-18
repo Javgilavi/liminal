@@ -425,3 +425,31 @@ def test_a_failed_ws4_step_ends_without_waiting_for_a_ws4_replan(ws4, tmp_path, 
         assert bridge.session.executor.state == "failed" and bridge.session.cfg.max_replans == 0
     finally:
         bridge.disconnect()
+
+
+def test_a_slow_check_counts_as_unclear_and_keeps_the_lid(ws4):
+    """Live 18 Oct run 3: one slow Opus call made SceneInspector publish lid_open unknown and broke the WHILE."""
+    import threading as th
+
+    from orchestrator.verifier import Verdict
+
+    from liminal.perception.types import InspectionRequest
+    from liminal.ws4_bridge.vision import Ws4HaikuVisionModel
+
+    release = th.Event()
+    answers = [Verdict(True, 0.9, "open", "fake")]
+
+    class Fake:
+        def check(self, step, skill, obs):
+            if answers:
+                return answers.pop(0)
+            release.wait(5)  # slower than the request allows
+            return Verdict(False, 0.1, "late", "fake")
+
+    model = Ws4HaikuVisionModel(verifier=Fake(), keep_s={"lid_open": 45})
+    request = InspectionRequest(("lid_open",), cameras=("top",), timeout_s=0.5)
+    frame = [np.zeros((48, 64, 3), np.uint8)]
+    assert asyncio.run(model.inspect_request(request, frame))["predicates"]["lid_open"]["value"] == "true"
+    slow = asyncio.run(model.inspect_request(request, frame))["predicates"]["lid_open"]
+    release.set()
+    assert slow["value"] == "true" and "longer than" in slow["evidence"] and "kept the confident" in slow["evidence"]

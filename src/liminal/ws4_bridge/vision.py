@@ -95,7 +95,10 @@ class Ws4HaikuVisionModel:
         wanted = [p for p in request.predicates if p in self.checks]
         for name in request.predicates:
             wanted += [p for p in self.derived.get(name, ()) if p not in wanted]
-        results = await asyncio.gather(*(asyncio.to_thread(self._check, p, head) for p in wanted))
+        # A check that outlives most of the request's budget counts as an unclear view, so keep_s applies to it too
+        # (live 18 Oct: one slow Opus call made SceneInspector publish the held lid as unknown and broke the WHILE).
+        deadline = 0.8 * request.timeout_s
+        results = await asyncio.gather(*(self._timed_check(p, head, deadline) for p in wanted))
         out = dict(zip(wanted, results, strict=True))
         predicates: dict[str, dict[str, Any]] = {}
         for name in request.predicates:
@@ -109,6 +112,12 @@ class Ws4HaikuVisionModel:
             else:
                 predicates[name] = {"value": "unknown", "evidence": "no ws4 check for this predicate"}
         return {"predicates": predicates, "ambiguous": []}
+
+    async def _timed_check(self, predicate: str, head: Any, deadline: float) -> dict[str, Any]:
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(self._check, predicate, head), deadline)
+        except TimeoutError:
+            return self._resolve(predicate, "unknown", f"check took longer than {deadline:.0f} s", 0.0)
 
     def _check(self, predicate: str, head: Any) -> dict[str, Any]:
         from orchestrator.plan import Step  # noqa: PLC0415
@@ -125,6 +134,9 @@ class Ws4HaikuVisionModel:
             value = "unknown"
         else:
             value = "true" if verdict.done else "false"
+        return self._resolve(predicate, value, evidence, float(verdict.confidence))
+
+    def _resolve(self, predicate: str, value: str, evidence: str, confidence: float) -> dict[str, Any]:
         now = self.clock()
         with self._lock:
             if value != "unknown":
@@ -132,9 +144,9 @@ class Ws4HaikuVisionModel:
             elif predicate in self.keep_s and predicate in self._confident:
                 kept, when = self._confident[predicate]
                 if now - when <= self.keep_s[predicate]:
-                    return {"value": kept, "evidence": f"view unclear ({verdict.confidence:.2f}: {evidence}); kept the "
+                    return {"value": kept, "evidence": f"view unclear ({confidence:.2f}: {evidence}); kept the "
                                                        f"confident verdict from {now - when:.0f} s ago"}
-        return {"value": value, "evidence": evidence, "confidence": float(verdict.confidence)}
+        return {"value": value, "evidence": evidence, "confidence": confidence}
 
 
 def _all(predicates: Sequence[str], value: str, evidence: str) -> dict[str, Any]:
