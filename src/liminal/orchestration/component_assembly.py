@@ -13,7 +13,11 @@ DEFINITIONS = {
     "components_assembled": "The green pen, red pen and yellow boxcutter are all seated in their respective slots, "
                             "with none still held by a gripper.",
 }
-PROMPTS = {item: f"put the {item.replace('_', ' ')} in its slot in the cardboard box" for item in COMPONENTS}
+PROMPTS = {
+    "green_pen": "put the green pen in the green slot",
+    "yellow_boxcutter": "put the yellow cutter in the yellow slot",
+    "red_pen": "put the red pen in its slot in the cardboard box",
+}
 
 
 def assembly_task(order: Sequence[str] = COMPONENTS) -> TaskSpec:
@@ -51,7 +55,7 @@ def assembly_task(order: Sequence[str] = COMPONENTS) -> TaskSpec:
             {"fallback": [
                 {"check": "lid_open"},
                 {"skill": {"arm": "right", "name": "open_box", "target": "lid",
-                           "prompt": "open the cardboard box and keep its lid clear of the component slots",
+                           "prompt": "open the box by pulling its handle",
                            "success": "lid_open", "timeout_s": 240, "zones": ["box"]}},
             ]},
             {"while": {"arm": "right", "maintain": "lid_open", "until": "components_assembled",

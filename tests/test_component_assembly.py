@@ -105,6 +105,25 @@ def test_invalid_orders_rejected(order):
 def test_shipped_task_and_registry_match():
     assert yaml.safe_load(Path('configs/tasks/assemble_components.yaml').read_text()) == assembly_task().raw
     cfg = yaml.safe_load(Path('configs/policy/showcase_registry.yaml').read_text())
+    prompts = {}
+
+    def collect(node):
+        if isinstance(node, dict):
+            if 'skill' in node:
+                prompts[node['skill']['name']] = node['skill']['prompt']
+            for value in node.values():
+                collect(value)
+        elif isinstance(node, list):
+            for value in node:
+                collect(value)
+
+    collect(assembly_task().raw)
+    assert prompts == {
+        'open_box': 'open the box by pulling its handle',
+        'put_green_pen_in_slot': 'put the green pen in the green slot',
+        'put_yellow_boxcutter_in_slot': 'put the yellow cutter in the yellow slot',
+        'put_red_pen_in_slot': 'put the red pen in its slot in the cardboard box',
+    }
     assert cfg['execute_steps'] == 16
     assert set(cfg['skill_checkpoints']) == {'open_box', *[f'put_{item}_in_slot' for item in COMPONENTS]}
     for skill, checkpoint in cfg['skill_checkpoints'].items():

@@ -23,6 +23,17 @@ flowchart TD
     Hold -. lid lost or evidence expires .-> Stop[Cancel placement and stop]
 ```
 
+The model receives these exact task prompts:
+
+| Skill | Prompt |
+|---|---|
+| `open_box` | `open the box by pulling its handle` |
+| `put_green_pen_in_slot` | `put the green pen in the green slot` |
+| `put_yellow_boxcutter_in_slot` | `put the yellow cutter in the yellow slot` |
+| `put_red_pen_in_slot` | `put the red pen in its slot in the cardboard box` |
+
+The orchestrator manages lid holding and placement order separately from these prompts.
+
 The three placement skills run sequentially because they share the left arm.
 They have no dependency on one another. Fresh inspection skips items already
 seated. The lid must remain open throughout placement; failed verification stops

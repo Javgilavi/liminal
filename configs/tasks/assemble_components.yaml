@@ -24,7 +24,7 @@ tree:
         arm: right
         name: open_box
         target: lid
-        prompt: open the cardboard box and keep its lid clear of the component slots
+        prompt: open the box by pulling its handle
         success: lid_open
         timeout_s: 240
         zones:
@@ -55,7 +55,7 @@ tree:
               arm: left
               name: put_green_pen_in_slot
               target: green_pen
-              prompt: put the green pen in its slot in the cardboard box
+              prompt: put the green pen in the green slot
               success: green_pen_in_slot
               timeout_s: 240
               verify_timeout_s: 2
@@ -107,7 +107,7 @@ tree:
               arm: left
               name: put_yellow_boxcutter_in_slot
               target: yellow_boxcutter
-              prompt: put the yellow boxcutter in its slot in the cardboard box
+              prompt: put the yellow cutter in the yellow slot
               success: yellow_boxcutter_in_slot
               timeout_s: 240
               verify_timeout_s: 2
