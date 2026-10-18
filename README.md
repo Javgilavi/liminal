@@ -15,12 +15,8 @@ true*, and *whether the goal really happened*.
 **Team Liminal:** Oscar Devos, Javier Gil, Tomas Leggaet, Simone Utili, Stanislaw Sufin. **[Submission video (2 min)](https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view)** · **[Slides (PDF)](https://drive.google.com/file/d/1tG4ehYkKH0PK-AJg1K_wNPsWDiAQaoM3/view)**
 60 s teasers by Javier Gil: [landscape](https://drive.google.com/file/d/1eyPMYofcuqxp0x0iw8-73LB_qJwRpfDJ/view) · [vertical](https://drive.google.com/file/d/1fthnCf_IRkh3jHtY1vPc4GKUaAegtTwA/view)
 
-**The full 4-skill chain, one run (12:05), sped up uniformly 5.71x with no cuts** (58 s, then the final frame holds
-2 s; operator console: plan,
-Claude's step checks, head and wrist cameras, FLUX's imagined vs actual frames). Step labels: box = scripted replay,
-not FLUX; green pen and cutter = FLUX 3 Action LoRAs; the green-pen policy also slotted the red pen on its way home.
-
-[![Full 4-skill chain on the real Haller, 12:05 run, 5.71x uniform speed-up](media/full_chain_60s_speedup.webp)](https://drive.google.com/file/d/1tK71kTtUIeYPc1cwt6Jqc6ZbzJMnnCIB/view)
+[![Full 4-skill chain on the real Haller, 12:05 run, 5.71x speed](docs/assets/full_chain_60s_speedup.gif)](https://drive.google.com/file/d/1tK71kTtUIeYPc1cwt6Jqc6ZbzJMnnCIB/view)
+*Full 4-skill chain on the real Haller, 12:05 run, 5.71x speed*
 
 - **Full 4-skill chain on the real Haller**, planned by Claude with a camera check after every step:
   **2 of 3 runs finished 4/4** with no human touch during the run (208.6 s and 302.2 s).
