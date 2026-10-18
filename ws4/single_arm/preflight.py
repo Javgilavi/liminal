@@ -124,11 +124,19 @@ def main() -> None:
     p.add_argument("--ref-take", type=int, default=None, help="take number in --ref-dir (default: the last by name)")
     p.add_argument("--layout-ref", default=str(HERE / "layouts" / "A_ep020_head.jpg"),
                    help="held-out start frame used when --ref-dir is not given (its _wrist twin too)")
+    p.add_argument("--skill", default=None, help="skills.py name: its task arm (health, wrist cam) and references")
     p.add_argument("--scene-cam", default=SCENE_CAM)
-    p.add_argument("--wrist-cam", default=WRIST_CAM)
+    p.add_argument("--wrist-cam", default=None, help="default: the task arm's wrist cam (pen arm: USB 7.2)")
     p.add_argument("--skip", nargs="*", default=[], choices=("ports", "calibration", "health", "cameras"))
     p.add_argument("--out", default=str(HERE / "frames" / "haller" / f"preflight_{time.strftime('%Y%m%d_%H%M%S')}.jpg"))
     args = p.parse_args()
+    from skills import ARMS, SKILLS, skill_info
+
+    side = SKILLS[args.skill].arm if args.skill else "left"
+    arm = ARMS[side]
+    args.wrist_cam = args.wrist_cam or arm.wrist_cam
+    if args.skill and not args.ref_dir:
+        args.ref_dir = str(HERE.parent.parent / skill_info(args.skill)["home_ref"])
     results: dict[str, bool] = {}
     print("1. ports")
     results["ports"] = check_ports()
@@ -139,8 +147,8 @@ def main() -> None:
         print("2. calibration (EEPROM vs files, read only)")
         results["calibration"] = check_calibration()
     if "health" not in args.skip:
-        print("3. task arm health (/dev/haller_arm_right)")
-        results["health"] = check_health(PORTS[0])
+        print(f"3. task arm health (robot {side}, {arm.port})")
+        results["health"] = check_health(arm.port)
     if "cameras" not in args.skip:
         import cv2
         from compare_frames import live_frame

@@ -33,6 +33,7 @@ import signal
 import subprocess
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -566,6 +567,48 @@ def hold_here(robot: SingleArmRobot) -> None:
         print(f"could not set the hold pose: {exc}", flush=True)
 
 
+def parked_ok(args: argparse.Namespace, other_q: Any) -> bool:
+    """The other arm must sit where the skill's demos had it: each arm joint inside ``--other-arm-lo`` ..
+    ``--other-arm-hi`` (the min / max over the demos) widened by ``--other-arm-tol`` deg; ``--other-arm-expect`` is
+    the one-pose form (a tucked arm). Its capsules in the keep-out use the live pose either way; its place in both
+    camera views is part of what was learned (the box arm holding the lid open varies a little per run). The runner
+    never moves that arm; a refusal names the joint."""
+    expect = getattr(args, "other_arm_expect", None)
+    lo, hi = getattr(args, "other_arm_lo", None), getattr(args, "other_arm_hi", None)
+    if lo is None or hi is None:
+        lo = hi = expect
+    if lo is None or other_q is None:
+        return True
+    q, lo, hi = (np.asarray(v, float)[:5] for v in (other_q, lo, hi))
+    err = np.maximum(lo - q, q - hi)  # > 0: outside the demonstrated range by that much
+    if err.max() <= args.other_arm_tol:
+        return True
+    j = int(np.argmax(err))
+    print(f"REFUSED: the other arm is at {np.round(other_q, 1)}; the skill's demos had it within {np.round(lo, 1)} .. "
+          f"{np.round(hi, 1)} ({ARM_JOINTS[j]} {err[j]:.1f} deg outside, limit {args.other_arm_tol:g}). Move it there "
+          f"(orchestrator ramp, or by hand with its torque off) and start again.", flush=True)  # fmt: skip
+    return False
+
+
+class KeepoutStop:
+    """Persistent pushing into a zone ends the attempt: ``ticks`` keep-out refusals among the last ``window`` policy
+    ticks. Ticks that only hold the pose between chunks ("waiting") neither count nor clear. A consecutive count was
+    reset by them and by the first, shallower commands of each new chunk, so FLUX's 32-step chunks never reached 45:
+    no Haller attempt ever stopped this way (replays of the recorded traces, README)."""
+
+    def __init__(self, ticks: int, window: int):
+        self.ticks, self.window, self.zone = ticks, deque(maxlen=window), ""
+
+    def update(self, zone: str, status: str) -> bool:
+        if zone or status != "waiting":
+            self.window.append(bool(zone))
+            self.zone = zone or self.zone
+        return sum(self.window) >= self.ticks
+
+    def reason(self) -> str:
+        return f"stop (keep-out: {self.zone} refused for {sum(self.window)} ticks of the last {len(self.window)})"
+
+
 def run_attempt(
     args: argparse.Namespace, runner: DualArmRunner, robot: SingleArmRobot, keys: Keys, task: str, out: Path
 ) -> dict[str, Any]:
@@ -586,6 +629,8 @@ def run_attempt(
         other_q = read_arm_joints(args.other_arm_port, args.other_arm_id)
         keepout.other_q = tuple(float(v) for v in other_q)
         print(f"parked other arm at {np.round(other_q, 1)}", flush=True)
+        if not parked_ok(args, other_q):
+            raise KeyboardInterrupt
     if args.start_pose is not None and args.robot == "so101" and not args.observe:
         print(f"ramping to the start pose {args.start_pose} ...", flush=True)
         ramp_ko = keepout.without_envelope() if keepout is not None else None  # envelope: policy commands only
@@ -605,8 +650,7 @@ def run_attempt(
     guard_ticks, capped0 = 0, robot.capped
     load_run = np.zeros(ARM_DIM - 1, dtype=int)
     load_cap = 10.0 * (args.torque_limit if args.robot == "so101" else 100.0)  # load units at the torque cap
-    keep_win: deque[bool] = deque(maxlen=args.keepout_window)
-    keep_zone, keep0 = "", dict(getattr(runner.guard, "counts", {}))
+    keep_stop, keep0 = KeepoutStop(args.keepout_ticks, args.keepout_window), dict(getattr(runner.guard, "counts", {}))
     stall = np.zeros(ARM_DIM - 1, dtype=int)
     volts: list[float] = []
     healths: list[dict | None] = []
@@ -636,15 +680,9 @@ def run_attempt(
         guard_ticks += report.guard_intervened
         q = np.array([float(robot.last_raw[f"{j}.pos"]) for j in ARM_JOINTS])
         zone = getattr(runner.guard, "last_zone", "")
-        # Persistent pushing into a zone ends the attempt: --keepout-ticks refusals among the last --keepout-window
-        # policy ticks. Ticks that only hold the pose between chunks neither count nor clear: with a consecutive count
-        # they reset it, and FLUX's 32-step chunks never reached 45 (every Haller attempt so far ran to its end).
-        if zone or report.status.get(target) != "waiting":
-            keep_win.append(bool(zone))
-            keep_zone = zone or keep_zone
-        if sum(keep_win) >= args.keepout_ticks:
+        if keep_stop.update(zone, report.status.get(target, "")):
             runner.guard.estop()
-            end_reason = f"stop (keep-out: {keep_zone} refused for {sum(keep_win)} ticks of the last {len(keep_win)})"
+            end_reason = keep_stop.reason()
             hold_here(robot)
             break
         # Stall check on the arm joints (not the gripper, which legitimately squeezes a cup): a joint that lags its
@@ -836,6 +874,9 @@ def check_at_home(args: argparse.Namespace, runner: DualArmRunner, robot: Single
     keepout = getattr(runner.guard, "keepout", None)
     if args.other_arm_port and keepout is not None:
         keepout.other_q = tuple(float(v) for v in read_arm_joints(args.other_arm_port, args.other_arm_id))
+        print(f"home check: parked other arm at {np.round(keepout.other_q, 1)}", flush=True)
+        if not parked_ok(args, keepout.other_q):
+            return False  # before any motion: no attempts, the arm is parked again below
     if args.start_pose is not None and args.robot == "so101" and not args.observe:
         print(f"home check: ramping to the start pose {args.start_pose} ...", flush=True)
         ramp_ko = keepout.without_envelope() if keepout is not None else None
@@ -848,7 +889,8 @@ def check_at_home(args: argparse.Namespace, runner: DualArmRunner, robot: Single
         ref_head, ref_wrist, ref_state, ref_name = hc.load_refs(Path(args.home_check), args.home_check_take)
         obs = robot.get_observation()
         q = robot.joints()
-        ok, lines, img = hc.home_check(obs[IMG_HEAD], obs[WRIST_KEY[robot.slot]], q, ref_head, ref_wrist, ref_state)
+        ok, lines, img = hc.home_check(obs[IMG_HEAD], obs[WRIST_KEY[robot.slot]], q, ref_head, ref_wrist, ref_state,
+                                       side=args.task_side)  # fmt: skip
         cv2.imwrite(str(session / "home_check.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
         (session / "home_check.json").write_text(json.dumps({"ok": ok, "reference": ref_name, "lines": lines,
                                                              "q": np.round(q, 2).tolist()}, indent=1))  # fmt: skip
@@ -906,6 +948,12 @@ def main(argv: list[str] | None = None) -> None:
                         "none of them, so leave this off for it")  # fmt: skip
     p.add_argument("--other-arm-port", default=None, help="parked other arm, read before each attempt (Haller)")
     p.add_argument("--other-arm-id", default="haller_left", help="calibration id of the parked other arm")
+    p.add_argument("--other-arm-expect", type=float, nargs=ARM_DIM, default=None,
+                   help="the other arm's (tucked) pose in the skill's demos: refuse to start when it is elsewhere")
+    p.add_argument("--other-arm-lo", type=float, nargs=ARM_DIM, default=None,
+                   help="per-joint min of the other arm over the skill's demos (with --other-arm-hi)")
+    p.add_argument("--other-arm-hi", type=float, nargs=ARM_DIM, default=None, help="per-joint max, see --other-arm-lo")
+    p.add_argument("--other-arm-tol", type=float, default=5.0, help="deg allowed outside the pose / range")
     p.add_argument("--start-pose", type=float, nargs=ARM_DIM, default=None,
                    help="ramp here before every attempt (Haller demos: 0 0 0 0 0 100)")  # fmt: skip
     p.add_argument("--allow-torque-off", action="store_true",
@@ -964,6 +1012,8 @@ def main(argv: list[str] | None = None) -> None:
                    help="before the attempts: ramp to --start-pose and compare live frames and joints with these "
                    "at-home references (frames/reference_2026-10-17_night)")
     p.add_argument("--home-check-take", type=int, default=None, help="reference take in --home-check (default last)")
+    p.add_argument("--task-side", choices=("left", "right"), default="left",
+                   help="robot side of the task arm (left = /dev/haller_arm_right, right = /dev/haller_arm_left)")
     p.add_argument("--condition", choices=("zero_shot", "post_training"), default="zero_shot")
     p.add_argument("--note", default="", help="free text prepended to every logged trial's notes")
     p.add_argument("--trial-task", default="stack_cups", help=f"one of {sorted(TASK_STEPS)} or any with --steps")

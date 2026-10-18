@@ -27,7 +27,9 @@ def _run(tmp_path, monkeypatch, *extra):
 
 
 def test_fake_backend_attempt_is_recorded_and_guarded(tmp_path, monkeypatch):
-    (meta,) = _run(tmp_path, monkeypatch, "--max-step", "0.1")
+    # The fake arm starts inside the default base zone and the fake policy pushes deeper: the keep-out stop would end
+    # the attempt (test_keepout_stop_...); switched off here, this test is about the per-tick step guard.
+    (meta,) = _run(tmp_path, monkeypatch, "--max-step", "0.1", "--keepout-ticks", "100000")
     assert meta["chunks"] >= 1 and meta["end_reason"] == "timeout"
     trace = np.load(next(tmp_path.glob("*/attempt01/trace.npz")))
     steps = np.abs(np.diff(trace["command"][:, :5], axis=0))
@@ -175,3 +177,48 @@ def test_load_freeze_trips_on_the_red_arm_damage_attempts():
         loads = [abs(x) for x in json.loads((fixtures / name).read_text())["elbow_load_per_s"] if x is not None]
         assert rsa.load_trip(np.repeat(np.array(loads, float)[:, None], 30, axis=0), cap) is not None, name
     assert rsa.load_trip(np.full((300, 5), 290.0), 600.0) is None  # the Haller's highest load tonight
+
+
+def test_keepout_stop_fires_across_chunk_boundaries_on_a_recorded_attempt():
+    # B cup attempt #2 (A0r-B, 17 Oct): 198 refused ticks in 60 s, never 45 in a row because the holds between
+    # chunks and each new chunk's first commands broke the run. It ran to its timeout; the window rule stops it.
+    import run_single_arm as rsa
+
+    t = np.load(Path(__file__).resolve().parent / "fixtures" / "b_cup_keepout_trace.npz")
+    zones, status = [str(z) for z in t["keepout"]], [str(s) for s in t["status"]]
+    stop = rsa.KeepoutStop(45, 60)
+    fired = next((i for i, (z, s) in enumerate(zip(zones, status, strict=True)) if stop.update(z, s)), None)
+    assert fired is not None and 20 * 30 < fired < 30 * 30, fired
+    assert stop.reason().startswith("stop (keep-out: ") and "of the last 60" in stop.reason()
+    still = rsa.KeepoutStop(45, 60)  # a continuous refusal still stops after exactly 45 ticks
+    assert [still.update("torso", "executing") for _ in range(45)][-1] and "refused for 45 ticks" in still.reason()
+    held = rsa.KeepoutStop(45, 60)  # holds between chunks neither count nor clear
+    for _ in range(44):
+        held.update("base", "executing")
+    assert not any(held.update("", "waiting") for _ in range(100)) and held.update("base", "executing")
+
+
+def test_parked_arm_off_its_tucked_pose_refuses_the_attempt(tmp_path, monkeypatch, capsys):
+    # Tonight's cup runs found the box arm parked with its pan at 85 deg; every red-pen demo had it at 3.1.
+    tucked = ["3.1", "-102.8", "96.7", "78.4", "13", "1.5"]
+    args = ("--other-arm-port", "/dev/null", "--other-arm-expect", *tucked)
+    monkeypatch.setattr(rsa, "read_arm_joints", lambda port, rid: np.array([85.3, -102.8, 96.7, 78.4, 13.0, 1.5]))
+    assert _run(tmp_path / "off", monkeypatch, *args) == []  # stopped before the ramp: no attempt recorded
+    out = capsys.readouterr().out
+    assert "REFUSED: the other arm" in out and "shoulder_pan 82.2 deg outside" in out
+    monkeypatch.setattr(rsa, "read_arm_joints", lambda port, rid: np.array([3.0, -102.6, 96.6, 78.3, 12.9, 1.4]))
+    (meta,) = _run(tmp_path / "on", monkeypatch, *args, "--keepout-ticks", "100000")
+    assert meta["end_reason"] == "timeout"
+    assert rsa.parked_ok(type("A", (), {"other_arm_expect": None})(), [85.0] * 6)  # no expectation: never refuses
+
+
+def test_other_arm_range_accepts_a_lid_holding_pose_inside_the_demonstrated_spread():
+    # Pen-arm skills in the chain: the box arm holds the lid open at a pose that varies a little per run.
+    from argparse import Namespace
+
+    lo, hi = [10.0, -40.0, 20.0, 30.0, -5.0, 0.0], [16.0, -34.0, 27.0, 41.0, 3.0, 5.0]
+    args = Namespace(other_arm_expect=None, other_arm_lo=lo, other_arm_hi=hi, other_arm_tol=5.0)
+    assert rsa.parked_ok(args, [13.0, -37.0, 24.0, 35.0, 0.0, 2.0])  # inside the demonstrated range
+    assert rsa.parked_ok(args, [20.5, -37.0, 24.0, 35.0, 0.0, 2.0])  # 4.5 deg past the max: within the margin
+    assert not rsa.parked_ok(args, [13.0, -46.0, 24.0, 35.0, 0.0, 2.0])  # lift 6 deg below the min
+    assert rsa.parked_ok(args, [13.0, -37.0, 24.0, 35.0, 0.0, 80.0])  # the gripper is not checked

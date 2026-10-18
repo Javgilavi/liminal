@@ -195,12 +195,19 @@ held-out take k).
    server: leave it alone.
 3. One arm session, as Oscar approved (17 Oct night, "ok i ll follow your recommendations"): checks, then 5
    attempts each of `base` (variant `A0r-B84`, zero_shot), `median` (`A0r-M`, zero_shot) and the checkpoint
-   (`LoRA-5k`, post_training). All rows use layouts A B C D A (held-out takes 20, 36, 86, 101, 21), 40 s each and
+   (`LoRA-5k-raw`, post_training). All rows use layouts A B C D A (held-out takes 20, 36, 86, 101, 21), 40 s each and
    the same prompt and guards. One command runs all three rows over one tunnel:
 
    ```bash
-   POD_HOST=157.157.221.177 POD_PORT=15377 LORA=lora_5000 bash ws4/single_arm/eval_pen.sh session
+   POD_HOST=157.157.221.177 POD_PORT=15377 LORA=lora_10000_raw bash ws4/single_arm/eval_pen.sh session
    ```
+
+   LoRA adapter, pre-registered (orchestrator, 18 Oct): the LoRA row uses whichever adapter (raw or EMA) of the
+   latest checkpoint is best on the 12 held-out takes at session start. At 10k (served since about 01:50) that is
+   raw: arm MAE 3.15 deg, direction 88.6 %, gripper direction 92 % (EMA 10k 3.19 / 87.2 / 84; raw 5k 3.24 / 83.3 /
+   62): package `lora_10000_raw`, variant `LoRA-10k-raw`. The wrapper
+   prints the choice before the first attempt and writes it into every LoRA trial's notes. `LORA=lora_<N>` is the
+   EMA adapter (`LoRA-<N/1000>k`), `lora_<N>_raw` the raw one (`checkpoints/<N>/pretrained_model`).
 
    If `median` is not served yet when the session starts, the rows become B84, LoRA-5k, median. Before the median
    row the wrapper checks the server again and skips it with a message if it is still missing (then `eval_pen.sh
@@ -255,6 +262,103 @@ fake robot and a local fake server: the LoRA sequence (resume, placement page fe
 layout, condition, checkpoint) and the baseline (home check, `go` after a failed check, 5 rows A B C D A with the
 right references). The rehearsal caught one crash (a numpy bool in home_check.json), fixed. Not yet run on the arm
 or against the real server.
+
+### Four-skill chain: per-skill evals on both arms (tooling ready 18 Oct 00:45, no new skill built yet)
+
+Final demo (Oscar, 18 Oct): the robot RIGHT arm opens the white box by its handle, then the robot LEFT arm puts the
+green pen, the yellow cutter and the red pen into their slots. [skills.py](skills.py) holds the table:
+
+| skill | task arm | port / calibration | wrist camera (dataset key) | trial task | graded steps |
+|---|---|---|---|---|---|
+| box | robot right | /dev/haller_arm_left, haller_left | USB 7.3 (`left_wrist`) | open_box | reach / grasp the handle, open the box |
+| green | robot left | /dev/haller_arm_right, haller_right | USB 7.2 (`right_wrist`) | put_green_pen_in_slot | reach / grasp the green pen, insert |
+| cutter | robot left | same | same | put_cutter_in_slot | reach / grasp the cutter, insert |
+| pen | robot left | same | same | put_pen_in_slot | reach / grasp the pen, insert |
+
+Both wrist cameras are mounted upside down and recorded rotated 180 (haller_ws `config.flux-real.yaml`, left wrist
+checked 18 Oct), so the runner rotates both by 180. Every skill runs the same safety stack: 1 deg/tick, the task arm's
+station keep-out with the parked other arm as capsules (read before every attempt), the skill's demo envelope, the
+keep-out, stall and load freezes, policy soft limits, the 60 % torque cap.
+
+1. When a skill's dataset is finalised (ws4-vr2 sends the repo id):
+
+   ```bash
+   python ws4/single_arm/build_skill.py box
+   ```
+
+   It snapshots the dataset (it refuses one whose writers are still open) and takes the split from
+   `ws4_split.json`, or else the review.json rejects plus the last 3 good takes held out (marked provisional). It
+   replays every good take through the task arm's station keep-out. It fits the envelope on the train takes and
+   checks it on the held-out ones, and writes the held-out start frames. While the laptop records (until about
+   06:00 CEST on 18 Oct) run it as `nice -n 19 ionice -c3 python ws4/single_arm/build_skill.py <skill> --no-refs`
+   (no video decoding: keep-out and envelope only); eval_skill.sh refuses such a skill until the full build has
+   written the references. Output: `skills/<skill>/skill.json`,
+   `workspace.json`, `layouts/`. Rerun after more takes land. Tested on the finalised pen data: it reproduces the pen
+   kit exactly (0 station refusals over 96 takes, the same 1,574-voxel envelope, 0 held-out refusals).
+2. Preflight with the skill's arm and references: `python ws4/single_arm/preflight.py --skill box`.
+3. Eval rows (packages on 8790 from ws4-datasets): `SKILL=box POD_HOST=157.157.221.177 POD_PORT=15377
+   LORA=<package> LORA_CHECKPOINT="<what it is>" bash ws4/single_arm/eval_skill.sh session`. Rows default to `lora`
+   for the new skills (`ROWS`, `BASE`, `MEDIAN` add the others). `eval_pen.sh` is `eval_skill.sh` with `SKILL=pen`
+   and is unchanged in what it runs. A skill whose demos the keep-out refused does not run
+   (`ALLOW_KEEPOUT_REFUSALS=1` after a review). The runner's `--task-side right` points the home check at the
+   image-right arm.
+
+The other arm: the runner reads it read-only before the home check and before every attempt. Its live pose places
+its keep-out capsules, and the runner never moves it. It refuses to start when any arm joint of the other arm is
+more than 5 deg (`PARKED_TOL`) outside the per-joint min..max of that arm over the skill's demos. Its place in both
+camera views is part of what was learned. Box skill: the pen arm tucked at [-1.1, -102.5, 95.9, 37.7, -11.1, 2.4].
+Pen-arm skills in the chain: the box arm HOLDS the lid open (the lid closes if it leaves), at a pose that varies a
+little per run, so their range comes from their own demos: `build_skill.py` records min/max per joint, and a green or
+cutter skill without that range does not run. The current red-pen dataset was recorded with the box arm tucked
+(2.8..3.1, -102.9..-102.6, 96.7, 78.3..78.5, 12.8..13.0 over the 96 good takes); a re-recorded red pen gets its
+range from the rebuild. During tonight's cup runs the box arm sat at pan 85 deg, so the current pen session refuses
+until it is back at pan ~3.
+
+Robot-right arm keep-out: `KeepOut.for_haller("right")` mirrors the left arm's station zones (bases at y = -/+0.137 m,
+torso and mast centred, midline y <= +0.11 m). Its home and folded park pose are clear, and a reach toward the parked
+left arm is refused by the capsules. The SO-101 itself is not mirror symmetric: on 5,000 random poses, the right arm
+at a mirrored pose differs from the left by up to 3.6 cm in the torso, mast and midline depths. So the right-arm zones
+are UNVERIFIED until the box demos replay with 0 refusals in `build_skill.py`. The right-arm home-check box (where the
+arm sits in the head view) is the mirror of the left one, also UNVERIFIED until the box references exist.
+
+**Box skill, built 18 Oct 01:45 (no references yet).** `ws4/haller_open_the_box`, 75 takes, final split
+(drop 3, 7, 16, 19, 21, 28, 41, 46, 47, 70; held-out P2 36-38, P3 72-74). The first build failed its own demos (183
+of 52,800 steps refused). Five takes reach TCP y 0.131 m measured / 0.142 m commanded, past the right arm's +0.11 m
+midline. Takes 4-6 come within the capsule model of the pen arm tucked the early way. Approved by the orchestrator:
+the box skill uses takes 7-74 only (the pen arm parked at ~[3, -83.6, 81.9, 82.8, -10.2, 0.9], pan 1.1..5.4 after a
+bump in take 7), with the right-arm midline at +0.17 m for box only. Both are recorded as overrides in skill.json with
+the reason. Result: 0 refusals over the 59 good takes with the station zones (43,366 steps), over the 53 train takes
+with zones and envelope (39,666) and over the 6 held-out takes (3,700). The dilated TCP envelope keeps at least 2.04
+cm (2.4 cm sampled) from the parked pen arm's capsules at both ends of its pan range. In the demos the box arm never
+came closer than 4.4 cm to the pen arm. The capsule check (4 cm) is unchanged. The full build after 06:00 adds the
+references:
+`python ws4/single_arm/build_skill.py box --exclude 0 1 2 3 4 5 6 --midline 0.17 --reason "<same>"`.
+
+**Green skill, built 18 Oct 03:10 (no references yet).** `ws4/haller_put_the_green_pen_in_the_green_slot`, 66
+takes (drop 14, 18, 25, 44, 50; held-out 63-65 at P3). The box arm holds the lid in every frame (pan 12.0..12.3, the
+rest fixed). The first build refused 9,866 of 53,042 steps: the green slot is in the box on the robot's right, so
+every take reaches TCP y -0.179 m measured / -0.198 m commanded, past the pen arm's -0.11 m midline. Approved by
+the orchestrator:
+- midline -0.23 m for green;
+- takes 3, 15, 23, 41, 47 left out of the safety envelope only (box-arm clearance, mast and table outliers; still in
+  the LoRA data);
+- `--env-gap 0.02`, which trims envelope voxels near the lid-holding box arm. The threshold includes the sampling
+  bound, so the trimmed envelope keeps at least 2.05 cm (2.23 cm sampled on a 12^3 grid).
+
+Result: 0 refused over the 56 good takes (48,456 steps) and the 3 held-out takes with the envelope (2,288). The 5
+excluded takes still trip green's zones 62 times (box arm 30, mast 28, table 4).
+Standing rule for the cutter (orchestrator): the same procedure within these bounds without asking: midline down to
+-0.23 m, up to 10 % of takes out of the envelope, 2 cm trim. Every override is recorded and reported.
+
+Red pen in the final setup: the current red-pen envelope (104 old takes, box at A-D, box arm tucked) does not cover the
+box at its current position. Near the slots, 54 % of the green commands fall outside its TCP envelope (up to 5.3 cm),
+pan goes up to 10 deg past its joint envelope, and 34 % cross its midline. With the midline at -0.23 it still refuses
+11,298 of 53,042 green steps. About 10 red-pen takes in the final setup are recommended, built like green.
+
+Tested without the arm: 8 tests in `tests/test_skills.py` (table, right-arm keep-out, mirrored home check, refs index,
+provisional split, eval_skill commands for the box on the right arm, the refusal gate). There was also a fake-robot run of a
+test box skill (built from the pen data with the right arm's columns) against the live 8790 server: right-arm flags,
+`open_box` steps, and the home check reporting the missing left-wrist reference instead of crashing.
 
 ### Imported by ws4-orchestrator (stable through Sunday)
 
@@ -333,8 +437,12 @@ All from `~/liminal` in the `(base)` conda env (LeRobot 0.5.1, `use_degrees=True
    kinematics (`ws4/kinematics`, stock flange TCP and the wrist point). A target is refused when it goes deeper than
    the measured pose into (a) the table plane plus 2 cm, (b) a 12 cm cylinder around the pan axis below shoulder
    height plus 5 cm, or (c) a fold-back where the gripper points back at the base within 25 cm of the axis. Refused
-   ticks hold the measured pose, are logged per tick and counted in the trial notes; 1.5 s of refusals ends the
-   attempt. Replays: the two damaging A0 attempts are refused at 0.97 s and 1.27 s (elbow load passed 50% at 7 s
+   ticks hold the measured pose, are logged per tick and counted in the trial notes. Refusals on 45 of the last 60
+   policy ticks (1.5 s within 2 s) end the attempt (`KeepoutStop`, `--keepout-ticks` / `--keepout-window`); holds
+   between chunks neither count nor clear. Until 17 Oct 23:15 this was "45 in a row", which the holds and each new
+   chunk's first, shallower commands always reset: replayed on every recorded Haller attempt, the longest run was 41
+   and none stopped (found by the ACT baseline session). The window rule would have ended 9 of the 10 attempts that
+   had refusals, 7 to 43 s in; the one with none is untouched, and the demos have 0 refusals. Replays: the two damaging A0 attempts are refused at 0.97 s and 1.27 s (elbow load passed 50% at 7 s
    and 8 s); Oscar's clean demos have 0 refusals. `table_z` is UNVERIFIED until `keepout.py --touch`.
 4. Stall freeze: any arm joint more than 8 degrees behind its command for 0.5 s ends the attempt, and every stop holds
    at the MEASURED pose (added after the elbow damage).
