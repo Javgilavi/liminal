@@ -11,9 +11,13 @@
 set -euo pipefail
 source /etc/rp_environment
 source "$WS4_ROOT/lerobot/.venv/bin/activate"
-source /workspace/real_lora/split_final.env  # TRAIN_EPS, EVAL_EPS, EXCLUDE
 export HF_HUB_OFFLINE=1 PYTHONPATH=/workspace/act/ws4
-VIEW=/workspace/act/data/pen84
+# Pen defaults; skill_act.sh passes VIEW, TRAIN_EPS and EXPECT_TRAIN for the other skills.
+if [ -z "${TRAIN_EPS:-}" ]; then
+  source /workspace/real_lora/split_final.env  # TRAIN_EPS, EVAL_EPS, EXCLUDE
+  EXPECT_TRAIN=84
+fi
+VIEW="${VIEW:-/workspace/act/data/pen84}"
 mode="${1:?view|probe|train}"
 
 if [ "$mode" = view ]; then
@@ -25,14 +29,15 @@ fi
 name="${2:?run name}"
 steps="${3:?steps}"
 episodes="[$(echo $TRAIN_EPS | tr ' ' ',')]"
-[ "$(echo $TRAIN_EPS | wc -w)" = 84 ] || { echo "expected 84 train episodes"; exit 1; }
+[ -z "${EXPECT_TRAIN:-}" ] || [ "$(echo $TRAIN_EPS | wc -w)" = "$EXPECT_TRAIN" ] || {
+  echo "expected $EXPECT_TRAIN train episodes"; exit 1; }
 out=/workspace/act/runs/$name
 save_freq="${SAVE_FREQ:-10000}"
 [ "$mode" = probe ] && save_freq=$steps
 # Module path (not the lerobot-train entry point) so pod_job_watchdog.sh's "lerobot_train" pattern matches.
 python -m lerobot.scripts.lerobot_train \
   --policy.type=act --policy.device=cuda --policy.push_to_hub=false \
-  --dataset.repo_id=local/pen84 --dataset.root="$VIEW" --dataset.episodes="$episodes" \
+  --dataset.repo_id="local/$(basename "$VIEW")" --dataset.root="$VIEW" --dataset.episodes="$episodes" \
   --batch_size="${BATCH:-8}" --num_workers="${WORKERS:-12}" --steps="$steps" \
   --save_freq="$save_freq" --log_freq="${LOG_FREQ:-200}" --save_checkpoint=true \
   --wandb.enable=false --seed=1000 --job_name="$name" --output_dir="$out"

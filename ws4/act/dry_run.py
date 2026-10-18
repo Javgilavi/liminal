@@ -88,6 +88,9 @@ def main() -> None:
     p.add_argument("--act-steps", type=int, default=None)
     p.add_argument("--calibration", default=str(CALIB / "haller_right.json"), help="soft limits (LeRobot calib)")
     p.add_argument("--keepout-config", default=str(CALIB / "haller_right_workspace_final.json"))
+    p.add_argument("--start-pose", type=float, nargs=6, default=[0, 0, 0, 0, 0, 100], help="the arm's home pose")
+    p.add_argument("--task", default=TASK, help="prompt (ACT ignores it; it goes into the attempt's meta)")
+    p.add_argument("--trial-task", default="put_pen_in_slot")
     p.add_argument("--via", choices=("remote", "act"), default="remote",
                    help="remote: ACT behind act.serve's protocol on 127.0.0.1, runner --backend remote (unchanged "
                         "runner); act: runner --backend act (in process)")  # fmt: skip
@@ -116,7 +119,7 @@ def main() -> None:
         if args.act_steps:
             policy_argv += ["--act-steps", str(args.act_steps)]
     run_argv = ["--robot", "fake", *policy_argv, "--keepout-config", args.keepout_config,
-                "--start-pose", "0", "0", "0", "0", "0", "100", "--task", TASK, "--trial-task", "put_pen_in_slot",
+                "--start-pose", *map(str, args.start_pose), "--task", args.task, "--trial-task", args.trial_task,
                 "--seconds", str(args.seconds), "--max-step", "1.0", "--max-relative-target", "20",
                 "--attempts", "1", "--yes", "--no-log", "--variant", "ACT dry run", *extra]  # fmt: skip
     try:

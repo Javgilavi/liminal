@@ -1,6 +1,6 @@
 """Markdown rows for pen_lora.md from offline_eval.py JSONs (one per checkpoint), in the FLUX curve's columns.
 
-    python ws4/act/curve_table.py /workspace/act/eval/act_pen84_*.json [--loss /workspace/act/logs/act_pen84.log]
+python ws4/act/curve_table.py /workspace/act/eval/act_pen84_*.json [--loss /workspace/act/logs/act_pen84.log]
 """
 
 from __future__ import annotations
@@ -40,7 +40,8 @@ def main() -> None:
             step = int(re.search(r"/(\d{6})/", m["checkpoint"]).group(1))
             mae = m["moving_mae"]
             loss = f"{losses[step]:.3f}" if step in losses else "-"
-            rows.append((step, f"| ACT | {step // 1000}k | {', '.join(f'{v:.1f}' for v in mae[:5])}; {mae[5]:.1f} | "
+            arm = f"{', '.join(f'{v:.1f}' for v in mae[:5])} ({np.mean(mae[:5]):.1f})"
+            rows.append((step, f"| ACT | {step // 1000}k | {arm}; {mae[5]:.1f} | "
                                f"{pct(m['moving_direction_agreement'])} | {pct(m['moving_rel_disp_error_median'])} | "
                                f"{loss} | {1e3 * m['latency_s']:.0f} ms |"))  # fmt: skip
     print("\n".join(r for _, r in sorted(rows)))
