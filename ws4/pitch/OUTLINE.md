@@ -104,4 +104,4 @@ lid at every handover; box at P3, objects per the overview image; fallback video
 
 - `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, who presents, who drives the robot.
 - `[[TEAM:WORKSTREAMS]]`: what WS1, WS2, WS3 and WS5 each finished, with their own numbers.
-- `[[TEAM:DEMO_LAYOUT]]` and whether the live demo is the full chain or the skills one by one (12:30 decision).
+- Live demo: the full chain (2 of 3 runs 4/4 this morning), box at P3 with the objects per the overview image.

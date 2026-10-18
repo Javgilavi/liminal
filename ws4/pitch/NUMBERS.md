@@ -387,7 +387,7 @@ flex, roll and gripper) and better than chance on direction. The slide claim to 
 | Actions with imagination on vs off | **bit-identical**, with `compile_model` on and off: max abs diff 0.0 over fresh processes (lora_500, guidance 1.0, seeds 0 to 4), and on 23 chunks of held-out takes 101 to 103 with B84 (compile off). The 0.255 command-unit difference ws4-datasets saw was between two separately compiled server processes, not caused by imagination (compile on vs off alone differ by up to 0.70). Say: "Decoding FLUX's imagined video leaves its actions unchanged (bit-identical, compile on and off)" | MEASURED by ws4-imagine on `real-serve-6000`, evidence `/workspace/imagine/compile_check/`; `ws4/imagine/README.md` status |
 | Decode cost | lazy mode adds no round trip (median 0.39 s with imagination vs 0.39 to 0.43 s plain); decoding the 41 frames takes 0.11 to 0.12 s on the RTX PRO 6000, after the take. Earlier sync / async decode on the RTX PRO 4500: 0.23 s / about 0.2 s, 17.6 GiB peak | MEASURED, `ws4/imagine/README.md`; `ws4/PLAN.md` "Risks" |
 | Prior public demos of decoded FLUX imagination | none found; BFL docs say the API "returns actions only" | `ws4/research/imagination.md` 1.1 ("we would be first" is our claim: phrase as "we found none") |
-| Imagined vs actual clips | replay of held-out takes 101, 102, 103 (layout D, never trained on) through FLUX with B84 real weights: `ws4/imagine/outputs/replay_ep10{1,2,3}/imagination/imagined_vs_actual.mp4` (H.264, 1048x340, 8 to 10 s, gitignored), contact sheets `replay_ep101/contact_chunk1.png`, `contact_chunk4.png`. A clip from a live Sunday attempt is optional: `[[CLIP:IMAGINED_VS_ACTUAL]]` | HAVE (replay), `ws4/imagine/README.md` "First clips" |
+| Imagined vs actual clips | replay of held-out takes 101, 102, 103 (layout D, never trained on) through FLUX with B84 real weights: `ws4/imagine/outputs/replay_ep10{1,2,3}/imagination/imagined_vs_actual.mp4` (H.264, 1048x340, 8 to 10 s, gitignored), contact sheets `replay_ep101/contact_chunk1.png`, `contact_chunk4.png`. No live-attempt clip was made; the replays are the clips | HAVE (replay), `ws4/imagine/README.md` "First clips" |
 | Imagination accuracy (3 held-out takes) | scene camera: the imagined frame is closer to reality than "nothing moves" on 80 % of (chunk, offset) pairs; wrist camera only 43 % (frames blur within about 0.5 s); under about 0.4 s ahead it looks near-identical | MEASURED, `ws4/imagine/README.md` accuracy table (mean abs RGB at 64x64 vs the VAE's held still frame) |
 | Fine-tuning improves the imagination | wrist-camera error of imagined frames, B84 zero-shot vs LoRA 5k: +2..+8 (0.07 to 0.27 s) 0.064 to 0.050 (-22 %), +9..+20 0.138 to 0.113, +21..+32 0.205 to 0.173, +33..+42 (1.1 to 1.4 s) 0.249 to 0.206 (-17 %); scene camera about -5 %. Zero-shot imagines a smeared, broken pen by +1 s; the 5k LoRA imagines it held cleanly, as it was. Caveat: the 5k replays ran with compile on, the others with compile off | MEASURED, `ws4/imagine/README.md` (table "Wrist-camera error by training stage"), `outputs/offset_errors_b84_to_lora5000.json`; slide image `ws4/imagine/outputs/b84_vs_lora5000_ep101_chunk1.png`; clips `outputs/lora5000_ep10{1,2,3}/imagination/imagined_vs_actual.mp4` |
 | Production config (live arm server, `lora_5000`, compile on) | commands identical with lazy imagination on all 23 chunks; round trip 0.34 s with imagination vs 0.34 to 0.38 s without; decode 0.12 s | MEASURED, `ws4/imagine/README.md` (21:45 UTC) |
@@ -450,8 +450,8 @@ flex, roll and gripper) and better than chance on direction. The slide claim to 
 
 | Item | Placeholder |
 |---|---|
-| GPU spend, all pods | `[[NUM:GPU_SPEND]]` (RunPod billing; keep invoices) |
-| Claude API spend | `[[NUM:CLAUDE_SPEND]]` (the HMI shows live spend) |
+| GPU spend, all pods | not compiled for the submission (RunPod billing; keep invoices) |
+| Claude API spend | not compiled; per chain run USD 0.02 to 0.05 (trial log, section 0.1b) |
 
 ## 13. Second skill dataset
 
@@ -459,16 +459,16 @@ flex, roll and gripper) and better than chance on direction. The slide claim to 
 |---|---|---|
 | "take the red pen out of its slot" VR takes | 11 takes, 11,385 frames, 30 fps | MEASURED, `~/.cache/huggingface/lerobot/ws4/haller_take_the_red_pen_out_of_its_slot/meta/info.json` |
 
-## 14. Placeholder index (who fills what, and when)
+## 14. Placeholder index (final, 18 Oct 13:10)
 
-Find what is still open: `grep -rn "\[\[" ws4/pitch`. Times are CEST, Sun 18 Oct.
+Filled from facts: repo https://github.com/Javgilavi/liminal (PR #3 brings everything into main), project page
+https://javgilavi.github.io/liminal/, models and datasets under https://huggingface.co/Oskrt, submission video
+`gdrive:liminal/05_video/liminal_2min_v4.mp4` (https://drive.google.com/file/d/1et5ffQpXLLh4a1qOvociNB1weNlaCGPU/view, anyone with the link, approved by Oscar), slides = the hosted deck (PDF `liminal_slides.pdf` in
+`gdrive:liminal/05_video/` and `~/liminal_video/out/`), live-demo layout = box at P3 with the objects per the overview
+image (runbook). Chain footage is in the video; the imagination clips are the replays (no live clip).
 
-| Placeholder | Meaning | Owner | Expected |
-|---|---|---|---|
-| `[[CLIP:HMI_CHAIN]]` | screen recording of the chain in the HMI | demo-rehearsal | with the chain run |
-| `[[CLIP:IMAGINED_VS_ACTUAL]]` | optional live imagination clip (replay clips exist) | demo-rehearsal / ws4-imagine | with the chain run |
-| `[[NUM:GPU_SPEND]]`, `[[NUM:CLAUDE_SPEND]]` | spend for the cost line | Oscar (RunPod billing, HMI) | 13:00 |
-| `[[NUM:RECORD_HOURS]]`, `[[NUM:TRAIN_HOURS]]` | time split, if wanted beyond section 0.1 | Oscar | 13:00 |
-| `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to `[[TEAM:WS5]]`, `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]`, `[[TEAM:CREDITS]]` | team facts | Oscar / team | as early as possible |
-| `[[TEAM:VIDEO_URL]]`, `[[TEAM:SLIDES_URL]]` | links for the README and close slide | Oscar | 13:30 |
-| `[[TEAM:DEMO_LAYOUT]]` | live-demo layout | Oscar | 12:30 |
+Still open (find with `grep -rn "\[\[" ws4/pitch`):
+
+| Placeholder | What | Owner |
+|---|---|---|
+| `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to `[[TEAM:WS5]]`, `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]`, `[[TEAM:CREDITS]]` | team-member facts | Oscar / team |
