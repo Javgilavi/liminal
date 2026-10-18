@@ -593,3 +593,105 @@ def test_lora_cycles_with_operator_reset(tmp_path, lora_server):
         assert any("OPERATOR: Take the red pen out" in e["msg"] for e in s.events.recent())
     finally:
         s.close()
+
+
+def _gated_session(monkeypatch, tmp_path, mode, think_s=0.0):
+    """A haller Session with WS4_HYBRID_CONFIG set and a fake reasoner in place of the Anthropic API."""
+    import asyncio
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
+    import liminal.policy.hybrid as hybrid
+
+    calls = []
+
+    class Reasoner:
+        def __init__(self, config):
+            self.usage = {}
+
+        async def decide(self, payload, images, schema):
+            calls.append(payload["task"])
+            if think_s:
+                await asyncio.sleep(think_s)
+            pose = payload["current_eef"]
+            return {"request_id": payload["request_id"], "mode": mode, "steps": 2, "reason": f"test {mode}",
+                    "edit": {"delta_position": [0, 0, 0], "delta_rotation_vector": [0, 0, 0], "gripper": "keep"},
+                    "target": {"position": pose["position"], "quaternion_wxyz": pose["quaternion_wxyz"],
+                               "gripper_closed": False},
+                    "assessment": {"task_progress": {"verified_completed": [], "currently_attempting": "insert",
+                                                      "remaining": []},
+                                   "current_subgoal": "insert", "execution_status": "progressing",
+                                   "execution_evidence": "test", "expected_next_intent": "insert",
+                                   "predicted_next_intent": "insert", "intent_status": "aligned",
+                                   "intent_evidence": "test"}}
+
+    monkeypatch.setattr(hybrid, "ClaudeReasoner", Reasoner)
+    monkeypatch.setenv("WS4_HYBRID_CONFIG", "configs/hybrid/claude_opus_haller.yaml")
+    cfg = SessionConfig(env="haller", robot="fake", policy="fake", planner="stub", verifier="manual",
+                        realtime=False, task="pen_chain", vocabulary=short_vocab(tmp_path), max_run_s=60,
+                        trial_log=str(tmp_path / "trials.jsonl"), runs_dir=str(tmp_path / "runs"))
+    return Session(cfg), calls
+
+
+def test_opus_gate_continue_runs_the_flux_step_through_the_guard(monkeypatch, tmp_path):
+    session, calls = _gated_session(monkeypatch, tmp_path, "student")
+    try:
+        flux = {t: be for t, be in session.target_backend.items() if not t.endswith(":prim")}
+        assert flux and all(type(be).__name__ == "GatedBackend" for be in flux.values())
+        session.verifier = PassOnAttempt()
+        result = session.execute(session.plan("put the pen in the box").result.plan)
+        assert result.status == "succeeded"
+        assert calls and set(calls) == {PUT}
+        messages = [e["msg"] for e in session.events.recent()]
+        assert any(m.startswith("Opus gate ON (claude-opus-5-5)") for m in messages)
+        assert any(m.startswith("OPUS student 2") for m in messages)
+        (log,) = (tmp_path / "runs").glob("hybrid_*.jsonl")
+        kinds = [line.split('"kind": "')[1].split('"')[0] for line in log.read_text().splitlines()]
+        assert kinds[0] == "hybrid_attempt" and "hybrid_decision" in kinds
+    finally:
+        session.close()
+
+
+def test_opus_gate_stop_is_the_executor_estop_hold(monkeypatch, tmp_path):
+    session, calls = _gated_session(monkeypatch, tmp_path, "stop")
+    try:
+        session.verifier = PassOnAttempt({"put_pen_in_slot": 99})
+        holds = []
+        session.rig.hold = lambda reason="": holds.append(reason)
+        plan = session.plan("put the pen in the box").result.plan
+        out = {}
+        thread = threading.Thread(target=lambda: out.setdefault("r", session.execute(plan)))
+        thread.start()
+        deadline = time.time() + 20
+        while (session.executor is None or session.executor.state != "estopped") and time.time() < deadline:
+            time.sleep(0.01)
+        assert session.executor.state == "estopped"
+        assert len(calls) == 1  # frozen at the first chunk: nothing more is asked or executed
+        assert any("control error: Opus stop: test stop" in e["msg"] for e in session.events.recent())
+        session.abort()
+        thread.join(timeout=10)
+        assert out["r"].status == "aborted"
+    finally:
+        session.close()
+
+
+def test_opus_gate_refuses_prefetch(monkeypatch, tmp_path):
+    monkeypatch.setenv("WS4_HYBRID_CONFIG", "configs/hybrid/claude_opus_haller.yaml")
+    cfg = SessionConfig(env="haller", robot="fake", policy="fake", planner="stub", verifier="manual",
+                        realtime=False, task="pen_chain", vocabulary=short_vocab(tmp_path), prefetch_ticks=4,
+                        async_inference=True, runs_dir=str(tmp_path / "runs"))
+    with pytest.raises(ValueError, match="prefetch must be off"):
+        Session(cfg)
+
+
+def test_opus_review_time_is_not_counted_in_the_attempt_timeout(monkeypatch, tmp_path):
+    session, calls = _gated_session(monkeypatch, tmp_path, "student", think_s=2.0)  # step timeout_s is 1.5
+    try:
+        session.verifier = PassOnAttempt()
+        result = session.execute(session.plan("put the pen in the box").result.plan)
+        assert result.status == "succeeded" and len(calls) == 1
+        (gate,) = {id(b): b for b in session.backends.values() if type(b).__name__ == "GatedBackend"}.values()
+        assert gate.total_wait_s >= 2.0
+    finally:
+        session.close()

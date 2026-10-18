@@ -1,0 +1,81 @@
+# showcase_registry.yaml with FLUX on the remote policy server instead of in-process CUDA (engine: remote,
+# src/liminal/policy/remote_engine.py). The server (ws4/cloud/lora_adapter.py serve, port 8790 through an SSH tunnel)
+# serves one LoRA package per skill with its own normalization; these are the packages of the final Haller demo, all
+# public on the Hub (`path` records where each one comes from; the package on the server is the identity, so there
+# is no local bundle hash). Prompts in the task files must be the packages' training captions (they are).
+#
+# Use it with mock or sim arms (`liminal run configs/tasks/assemble_components.yaml --backend flux --policy
+# configs/policy/haller_remote_registry.yaml`): real FLUX chunks through liminal's own executor. On the Haller arms use
+# the ws4 bridge instead (configs/policy/haller_ws4.yaml, ws4/HARNESS_BRIDGE.md): liminal's SO101 driver has none of
+# the Haller keep-outs, start gate or load freeze, and its e-stop switches torque off (the box arm drops the lid).
+engine: remote
+server: http://127.0.0.1:8790
+token_cmd_env: WS4_TOKEN_CMD  # export WS4_TOKEN_CMD="ssh -i <key> -p <port> root@<pod-ip> cat /workspace/flux_token"
+midtraining_base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
+embodiment: so101
+joint_order: &joints [shoulder_pan, shoulder_lift, elbow_flex, wrist_flex, wrist_roll, gripper]
+state_units: degrees_percent
+action_semantics: absolute_position
+action_dim: 6
+camera_roles: [scene, wrist]
+camera_map:  # robot frame: left = the pen arm, right = the box arm
+  left: {scene: top, wrist: left_wrist}
+  right: {scene: top, wrist: right_wrist}
+obs_history: 8
+chunk_size: 42
+execute_steps: 16  # the horizon of the real-arm inserts (ws4 runner --action-steps 16)
+control_hz: 30
+# One tunnel round trip measured 0.68 s to 1.76 s (ws4 runbook, research/orchestrator.md); liminal's in-process
+# default of 1 s would expire most chunks. VERIFY on the robot laptop before trusting this number.
+max_observation_age_s: 2.5
+inference_timeout_s: 30
+load_timeout_s: 60
+checkpoints:
+  open_box: &skill
+    package: skill_open_box
+    path: hf://Oskrt/flux-3-action-so101-haller-open-box-lora (repo root = served adapter)
+    sha256: ""  # remote: not a local bundle
+    base: black-forest-labs/flux-3-action-so101@0713a7af6768562e618e81d534372c6795d41b2e
+    embodiment: so101
+    joint_order: *joints
+    state_units: degrees_percent
+    action_semantics: absolute_position
+    action_dim: 6
+    camera_roles: [scene, wrist]
+    targets: [right]
+    obs_history: 8
+    chunk_size: 42
+    control_hz: 30
+    normalization_profile: dataset_native
+  put_green_pen_in_slot:
+    <<: *skill
+    package: skill_green_pen
+    path: hf://Oskrt/flux-3-action-so101-haller-green-pen-lora (repo root = served adapter)
+    targets: [left]
+  put_yellow_boxcutter_in_slot:
+    <<: *skill
+    package: skill_yellow_cutter
+    path: hf://Oskrt/flux-3-action-so101-haller-yellow-cutter-lora (repo root = served adapter)
+    targets: [left]
+  put_red_pen_in_slot:
+    <<: *skill
+    package: skill_red_pen
+    path: hf://Oskrt/flux-3-action-so101-haller-pen-lora/checkpoints/lora_pen84/005000/raw (B84 + RAW 5k, 3/5 inserts)
+    targets: [left]
+skill_checkpoints:
+  open_box: open_box
+  put_green_pen_in_slot: put_green_pen_in_slot
+  put_yellow_boxcutter_in_slot: put_yellow_boxcutter_in_slot
+  put_red_pen_in_slot: put_red_pen_in_slot
+instances: per_arm
+max_invariant_age_s: 5
+# Claude recovery gate per arm (src/liminal/policy/hybrid.py, FluxPolicyBackend): off unless `enabled: true` here
+# (the referenced file's own `enabled` is ignored). With kinematics_verified false it only observes: at every chunk
+# boundary the arm parks, Opus judges the chunk, the decision is logged and the unchanged chunk runs. Corrections
+# (edit / eef through bounded local IK and the safety supervisor) need that arm's mapping verified and joint limits.
+hybrid:
+  enabled: false
+  config: configs/hybrid/claude_opus_haller.yaml
+  arms:  # q_model_degrees = (q_robot_degrees - joint_offsets_deg) / joint_signs, per arm's own encoder zeroes
+    left: {joint_signs: [1, 1, 1, 1, 1], joint_offsets_deg: [0, 0, 0, 0, 0], kinematics_verified: false}  # VERIFY
+    right: {joint_signs: [1, 1, 1, 1, 1], joint_offsets_deg: [0, 0, 0, 0, 0], kinematics_verified: false}  # VERIFY

@@ -104,11 +104,38 @@ def _strip_fences(text: str) -> str:
 # -- model adapters (thin; swap freely) ------------------------------------------------
 
 
+def anthropic_api_key() -> str | None:
+    """$ANTHROPIC_API_KEY, else the ws4 key file (``ANTHROPIC_API_KEY=...`` in $ANTHROPIC_API_KEY_FILE or
+    ~/.config/ws4/anthropic.env, as ws4/orchestrator/claude.py reads it), else None (the SDK's own resolution).
+    The key is passed to the client only, never printed or logged."""
+    import os
+
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        return None
+    try:
+        from liminal.ws4_bridge import import_orchestrator
+
+        import_orchestrator()
+        from orchestrator.claude import ClaudeUnavailable, resolve_api_key
+    except (ImportError, RuntimeError):
+        return None
+    try:
+        return resolve_api_key()
+    except ClaudeUnavailable:
+        return None
+
+
+# Opus 5.5 / Sonnet 5.5 run with the server-side refusal fallback, as ws4's planner does (ws4/orchestrator/claude.py).
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+FALLBACK_MODELS = frozenset({"claude-opus-5-5", "claude-sonnet-5-5"})
+
+
 class ClaudeModel:
-    def __init__(self, model: str = "claude-sonnet-5-5", max_tokens: int = 2048):
+    # Current models always think, and thinking counts against max_tokens: 2048 would cut a task tree short.
+    def __init__(self, model: str = "claude-sonnet-5-5", max_tokens: int = 16000):
         import anthropic
 
-        self.client = anthropic.Anthropic()
+        self.client = anthropic.Anthropic(api_key=anthropic_api_key())
         self.model, self.max_tokens = model, max_tokens
 
     def complete(self, system: str, user: str, images: Sequence[bytes] = ()) -> str:
@@ -120,8 +147,14 @@ class ClaudeModel:
             for img in images
         ]
         content.append({"type": "text", "text": user})
-        msg = self.client.messages.create(model=self.model, max_tokens=self.max_tokens, system=system,
-                                          messages=[{"role": "user", "content": content}])
+        kwargs = {"model": self.model, "max_tokens": self.max_tokens, "system": system,
+                  "messages": [{"role": "user", "content": content}]}
+        if self.model in FALLBACK_MODELS:
+            msg = self.client.beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **kwargs)
+        else:
+            msg = self.client.messages.create(**kwargs)
+        if msg.stop_reason in ("refusal", "max_tokens"):
+            raise RuntimeError(f"{self.model} stopped with {msg.stop_reason}; no task tree")
         return "".join(b.text for b in msg.content if b.type == "text")
 
 

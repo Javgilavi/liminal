@@ -26,6 +26,12 @@ def build_arms(robot_cfg: dict[str, Any]) -> tuple[dict[str, Arm], dict[str, Any
     arms: dict[str, Arm] = {}
     cameras: dict[str, Any] = {}
     world_sim = None
+    ws4 = None
+    if "ws4" in robot_cfg:
+        # One ws4 orchestrator session owns the Haller arms and cameras (liminal.ws4_bridge); built on connect.
+        from liminal.ws4_bridge.session import Ws4Bridge
+
+        ws4 = Ws4Bridge(robot_cfg["ws4"])
     if "mujoco" in robot_cfg:
         from liminal.sim.mujoco_arm import MujocoWorld
 
@@ -42,11 +48,18 @@ def build_arms(robot_cfg: dict[str, Any]) -> tuple[dict[str, Arm], dict[str, Any
             arms[name] = SO101Arm(name, port=a["port"], robot_id=a.get("id"),
                                   max_relative_target=a.get("max_relative_target"),
                                   max_speed=a.get("max_speed", 20.0),
-                                  temperature_limit=a.get("temperature_limit", 55.0))
+                                  temperature_limit=a.get("temperature_limit", 55.0),
+                                  estop=a.get("estop", "torque_off"))
         elif kind == "mujoco":
             from liminal.sim.mujoco_arm import MujocoArm
 
             arms[name] = MujocoArm(name, world_sim, a["actuator_prefix"])
+        elif kind == "ws4":
+            from liminal.ws4_bridge.arms import Ws4Arm
+
+            if ws4 is None:
+                raise ValueError(f"arm {name!r} has type ws4 but the robot config has no ws4: section")
+            arms[name] = Ws4Arm(name, ws4, a["ws4_arm"])
         else:
             raise ValueError(f"unknown arm type {kind!r}")
     for name, c in robot_cfg.get("cameras", {}).items():
@@ -65,6 +78,12 @@ def build_arms(robot_cfg: dict[str, Any]) -> tuple[dict[str, Arm], dict[str, Any
             from liminal.sim.mujoco_arm import MujocoCamera
 
             cameras[name] = MujocoCamera(name, world_sim, c["mj_camera"])
+        elif kind == "ws4":
+            from liminal.ws4_bridge.arms import Ws4Camera
+
+            if ws4 is None:
+                raise ValueError(f"camera {name!r} has type ws4 but the robot config has no ws4: section")
+            cameras[name] = Ws4Camera(name, ws4, c["ws4_camera"])
     if world_sim is not None:
         world_sim.start()
     return arms, cameras
@@ -85,7 +104,12 @@ def build_policy(backend: str, policy_cfg: dict[str, Any] | None = None) -> Skil
         cfg = {k: v for k, v in (policy_cfg or {}).items() if k not in ("instances", "devices")}
         cfg["camera_roles"] = tuple(cfg.get("camera_roles", ("scene", "wrist")))
         return FluxPolicyBackend(FluxConfig(**cfg))
-    raise ValueError(f"unknown backend {backend!r} (mock | scripted | flux)")
+    if backend == "ws4":
+        # Haller: each skill runs as a ws4 step behind the Haller safety stack (needs a robot config with ws4 arms)
+        from liminal.ws4_bridge.backend import Ws4ChainBackend
+
+        return Ws4ChainBackend.from_config(policy_cfg or {})
+    raise ValueError(f"unknown backend {backend!r} (mock | scripted | flux | ws4)")
 
 
 def build_context(robot: str | Path | dict[str, Any], backend: str = "mock",

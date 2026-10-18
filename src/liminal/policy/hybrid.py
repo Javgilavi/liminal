@@ -3,6 +3,10 @@
 The model sees RGB, proprioception, robot-only FK proposals and episode history.
 It selects student / edit / eef / stop. Only deterministic local IK and the existing
 SafetySupervisor may turn a validated decision into a motor command.
+
+Two users: the standalone runners (official_live, live; never alongside the harness on the
+same arm) and the harness's FluxPolicyBackend, one controller per skill target (``hybrid:``
+in a policy config, see HarnessHybrid).
 """
 from __future__ import annotations
 
@@ -33,6 +37,7 @@ class HybridConfig:
     frame_description: str = "SO-101 MJCF root frame; gripperframe site; not camera coordinates"
     timeout_s: float = 30.0
     max_tokens: int = 4096
+    effort: str = ""  # output_config.effort (low | medium | high | xhigh | max); "" = the model's default
     max_student_steps: int = 15
     history_turns: int = 8
     max_position_delta_m: float = .05
@@ -153,6 +158,10 @@ claim that a pose or task is reached based only on a predicted trajectory.
 """
 
 
+# Current models that return HTTP 400 on tool_choice "tool" / "any" (Claude API docs, model migration notes).
+AUTO_TOOL_MODELS = frozenset({"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"})
+
+
 class Reasoner(Protocol):
     async def decide(self, payload: dict, images: list[dict], schema: dict) -> dict: ...
 
@@ -170,14 +179,27 @@ class ClaudeReasoner:
             content.extend([{"type": "text", "text": image["label"]},
                             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                           "data": image["data"]}}])
-        async with anthropic.AsyncAnthropic(timeout=self.config.timeout_s, max_retries=0) as client:
-            response = await client.messages.create(
-                model=self.config.model, max_tokens=self.config.max_tokens, system=SYSTEM,
-                messages=[{"role": "user", "content": content}],
-                tools=[{"name": "hybrid_decision", "description": "Choose the next bounded robot segment",
-                        "input_schema": schema}],
-                tool_choice={"type": "tool", "name": "hybrid_decision"},
-            )
+        from liminal.orchestration.planner import FALLBACK_BETA, FALLBACK_MODELS, anthropic_api_key
+
+        kwargs = {"model": self.config.model, "max_tokens": self.config.max_tokens, "system": SYSTEM,
+                  "messages": [{"role": "user", "content": content}],
+                  "tools": [{"name": "hybrid_decision", "description": "Choose the next bounded robot segment",
+                             "input_schema": schema}]}
+        if self.config.effort:
+            kwargs["output_config"] = {"effort": self.config.effort}
+        if self.config.model in AUTO_TOOL_MODELS:
+            # These models reject a forced tool_choice (HTTP 400): ask for the call instead; the checks below
+            # still refuse any answer that is not exactly one hybrid_decision call.
+            kwargs["tool_choice"] = {"type": "auto"}
+            content.append({"type": "text", "text": "Answer only by calling hybrid_decision exactly once."})
+        else:
+            kwargs["tool_choice"] = {"type": "tool", "name": "hybrid_decision"}
+        async with anthropic.AsyncAnthropic(api_key=anthropic_api_key(), timeout=self.config.timeout_s,
+                                            max_retries=0) as client:
+            if self.config.model in FALLBACK_MODELS:
+                response = await client.beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **kwargs)
+            else:
+                response = await client.messages.create(**kwargs)
         calls = [b for b in response.content if b.type == "tool_use"]
         if response.stop_reason != "tool_use" or len(calls) != 1 or calls[0].name != "hybrid_decision":
             raise ValueError("missing, multiple or truncated hybrid tool response")
@@ -337,6 +359,69 @@ class HybridController:
         self.previous_images = [{**image, "label": image["label"].replace("current_", "previous_before_")}
                                 for image in self._images]
         log("hybrid_executed", **entry)
+
+    def reset(self):
+        """Forget the episode at a skill boundary: the next skill's goal is a different prompt."""
+        self.history = []
+        self.previous_images = []
+        self._images = []
+
+
+@dataclass
+class HarnessHybrid:
+    """The harness's ``hybrid:`` policy-config mapping (FluxPolicyBackend), resolved per skill target.
+
+    ``config:`` names a gate YAML (configs/hybrid/*.yaml) whose fields become the defaults, except its
+    ``enabled``: only this mapping, or an ``arms:`` entry, switches the gate on, so it is off unless set.
+    ``arms:`` overrides any field per skill target, because each arm has its own encoder zeroes
+    (joint_signs, joint_offsets_deg, kinematics_verified).
+    """
+
+    shared: dict = field(default_factory=dict)
+    arms: dict[str, dict] = field(default_factory=dict)
+
+    @classmethod
+    def parse(cls, raw) -> HarnessHybrid:
+        if not raw:
+            return cls()
+        if not isinstance(raw, dict):
+            raise ValueError("hybrid configuration must be a mapping")
+        raw = dict(raw)
+        shared = {}
+        path = raw.pop("config", None)
+        if path is not None:
+            loaded = yaml.safe_load(Path(path).read_text())
+            if not isinstance(loaded, dict):
+                raise ValueError(f"{path}: hybrid configuration must be a mapping")
+            shared = {key: value for key, value in loaded.items() if key != "enabled"}
+        arms = raw.pop("arms", None) or {}
+        if not isinstance(arms, dict) or not all(isinstance(v, dict) for v in arms.values()):
+            raise ValueError("hybrid arms must map each skill target to a mapping")
+        settings = cls({**shared, **raw}, {target: dict(values) for target, values in arms.items()})
+        for target in (None, *settings.arms):
+            settings.config(target)  # a bad field fails when the backend is built, not mid-task
+        return settings
+
+    def config(self, target: str | None) -> HybridConfig:
+        try:
+            return HybridConfig(**{**self.shared, **self.arms.get(target, {})})
+        except TypeError as exc:
+            raise ValueError(f"hybrid configuration for {target or 'every arm'}: {exc}") from exc
+
+
+def jpeg_base64(frame) -> str:
+    """An RGB camera frame (HxWx3 uint8, what Camera.read returns) -> the base64 JPEG the reasoner sees."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    array = np.asarray(frame)
+    if array.ndim != 3 or array.shape[2] not in (3, 4) or not array.size:
+        raise ValueError("hybrid camera frame must be an HxWx3 RGB image")
+    buffer = io.BytesIO()
+    Image.fromarray(array.astype(np.uint8)).convert("RGB").save(buffer, format="JPEG", quality=90)
+    return base64.b64encode(buffer.getvalue()).decode()
 
 
 def build_hybrid(cfg: dict, *, execute: bool):

@@ -313,7 +313,9 @@ class Executor:
                                               or self.state in TERMINAL):
                 self._last_frame = now_wall
                 self.on_frame(obs, report)
-            if self.max_run_s is not None and self.t > self.max_run_s and self.state == "running":
+            gated = sum(b.total_wait_s for b in {id(b): b for b in self.backends.values()
+                                                  if hasattr(b, "gate_wait_s")}.values())
+            if self.max_run_s is not None and self.t - gated > self.max_run_s and self.state == "running":
                 self._finish("failed", f"run exceeded {self.max_run_s:.0f} s")
             if self.realtime:
                 next_tick += period
@@ -670,8 +672,11 @@ class Executor:
                     self._verify(run, obs)
                     if run.status != "running":
                         continue
-            if self.t - run.t_start > skill.timeout_s:
-                self._fail_attempt(run, f"timeout after {skill.timeout_s:.0f} s without a verified success")
+            # Time the arm held while the Opus gate reviewed a chunk (hybrid_gate) is not policy time.
+            gated = backend.gate_wait_s(run.target) if hasattr(backend, "gate_wait_s") else 0.0
+            if self.t - run.t_start - gated > skill.timeout_s:
+                self._fail_attempt(run, f"timeout after {skill.timeout_s:.0f} s without a verified success"
+                                   + (f" (plus {gated:.0f} s of Opus review)" if gated else ""))
 
     def _verify(self, run: StepRun, obs: dict) -> None:
         if getattr(self.verifier, "fast", False):
@@ -697,10 +702,18 @@ class Executor:
             self._park(run, verdict.observation)
         elif ok:
             self._complete(run, verdict.observation)
-        elif run.returning:
-            self._fail_attempt(run, f"the check failed after the arm returned home: {verdict.observation}")
-        elif run.parking:
-            self._fail_attempt(run, f"the check failed after parking: {verdict.observation}")
+        elif run.returning or run.parking:
+            # The step already passed with confidence before the arm moved away. Only a confident "not done" undoes
+            # that; an unclear re-check (low confidence, a verifier error) keeps the pass (live 18 Oct: green passed at
+            # 0.70, then "upright in the green holder, seating not fully visible" at 0.60 failed a real insert).
+            where = "after the arm returned home" if run.returning else "after parking"
+            if not verdict.done and verdict.confidence >= run.skill.confidence:
+                self._fail_attempt(run, f"the check failed {where}: {verdict.observation}")
+            else:
+                self.events.add("warn", f"{run.step.id}: re-check {where} unclear ({verdict.source}, conf "
+                                f"{verdict.confidence:.2f}): {verdict.observation}; the earlier pass stands",
+                                step=run.step.id)
+                self._complete(run, f"passed; re-check {where} unclear (conf {verdict.confidence:.2f})")
         elif run.final_check:
             self._fail_attempt(run, f"motion finished but the check failed: {verdict.observation}")
 

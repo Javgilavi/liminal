@@ -1,0 +1,23 @@
+# Skill catalog for the LLM planner on the green Haller (`liminal plan ... --planner claude --model claude-opus-5-5
+# --skills configs/skills_haller.yaml`). Only what the ws4 bridge can run (configs/policy/haller_ws4.yaml); every
+# prompt is the exact training caption of the served LoRA (the bridge refuses any other). Arms are the ROBOT's sides.
+arms: [left, right]
+skills:
+  open_box: >-
+    RIGHT arm only. Opens the closed white box by pulling its handle and keeps holding the lid open afterwards (the lid
+    closes if it lets go); never give the right arm another skill after it. prompt must be exactly: "open the box by
+    pulling its handle". success: lid_open
+  put_green_pen_in_slot: >-
+    LEFT arm only, box open. prompt must be exactly: "put the green pen in the green slot". success: green_pen_in_slot
+  put_yellow_boxcutter_in_slot: >-
+    LEFT arm only, box open, after the green pen (its demos had the green pen already in). prompt must be exactly:
+    "put the yellow cutter in the yellow slot". success: yellow_boxcutter_in_slot
+  put_red_pen_in_slot: >-
+    LEFT arm only, box open, after the green pen and the cutter (its demos had both in). prompt must be exactly:
+    "put the red pen in its slot in the cardboard box". success: red_pen_in_slot
+predicates:
+  - lid_open
+  - green_pen_in_slot
+  - yellow_boxcutter_in_slot
+  - red_pen_in_slot
+  - components_assembled  # all three items in their slots

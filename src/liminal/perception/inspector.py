@@ -88,8 +88,13 @@ class SceneInspector:
 
         captured_at = time.monotonic()
         prompt = _build_prompt(request)
+        # A model with per-predicate prompts of its own (ws4_haiku) takes the request instead of the joint prompt.
+        inspect_request = getattr(self.model, "inspect_request", None)
         try:
-            response = await self.model.inspect(prompt, images)
+            if inspect_request is not None:
+                response = await inspect_request(request, images)
+            else:
+                response = await self.model.inspect(prompt, images)
         except asyncio.TimeoutError:
             raise
         except Exception as exc:

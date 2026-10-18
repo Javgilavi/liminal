@@ -153,6 +153,10 @@ class SessionConfig:
     action_steps: int | None = None  # commands executed per FLUX chunk before replanning (package: 32)
     lift_stall_deg: float | None = None  # shoulder-lift stall threshold (other joints: stall_deg)
     prefetch_ticks: int | None = None  # request the next chunk when this many commands are left (0 = off)
+    # Opus reviews every FLUX chunk (ws4/single_arm/hybrid_gate.py): continue through the guard, or stop = e-stop hold.
+    # "" = WS4_HYBRID_CONFIG, else off. E.g. configs/hybrid/claude_opus_haller.yaml (repo-relative paths are fine).
+    hybrid_config: str = ""
+    hybrid_every: int = 0  # review the first chunk of each attempt, then every N-th; 0 = WS4_HYBRID_EVERY, else 1
     # Arms handed over holding at launch (run_single_arm --hold-other-arm, single_arm README "Handover from the HMI"):
     # held where they are (goal = present pose, then torque on, as connect_so101 does), never driven, torque on at
     # close.
@@ -355,7 +359,7 @@ class Session:
             uses = {(a, s.package or cfg.package_for(a)) for s in self.vocab.skills.values()
                     if s.is_flux and s.backend == "flux" for a in s.arms if a in arms}
             for pkg in sorted({p for _, p in uses}):
-                self.backends[pkg] = self._policy_backend(pkg)
+                self.backends[pkg] = self._gated(self._policy_backend(pkg))
                 if cfg.action_steps:
                     # as run_single_arm --action-steps: the runner reads the horizon from the backend's contract
                     self.backends[pkg].contract = dataclasses.replace(self.backends[pkg].contract,
@@ -443,6 +447,29 @@ class Session:
             self.events.add("info" if installed == SDK_VERSION else "warn",
                             f"anthropic SDK {installed or 'not installed'} (code checked against {SDK_VERSION}); "
                             f"API key {'found' if api_key_available() else 'NOT found'}")
+
+    def _gated(self, backend: Any) -> Any:
+        """The package's backend behind the Opus chunk gate when one is configured; continue or freeze only."""
+        path = self.cfg.hybrid_config or os.environ.get("WS4_HYBRID_CONFIG", "")
+        if not path:
+            return backend
+        if self.cfg.prefetch_ticks:
+            raise ValueError("the Opus gate judges a chunk while the arm holds: prefetch must be off")
+        single_arm = str(Path(__file__).resolve().parents[1] / "single_arm")
+        if single_arm not in sys.path:
+            sys.path.insert(0, single_arm)
+        from hybrid_gate import GatedBackend
+
+        every = self.cfg.hybrid_every or _env_number("WS4_HYBRID_EVERY", int) or 1
+        gated = GatedBackend(backend, path, self.runs_dir / f"hybrid_{time.strftime('%Y%m%d_%H%M%S')}.jsonl",
+                             every=every,
+                             notify=lambda message: self.events.add(
+                                 "warn" if "GATE ERROR" in message or not message.startswith("OPUS student") else
+                                 "info", message))  # fmt: skip
+        self.events.add("warn", f"Opus gate ON ({gated.config.model}): chunk 1 of every attempt, then every {every}, "
+                        "reviewed while the arm holds (not counted in the attempt timeout); continue = through the "
+                        f"guard, stop = e-stop hold; log {gated.log_path}")
+        return gated
 
     def _policy_backend(self, package: str) -> Any:
         cfg = self.cfg
@@ -555,6 +582,12 @@ class Session:
         with self._lock:
             obs = self._last_obs
         return None if obs is None else obs.get(IMG_HEAD)
+
+    def observation(self) -> dict | None:
+        """The latest robot observation (12-D state and camera frames) the control thread read; never touches the
+        bus. For readers on other threads, e.g. the liminal harness bridge (src/liminal/ws4_bridge)."""
+        with self._lock:
+            return self._last_obs
 
     # ------------------------------------------------------------------ planning
     def plan(self, goal: str, *, kind: str = "plan", state: dict | None = None) -> Proposal:
@@ -912,6 +945,8 @@ class Session:
                     if (run.step.id, run.attempt) in self._start_note else "")
                  + (f"; {self.runner_settings()}" if self.rig is not None else "")
                  + (f"; kit runner_args {' '.join(run.skill.runner_args)}" if run.skill.runner_args else "")
+                 + (f"; checks {', '.join(f'{v.done} {v.confidence:.2f}' for v in run.verdicts)}"
+                    if len(run.verdicts) > 1 else "")
                  + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"
                     if verdict else ""))
         trial = tl.Trial(

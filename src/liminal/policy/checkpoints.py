@@ -25,6 +25,7 @@ class Checkpoint:
     chunk_size: int = 42
     control_hz: float = 30.0
     normalization_profile: str = "released"
+    package: str = ""  # engine: remote: the package the policy server serves for this checkpoint
 
     @classmethod
     def parse(cls, name: str, values: dict[str, Any]) -> Checkpoint:

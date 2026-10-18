@@ -25,13 +25,16 @@ class SO101Arm:
 
     def __init__(self, name: str, port: str, robot_id: str | None = None,
                  hold_rate_hz: float = 30.0, max_relative_target: float | None = None,
-                 max_speed: float = 20.0, temperature_limit: float = 55.0):
+                 max_speed: float = 20.0, temperature_limit: float = 55.0, estop: str = "torque_off"):
         if not math.isfinite(max_speed) or max_speed <= 0:
             raise ValueError("max_speed must be finite and positive")
         if max_relative_target is not None and (not math.isfinite(max_relative_target) or max_relative_target <= 0):
             raise ValueError("max_relative_target must be finite and positive")
         if not 20 <= temperature_limit <= 60:
             raise ValueError("temperature_limit must be between 20 and 60 C")
+        if estop not in ("torque_off", "freeze"):
+            raise ValueError("estop must be torque_off or freeze")
+        self.estop_mode = estop
         self.name, self.port, self.robot_id = name, port, robot_id or name
         self.hold_rate_hz = hold_rate_hz
         self.max_relative_target = max_relative_target
@@ -244,6 +247,14 @@ class SO101Arm:
                 self._last_action = time.monotonic()
 
     def emergency_stop(self) -> None:
+        """torque_off: release (the arm can sag). freeze: hold the measured pose with torque on and keep the gripper
+        goal, for an arm that holds something up (a box lid). An arm with a hardware fault always releases."""
+        if self.estop_mode == "freeze" and self.torque_enabled and not self.fault:
+            try:
+                self.stop()
+                return
+            except Exception:
+                log.exception("%s: e-stop freeze failed; releasing torque", self.name)
         self.set_torque(False)
 
     def health(self) -> dict[str, Any]:

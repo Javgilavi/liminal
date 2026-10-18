@@ -1,0 +1,25 @@
+# `liminal run ... --backend ws4 --policy configs/policy/haller_ws4.yaml`: each liminal skill runs as one ws4 step on the
+# Haller (src/liminal/ws4_bridge/backend.py). FLUX runs on the remote policy server (ws4/cloud/lora_adapter.py serve,
+# port 8790), one LoRA package per skill with its own normalization. The prompts in the task file must equal the ws4
+# vocabulary's (the LoRAs' training captions): the backend refuses a skill whose prompt, arm or package differs.
+#
+# The registry of what is served (public on the Hub, Oskrt/*). `package` is checked against the ws4 vocabulary
+# (ws4/orchestrator/skills.yaml); `checkpoint` is logged with every step.
+max_attempts: 1  # the tree owns retries; one ws4 attempt (<= 120 s policy + ramps + checks) fits the 240 s skill timeout
+skills:
+  open_box:
+    ws4_skill: open_box
+    package: skill_open_box
+    checkpoint: Oskrt/flux-3-action-so101-haller-open-box-lora (repo root = served adapter)
+  put_green_pen_in_slot:
+    ws4_skill: put_green_pen_in_slot
+    package: skill_green_pen
+    checkpoint: Oskrt/flux-3-action-so101-haller-green-pen-lora (repo root = served adapter)
+  put_yellow_boxcutter_in_slot:
+    ws4_skill: put_yellow_cutter_in_slot
+    package: skill_yellow_cutter
+    checkpoint: Oskrt/flux-3-action-so101-haller-yellow-cutter-lora (repo root = served adapter)
+  put_red_pen_in_slot:
+    ws4_skill: put_pen_in_slot
+    package: skill_red_pen
+    checkpoint: Oskrt/flux-3-action-so101-haller-pen-lora checkpoints/lora_pen84/005000/raw (B84 + RAW 5k, 3/5)

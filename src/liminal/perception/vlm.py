@@ -54,6 +54,13 @@ def build_vision_model(config: Mapping[str, Any]) -> VisionModel:
             return QwenVisionModel(QwenVisionConfig(**data))
         except TypeError as exc:
             raise ValueError(f"invalid Qwen model configuration: {exc}") from exc
+    if provider == "ws4_haiku":
+        from liminal.ws4_bridge.vision import Ws4HaikuVisionModel
+
+        try:
+            return Ws4HaikuVisionModel(**data)
+        except TypeError as exc:
+            raise ValueError(f"invalid ws4_haiku model configuration: {exc}") from exc
     if provider is None:
         raise ValueError("vision model configuration needs a provider")
-    raise ValueError(f"unsupported vision model provider {provider!r}; available: qwen")
+    raise ValueError(f"unsupported vision model provider {provider!r}; available: qwen, ws4_haiku")
