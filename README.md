@@ -1,4 +1,8 @@
-# liminal
+<p align="center">
+  <a href="https://javgilavi.github.io/liminal/">
+    <img src="docs/assets/liminal-header.png" alt="Liminal — Imagine, then act. Dual-arm manipulation with FLUX 3 Action." width="100%" />
+  </a>
+</p>
 
 **[Project page](https://javgilavi.github.io/liminal/) · [Live lab](https://javgilavi.github.io/liminal/live.html)**
 
