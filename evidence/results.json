@@ -1,5 +1,5 @@
 {
-  "source_revision": "df25c60c3a1c4cb971e308bc3abc7d633f74285a",
+  "source_revision": "07e50d0985bb91c4f613017df7a30e9ea68394c0",
   "source_date": "2026-10-18",
   "simulation": {
     "title": "Corrected single-arm simulation comparison",
@@ -69,6 +69,28 @@
     "sources": [
       "media/README.md",
       "examples/dual_so101_sim/twin/README.md"
+    ]
+  },
+  "real_pen_highlights": {
+    "task": "Put the red pen in its slot in the cardboard box",
+    "model": "FLUX red-pen LoRA RAW 5000",
+    "actions_per_request": 16,
+    "blocks": [
+      {
+        "label": "Early morning block",
+        "reported_successes": 3,
+        "attempts": 5
+      },
+      {
+        "label": "07:40 block",
+        "reported_successes": 2,
+        "attempts": 3
+      }
+    ],
+    "interpretation": "Team-reported small session blocks with retained successful single-arm camera videos. Not a matched benchmark, a pooled hardware success rate or a full learned bimanual demonstration. Separate from the older 16-trial official index.",
+    "sources": [
+      "media/README.md",
+      "media/real_robot/flux_red_pen_runs/"
     ]
   }
 }

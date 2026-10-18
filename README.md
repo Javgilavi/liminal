@@ -8,7 +8,7 @@ No build framework or server runtime is required for the website. Serve this
 folder with a static HTTP server for preview. Three.js 0.180.0 and fonts are
 self-hosted with their licenses. Relative asset paths support GitHub project Pages.
 
-Content is based on source main `df25c60c3a1c4cb971e308bc3abc7d633f74285a`.
+Content is based on source main `07e50d0985bb91c4f613017df7a30e9ea68394c0`.
 See `evidence/notes.html` and `evidence/results.json` for experiment provenance,
 limitations and bridge setup. Publishing this static tree does not publish raw
 logs, profiles, credentials or the private source repository.
