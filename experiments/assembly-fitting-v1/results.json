@@ -1,0 +1,359 @@
+{
+  "recorded_at_utc": "2026-10-18T00:59:34.534382+00:00",
+  "run": "fixed-window-fit-20261018-01",
+  "outcome": "not_promoted",
+  "protocol": "Eight fixed training pickup windows from episode 0 / seed 100; eight development-validation windows from seed 10000. Native coordinates and frozen HF normalization, 20 Hz, Euler4/CFG3.",
+  "budget": {
+    "microbatches": 1000,
+    "optimizer_updates": 250,
+    "examples": 2000,
+    "wall_seconds": 1144.9290787889622,
+    "trainable_parameters": 136851456
+  },
+  "optimization_checks": {
+    "optimizer_covers_all_trainable": true,
+    "gradient_samples": {
+      "base_model.model.dit.content_mode_blocks.action.0.q_proj.lora_B.default.weight": {
+        "calls": 1000,
+        "max_abs": 2.3126602172851562e-05
+      },
+      "base_model.model.dit.emb_in.action.modules_to_save.default.weight": {
+        "calls": 1000,
+        "max_abs": 0.00323486328125
+      }
+    },
+    "parameter_probe_max_changes": {
+      "base_model.model.dit.content_mode_blocks.action.0.q_proj.lora_B.default.weight": 0.003925605211406946,
+      "base_model.model.dit.emb_in.action.modules_to_save.default.weight": 0.0150146484375
+    }
+  },
+  "prediction": {
+    "before": [
+      {
+        "split": "train",
+        "windows": 8,
+        "joint_rmse": {
+          "1": 0.1518521448597312,
+          "8": 2.789464697241783,
+          "32": 14.316770493984222,
+          "42": 19.05719804763794
+        },
+        "gripper_mae": {
+          "1": 0.6188746690750122,
+          "8": 1.3428301215171814,
+          "32": 1.6895018815994263,
+          "42": 1.0270635485649109
+        }
+      },
+      {
+        "split": "validation",
+        "windows": 8,
+        "joint_rmse": {
+          "1": 0.13226840225979686,
+          "8": 3.9127010107040405,
+          "32": 19.847234547138214,
+          "42": 25.785622894763947
+        },
+        "gripper_mae": {
+          "1": 0.2953795790672302,
+          "8": 1.1356995105743408,
+          "32": 0.5726027488708496,
+          "42": 1.4350029826164246
+        }
+      }
+    ],
+    "after": [
+      {
+        "split": "train",
+        "windows": 8,
+        "joint_rmse": {
+          "1": 0.06865794770419598,
+          "8": 0.6870038490742445,
+          "32": 6.586468607187271,
+          "42": 7.906933277845383
+        },
+        "gripper_mae": {
+          "1": 0.3100593090057373,
+          "8": 0.5356397032737732,
+          "32": 0.9207030534744263,
+          "42": 1.4751259088516235
+        }
+      },
+      {
+        "split": "validation",
+        "windows": 8,
+        "joint_rmse": {
+          "1": 0.11273431498557329,
+          "8": 2.7436257898807526,
+          "32": 14.550498619675636,
+          "42": 24.306678414344788
+        },
+        "gripper_mae": {
+          "1": 0.4475584030151367,
+          "8": 0.8635060787200928,
+          "32": 1.0611887574195862,
+          "42": 0.8367748260498047
+        }
+      }
+    ]
+  },
+  "per_joint_horizon32": [
+    {
+      "checkpoint": "before",
+      "split": "train",
+      "per_joint_mae": {
+        "shoulder_pan": 3.098412811756134,
+        "shoulder_lift": 8.758113043382764,
+        "elbow_flex": 6.645119786262512,
+        "wrist_flex": 6.831766128540039,
+        "wrist_roll": 23.77918180823326,
+        "gripper": 1.6895018815994263
+      },
+      "per_joint_signed_bias": {
+        "shoulder_pan": -0.5677188038825989,
+        "shoulder_lift": 6.958206193521619,
+        "elbow_flex": -6.234367102384567,
+        "wrist_flex": 6.831766128540039,
+        "wrist_roll": -4.397898465394974,
+        "gripper": -1.3743363618850708
+      },
+      "mean_window_joint_rmse": 14.316770708834389,
+      "mean_gripper_absolute_error": 1.6895018815994263
+    },
+    {
+      "checkpoint": "before",
+      "split": "validation",
+      "per_joint_mae": {
+        "shoulder_pan": 2.6988561749458313,
+        "shoulder_lift": 8.039042294025421,
+        "elbow_flex": 7.9341777712106705,
+        "wrist_flex": 7.812520980834961,
+        "wrist_roll": 36.53208129107952,
+        "gripper": 0.5726027488708496
+      },
+      "per_joint_signed_bias": {
+        "shoulder_pan": 0.268898069858551,
+        "shoulder_lift": 6.894228041172028,
+        "elbow_flex": -7.881091013550758,
+        "wrist_flex": 7.812520980834961,
+        "wrist_roll": 13.693431988358498,
+        "gripper": 0.3059043884277344
+      },
+      "mean_window_joint_rmse": 19.847234571949755,
+      "mean_gripper_absolute_error": 0.5726027488708496
+    },
+    {
+      "checkpoint": "after",
+      "split": "train",
+      "per_joint_mae": {
+        "shoulder_pan": 0.9796247482299805,
+        "shoulder_lift": 1.8771376591175795,
+        "elbow_flex": 2.6446130722761154,
+        "wrist_flex": 3.0121822357177734,
+        "wrist_roll": 12.51304306089878,
+        "gripper": 0.9207030534744263
+      },
+      "per_joint_signed_bias": {
+        "shoulder_pan": 0.4122960567474365,
+        "shoulder_lift": 1.0866216141730547,
+        "elbow_flex": 0.7610809057950974,
+        "wrist_flex": 2.8993587493896484,
+        "wrist_roll": 12.186108335852623,
+        "gripper": -0.15818583965301514
+      },
+      "mean_window_joint_rmse": 6.5864689481482115,
+      "mean_gripper_absolute_error": 0.9207030534744263
+    },
+    {
+      "checkpoint": "after",
+      "split": "validation",
+      "per_joint_mae": {
+        "shoulder_pan": 3.204025626182556,
+        "shoulder_lift": 2.668860912322998,
+        "elbow_flex": 3.4940638542175293,
+        "wrist_flex": 4.487970352172852,
+        "wrist_roll": 29.569845646619797,
+        "gripper": 1.0611887574195862
+      },
+      "per_joint_signed_bias": {
+        "shoulder_pan": 2.0644575357437134,
+        "shoulder_lift": 1.9109482765197754,
+        "elbow_flex": -1.7976226806640625,
+        "wrist_flex": 3.765584945678711,
+        "wrist_roll": 25.169865638017654,
+        "gripper": 0.4752430319786072
+      },
+      "mean_window_joint_rmse": 14.55049834495858,
+      "mean_gripper_absolute_error": 1.0611887574195862
+    }
+  ],
+  "pickup_rollouts": {
+    "before": [
+      {
+        "seed": 100,
+        "task_report": {
+          "status": "timeout",
+          "goal_verified": false
+        },
+        "final_facts": {
+          "gear_held": false,
+          "gear_seated": false,
+          "collar_held": false,
+          "collar_seated": false,
+          "assembly_complete": false
+        }
+      },
+      {
+        "seed": 10000,
+        "task_report": {
+          "status": "timeout",
+          "goal_verified": false
+        },
+        "final_facts": {
+          "gear_held": false,
+          "gear_seated": false,
+          "collar_held": false,
+          "collar_seated": false,
+          "assembly_complete": false
+        }
+      }
+    ],
+    "after": [
+      {
+        "seed": 100,
+        "task_report": {
+          "status": "timeout",
+          "goal_verified": false
+        },
+        "final_facts": {
+          "gear_held": false,
+          "gear_seated": false,
+          "collar_held": false,
+          "collar_seated": false,
+          "assembly_complete": false
+        }
+      },
+      {
+        "seed": 10000,
+        "task_report": {
+          "status": "timeout",
+          "goal_verified": false
+        },
+        "final_facts": {
+          "gear_held": false,
+          "gear_seated": false,
+          "collar_held": false,
+          "collar_seated": false,
+          "assembly_complete": false
+        }
+      }
+    ]
+  },
+  "grasp_approach": [
+    {
+      "version": "before",
+      "seed": 100,
+      "tick": 244,
+      "distance_mm": 48.595618033848574,
+      "xy_error_mm": 10.770669804756444,
+      "z_error_mm": 47.38698939633765,
+      "gripper_axis_tilt_deg": 5.488943099975816,
+      "measured_gripper_pp": 54.91265869140625,
+      "commanded_gripper_pp": 55.18238067626953,
+      "ticks_within_5mm": 0
+    },
+    {
+      "version": "after",
+      "seed": 100,
+      "tick": 188,
+      "distance_mm": 15.82314374099011,
+      "xy_error_mm": 8.76287189145676,
+      "z_error_mm": 13.175126339506258,
+      "gripper_axis_tilt_deg": 8.246741771698069,
+      "measured_gripper_pp": 55.02386474609375,
+      "commanded_gripper_pp": 54.34980392456055,
+      "ticks_within_5mm": 0
+    },
+    {
+      "version": "before",
+      "seed": 10000,
+      "tick": 0,
+      "distance_mm": 79.49714971103009,
+      "xy_error_mm": 78.28638802363787,
+      "z_error_mm": -13.821659176464287,
+      "gripper_axis_tilt_deg": 29.25920867919925,
+      "measured_gripper_pp": 4.999935626983643,
+      "commanded_gripper_pp": 3.775730848312378,
+      "ticks_within_5mm": 0
+    },
+    {
+      "version": "after",
+      "seed": 10000,
+      "tick": 188,
+      "distance_mm": 19.026467299207397,
+      "xy_error_mm": 11.767859156043201,
+      "z_error_mm": 14.950717333002405,
+      "gripper_axis_tilt_deg": 9.847650527954311,
+      "measured_gripper_pp": 56.898193359375,
+      "commanded_gripper_pp": 55.57908630371094,
+      "ticks_within_5mm": 0
+    }
+  ],
+  "decision": {
+    "window_fit_passed": false,
+    "training_pickup": false,
+    "validation_pickup": false,
+    "promoted": false,
+    "next_action": "inspect_optimization_and_serialization",
+    "checkpoint": "/liminal/experiments/sim-assembly-20261017/fixed-window-fit-20261018-01/training/checkpoints/001000/pretrained_model",
+    "original_pipeline_failed": true,
+    "recovery": "Rollout-only continuation; no repeated fitting or overwritten failure evidence"
+  },
+  "pipeline_incident": {
+    "original_completed": false,
+    "error": "RuntimeError: FIT_DOWNSTREAM: exit=2; inspect /liminal/experiments/sim-assembly-20261017/fixed-window-fit-20261018-01/before-rollouts.log",
+    "recovery_completed": true,
+    "training_repeated": false,
+    "original_failure_record_preserved": true,
+    "fix": "Preflight evaluator CLI; explicit compatible evaluator; hash-verified rollout-only resume."
+  },
+  "validation": {
+    "pytest_passed": 215,
+    "pytest_skipped": 1,
+    "ruff": "passed",
+    "final_real_contract_audit": "passed: 16 windows",
+    "initial_training_and_inference_contract": "passed: 16 windows",
+    "original_runtime_snapshot_hashes": "verified: all four modules"
+  },
+  "environment": {
+    "torch": "2.10.0+cu128",
+    "peft": "0.21.2",
+    "accelerate": "1.15.0",
+    "natten": "0.21.6+torch2100cu128",
+    "transformers": "5.5.4"
+  },
+  "artifact_sha256": {
+    "windows.json": "b9fa277da4e9fda9a09110245b08966f734e14185e00b2802bd727b058e9b327",
+    "before.json": "c460a05ca4c8c06860398b81cb5d2ee94ebde8a22e395b60bdfe6facbd128af1",
+    "before.npz": "0e00aeef68e9f2b70435e1b72b76f6f0d726400623d8c2c81d008159bfd4c664",
+    "after.json": "1f9202dc8059c6d3050ae3e7cb0376b2eb400ddc57b8b2702d248936a3655c58",
+    "after.npz": "3dd05f971f89ad46d82f98f6e261d16de2d20e6cd24efe66851c23bd9cd6478c",
+    "optimization.json": "2e75713ec14016d5f41945a3cdfd741c5a88794d40675fb95868882b44ca67b1",
+    "status.json": "e6e7cf0ee3bfde1956330426096a1960e3e4dcdce46e029bb4ca40d444346cdf",
+    "evaluation-resume-status.json": "88a188b8ac7cebee0fe5fc37a73748c6e46954ce4cb9c763f0934a89f93659c6",
+    "decision.json": "4003794bdb045d630c7f5f4a406129de1275f41a06045417815c53474709abdb",
+    "base-environment-provenance.json": "911f4b5efb4c4fd164361a7aa05cfd3830c57fa7374eab55d646281ded7e0002"
+  },
+  "interpretation": "Additional fitting materially improved recorded-history prediction and jaw approach, but neither pickup succeeded. Basic optimizer coverage, sampled gradients, parameter changes and fresh-checkpoint evaluation are verified. Resolve remaining command drift and nominal pickup before collecting more similar demonstrations.",
+  "limitations": [
+    "One train and one validation scene; no success-rate estimate.",
+    "The existing validation seed is development data, not an untouched final test.",
+    "Joint deviation from one teacher trajectory is not Cartesian accuracy; wrist roll contributes strongly.",
+    "Eight training anchors with overlapping futures do not establish closed-loop coverage.",
+    "A bounded unsuccessful fit does not establish a capacity limit.",
+    "Reported torch memory peaks cover the final trainer microbatch because upstream resets peak counters each step.",
+    "The run used the pre-hardening source snapshot; the final runner separately passed a real audit-only run."
+  ],
+  "next_step": "Keep the same frozen windows and investigate remaining per-joint accumulated error, objective/guidance behavior and convergence before expanding data or orchestrating skills.",
+  "evidence_directory": "Downloads/liminal-assembly/fixed-window-fit-20261018-01 (external artifacts; checkpoints remain on VM)"
+}

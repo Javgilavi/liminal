@@ -5,14 +5,15 @@ device: cuda
 dtype: bfloat16          # VERIFY ~32 GB VRAM reported for BF16 inference
 action_dim: 6            # one arm per skill
 chunk_size: 42           # VERIFY
-execute_steps: 32        # VERIFY default executed per chunk
+execute_steps: 12        # short stop-inspect-continue window; tune from measured control/inference latency
 control_hz: 30.0         # VERIFY
+inference_timeout_s: 30.0 # quarantine this model instance if a worker exceeds the deadline
 obs_history: 8           # VERIFY
 camera_roles: [scene, wrist]
 camera_map:
   right: {scene: top, wrist: right_wrist}
   left:  {scene: top, wrist: left_wrist}
 lora_adapter: null       # e.g. outputs/lora/pick_place_v1 after WS1 fine-tuning
-arm_adapters: {}         # A1 + per-arm LoRA, e.g. {left: outputs/lora/left_v1, right: outputs/lora/right_v1}
-instances: shared        # shared = A1 (one model, single-flight) | per_arm = A2 (one model per arm, ~2x VRAM)
-devices: {}              # A2 only, e.g. {left: "cuda:0", right: "cuda:1"}
+arm_adapters: {}         # Optional per-arm LoRA, e.g. {left: outputs/lora/left_v1, right: outputs/lora/right_v1}
+instances: per_arm        # independent model/locks per arm; shared is an explicit serialized fallback
+devices: {}              # Optional placement, e.g. {left: "cuda:0", right: "cuda:1"}

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from liminal.core.types import JointPositions
+from liminal.core.types import SO101_JOINTS, JointPositions
 
 
 class MockArm:
     def __init__(self, name: str, num_joints: int = 6, home: JointPositions | None = None):
         self.name = name
         self.num_joints = num_joints
+        self.policy_contract = {"embodiment": "so101", "state_units": "degrees_percent",
+                                "joint_order": SO101_JOINTS if num_joints == 6 else
+                                tuple(f"joint_{i}" for i in range(num_joints))}
         self.home = list(home) if home else [0.0] * num_joints
         self.state: JointPositions = list(self.home)
         self.connected = False

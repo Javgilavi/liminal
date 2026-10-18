@@ -1,0 +1,356 @@
+diff --git a/hmi/backend/haller_hmi/arm.py b/hmi/backend/haller_hmi/arm.py
+index c3ee5ba..cdc120a 100644
+--- a/hmi/backend/haller_hmi/arm.py
++++ b/hmi/backend/haller_hmi/arm.py
+@@ -9,6 +9,7 @@ The HMI's safety surface lives on top of lerobot's raw API:
+ from __future__ import annotations
+ 
+ import logging
++import math
+ import time
+ from dataclasses import dataclass, field
+ from functools import partial
+@@ -288,6 +289,27 @@ class ArmHandle:
+             use_degrees=True,
+         )
+         self.robot = SO101Follower(cfg)
++        if not self.config.startup_torque:
++            # Attach without configure(): lerobot's configure context enables
++            # torque on exit, even if it was off before entering.
++            try:
++                self.robot.bus.connect()
++                if not self.robot.is_calibrated:
++                    raise RuntimeError("Motor calibration differs from file; refusing to rewrite it")
++                for joint in self.robot.bus.motors:
++                    if self.robot.bus.read("Torque_Enable", joint, normalize=False):
++                        raise RuntimeError(f"{joint}: torque already enabled; expected a resting arm")
++                    if self.robot.bus.read("Operating_Mode", joint, normalize=False) != 0:
++                        raise RuntimeError(f"{joint}: expected position mode")
++                self.torque_enabled = False
++                self.joint_limits_deg = self._load_joint_limits()
++                self._effort_mode = self._probe_effort_path()
++                logger.info("arm %s connected with torque OFF; motor settings preserved", self.config.id)
++                return
++            except Exception:
++                self.robot.bus.disconnect(disable_torque=False)
++                self.robot = None
++                raise
+         # connect() delegates to robot.calibrate() whenever the motors disagree
+         # with the calibration file — precisely the state the wizard leaves
+         # behind the instant it writes a new one. Substitute the prompt-free
+@@ -445,8 +467,13 @@ class ArmHandle:
+         return get_observation_median(self, ANCHOR_READS)
+ 
+     def send_goal(self, goal_deg: dict[str, float], *,
+-                  speed_cap_deg_s: float | None = None) -> dict[str, float]:
+-        """Write one goal, elapsed-time capped.
++                  speed_cap_deg_s: float | None = None,
++                  max_interval_s: float | None = None,
++                  rate_limit: bool = True) -> dict[str, float]:
++        """Write one goal; policy streaming can explicitly disable slew limiting.
++
++        `rate_limit=False` preserves measured-joint and calibrated-travel checks
++        while passing valid targets unchanged. Manual moves keep the default cap.
+ 
+         `speed_cap_deg_s` lets a caller that already rate-caps every step
+         bring its own ceiling — the teleop session passes its per-tick cap so
+@@ -454,6 +481,8 @@ class ArmHandle:
+         ceiling (the kit's write path carries no cap at all; every write here
+         stays bounded, only the number is the caller's). None means
+         `motion.max_speed_deg_s`, which every discrete-path caller keeps.
++        `max_interval_s` caps elapsed-time credit for streaming policies so a
++        GPU planning pause cannot turn into a large first target step.
+         """
+         self.guard.assert_manual()
+         assert self.robot is not None
+@@ -482,10 +511,15 @@ class ArmHandle:
+         # on a fixed per-call cap and reintroduce the over-speed this fixed.
+         dt = (1.0 / self.motion.ramp_hz) if self._last_command_at is None \
+             else (now - self._last_command_at)
++        # A planning pause must not buy a large instantaneous target step.
++        if max_interval_s is not None:
++            if not math.isfinite(max_interval_s) or max_interval_s <= 0:
++                raise ValueError("max_interval_s must be finite and positive")
++            dt = min(dt, max_interval_s)
+         cap = self.motion.max_speed_deg_s if speed_cap_deg_s is None \
+             else speed_cap_deg_s
+         max_step_deg = step_budget_deg(dt, cap)
+-        capped = limit_step(self._last_commanded, measurable, max_step_deg)
++        capped = limit_step(self._last_commanded, measurable, max_step_deg) if rate_limit else measurable
+         # lerobot expects keys suffixed with ".pos"
+         action = {f"{j}.pos": v for j, v in capped.items()}
+         self.robot.send_action(action)
+diff --git a/hmi/backend/haller_hmi/policy_bridge.py b/hmi/backend/haller_hmi/policy_bridge.py
+index e5878ab..f809a85 100644
+--- a/hmi/backend/haller_hmi/policy_bridge.py
++++ b/hmi/backend/haller_hmi/policy_bridge.py
+@@ -59,11 +59,9 @@ the honest fix is the hello-declares-the-order escalation already recorded in
+ 
+ ## What `submit` does and refuses
+ 
+-Targets land on `ArmHandle.send_goal` with the DEFAULT speed cap — no
+-`speed_cap_deg_s` is passed, so `motion.max_speed_deg_s` governs. The teleop
+-session brings its own ceiling because a practised hand earned one; a policy
+-is not an operator's hand, and the discrete-move cap is the conservative
+-default the contract's commit chain implies, not a downgrade. The mode guard
++Policy targets use `ArmHandle.send_goal(rate_limit=False)` to preserve the
++coordinated model trajectory. Calibrated travel and measured-joint checks remain.
++Manual UI moves keep their speed cap. The mode guard
+ stays (`send_goal` raises on a non-MANUAL arm — an E-STOPPED arm refuses every
+ frame), torque is NEVER enabled here, and a side that names no arm on this rig
+ is refused per action rather than guessed at — the two arms are 40 cm apart.
+@@ -86,7 +84,7 @@ from typing import Any
+ from .lab import lease
+ from .policy_ingest import ACTION_TYPE, PolicyIngest, PolicyRefusal
+ from .recorder import SO101_JOINT_ORDER
+-from .safety import ModeError
++from .safety import Mode, ModeError
+ from .tick import ProducerConflict, ProducerToken, TickBus
+ 
+ logger = logging.getLogger(__name__)
+@@ -179,11 +177,9 @@ class FiniteActionIngest(PolicyIngest):
+     exactly this class (`human_teleop._usable_side`, whose docstring names the
+     `max(lo, min(hi, nan))` hazard); the policy wire gets the same gate here.
+ 
+-    A subclass rather than an edit because `policy_ingest.py` is this port's
+-    ground truth for the wire and is not editable from this side. Raising
+-    `PolicyRefusal` from `decode_action` rides the module's own
+-    malformed-frame rule — the RUN is refused, and the sentence reaches the
+-    child as its exit message rather than dying in a server log.
++    Raising `PolicyRefusal` from `decode_action` uses the wire's
++    malformed-frame rule for legacy and feedback clients: the run is refused,
++    and the sentence reaches the child instead of remaining in a server log.
+     """
+ 
+     def decode_action(self, msg: dict) -> tuple[int, dict]:
+@@ -244,6 +240,7 @@ class PolicyBridge:
+         #: {side: {joint: deg}} — last committed targets, published as the
+         #: tick's `goal_deg` so the HUD shows what the policy is commanding.
+         self._goals: dict[str, dict[str, float]] = {}
++        self._release_arms: set[str] = set()
+         #: Last logged fault sentence, so a stalled camera at 30 Hz is one log
+         #: line, not thirty a second. Cleared on the next good sample.
+         self._fault_msg: str | None = None
+@@ -346,6 +343,7 @@ class PolicyBridge:
+             return None
+         solo = len(sides) == 1
+         state: list[float] = []
++        command: list[float] = []
+         names: list[str] = []
+         snaps: dict[str, dict] = {}
+         for side, arm_id in sides:
+@@ -365,6 +363,7 @@ class PolicyBridge:
+                         "observation withheld rather than padded")
+                     return None
+                 state.append(float(cell["pos"]))
++                command.append(float(self._goals.get(side, {}).get(joint, cell["pos"])))
+                 names.append(joint if solo else f"{side}_{joint}")
+         images = self._images()
+         if images is None:
+@@ -375,7 +374,9 @@ class PolicyBridge:
+         t_unix = time.time()
+         self._publish_tick(t_mono, t_unix, snaps)
+         self._fault_msg = None
+-        return {"state": state, "state_names": names, "images": images}
++        last_commit = getattr(self._ingest, "last_commit", None) or {}
++        return {"state": state, "state_names": names, "images": images,
++                "command": command, "command_seq": int(last_commit.get("seq", -1))}
+ 
+     def _images(self) -> dict[str, str] | None:
+         """base64 JPEG per recorded camera, keyed by `dataset_feature_key`.
+@@ -452,8 +453,12 @@ class PolicyBridge:
+             self._fault(sentence)
+             return {"refused": sentence}
+         try:
+-            # DEFAULT speed cap, on purpose: no `speed_cap_deg_s` is passed.
+-            committed = handle.send_goal(dict(joints))
++            # Policy targets retain their coordinated trajectory; no slew reshaping.
++            period = getattr(self._ingest, "control_period_s", None)
++            timing = {"max_interval_s": period} if period is not None else {}
++            if period is not None:
++                self._release_arms.add(arm_id)
++            committed = handle.send_goal(dict(joints), rate_limit=False, **timing)
+         except ModeError as e:
+             # The mode guard staying is the point — an E-STOPPED arm refuses
+             # every frame and never re-energises from here.
+@@ -542,6 +547,18 @@ class PolicyBridge:
+         its own `_release_if_stale` call is benign (the coroutine returns
+         before it ever awaits again).
+         """
++        # Stop before returning serial ownership to the idle sampler. A dead
++        # client cannot run its own finally block or issue an HTTP stop.
++        for arm_id in self._release_arms:
++            try:
++                handle = self._arms[arm_id]
++                handle.guard.set(Mode.STOP)
++                refused = handle.disable_torque()
++                if refused:
++                    logger.error("policy disconnect: torque release failed on %s: %s", arm_id, refused)
++            except Exception:
++                logger.exception("policy disconnect: failed to stop %s", arm_id)
++        self._release_arms.clear()
+         token, self._token = self._token, None
+         if token is not None and token.live:
+             token.detach()
+diff --git a/hmi/backend/haller_hmi/policy_ingest.py b/hmi/backend/haller_hmi/policy_ingest.py
+index 0a7f40f..1f59777 100644
+--- a/hmi/backend/haller_hmi/policy_ingest.py
++++ b/hmi/backend/haller_hmi/policy_ingest.py
+@@ -28,6 +28,11 @@ child already speaks (`rollout_runner.IngestClient`).
+     server -> child   policy_observation  state + images, one per inference tick
+     child -> server   policy_action       five frozen keys, {side: {joint: deg}}
+ 
++Clients opting into `command_feedback: 1` in hello also receive
++`policy_action_ack` with the commit outcome, and observations carry the paired
++`command` vector and `command_seq`. The acknowledgement echoes the negotiated
++version. Legacy clients retain the original message shapes.
++
+ Every spelling below is a MODULE CONSTANT rather than an inline literal, and
+ that is load-bearing rather than tidy. The two halves live in different venvs
+ and cannot import each other — `lab/` and this module are banned from the
+@@ -48,6 +53,7 @@ from __future__ import annotations
+ import asyncio
+ import json
+ import logging
++import math
+ import os
+ import time
+ from collections.abc import Callable
+@@ -180,6 +186,8 @@ class PolicyIngest:
+         self.observations_sent = 0
+         self.last_commit: dict | None = None
+         self.last_refusal: str | None = None
++        self.command_feedback = False
++        self.control_period_s: float | None = None
+ 
+     # ---- lifecycle -------------------------------------------------------
+ 
+@@ -327,7 +335,7 @@ class PolicyIngest:
+         derived rather than declared, and why a self-describing wire is the
+         cheapest thing available until the hello can carry it.
+         """
+-        return {
++        message = {
+             "type": OBSERVATION_TYPE,
+             "seq": int(seq),
+             "t_ms": int(time.time() * 1000),
+@@ -335,6 +343,10 @@ class PolicyIngest:
+             "state_names": list(payload.get("state_names", [])),
+             "images": dict(payload.get("images") or {}),
+         }
++        if self.command_feedback:
++            message.update(command=payload["command"], command_seq=payload["command_seq"],
++                           run_id=self.active_run_id)
++        return message
+ 
+     # ---- the connection --------------------------------------------------
+ 
+@@ -357,13 +369,23 @@ class PolicyIngest:
+                 await self._send(writer, self.refusal_message(str(e)))
+                 return
+ 
++            feedback = hello.get("command_feedback") == 1
++            hz = float(hello.get("control_hz_declared") or 0.0)
++            if feedback and (not math.isfinite(hz) or not 0 < hz <= 240):
++                await self._send(writer, self.refusal_message("command feedback requires a finite control rate in (0, 240]"))
++                return
++            self.command_feedback = feedback
++            self.control_period_s = 1.0 / hz if feedback else None
+             self.active_run_id = run_id
+             self.last_refusal = None
+-            await self._send(writer, self.ack_message())
++            self.last_commit = None
++            ack = self.ack_message()
++            if feedback:
++                ack["command_feedback"] = 1
++            await self._send(writer, ack)
+             logger.info("policy ingest ADMITTED run %s from %s (server pid %d)",
+                         run_id, peer, os.getpid())
+-            await self._stream(reader, writer,
+-                               float(hello.get("control_hz_declared") or 0.0))
++            await self._stream(reader, writer, hz)
+         except (ConnectionError, asyncio.IncompleteReadError):
+             logger.info("policy ingest: run %s disconnected", run_id)
+         except Exception:
+@@ -376,6 +398,8 @@ class PolicyIngest:
+             # second thing that can disagree with the first.
+             if self.active_run_id == run_id:
+                 self.active_run_id = None
++                self.command_feedback = False
++                self.control_period_s = None
+                 if self._on_session_end is not None:
+                     try:
+                         self._on_session_end()
+@@ -401,6 +425,7 @@ class PolicyIngest:
+         obs_seq = 0
+         period = 1.0 / declared_hz if declared_hz > 0 else 0.05
+         next_obs = 0.0
++        last_action_seq = -1
+         while self.active_run_id is not None:
+             now = time.monotonic()
+             if now >= next_obs:
+@@ -422,6 +447,14 @@ class PolicyIngest:
+             self.actions_received += 1
+             try:
+                 seq, action = self.decode_action(msg)
++                if self.command_feedback and (type(msg.get("seq")) is not int or seq != last_action_seq + 1):
++                    raise PolicyRefusal("command feedback requires consecutive action sequence numbers starting at zero")
++                if self.command_feedback and (
++                    not isinstance(msg.get("t_ms"), (int, float))
++                    or not math.isfinite(msg["t_ms"])
++                    or abs(time.time() - msg["t_ms"] / 1000) > 0.5
++                ):
++                    raise PolicyRefusal("command timestamp is stale or invalid")
+             except PolicyRefusal as e:
+                 # A malformed frame refuses the RUN rather than being skipped.
+                 # Skipping would leave a policy driving on a subset of its own
+@@ -437,6 +470,10 @@ class PolicyIngest:
+             outcome = self._submit(self.active_run_id or "", seq, action)
+             self.actions_committed += 1
+             self.last_commit = outcome
++            last_action_seq = seq
++            if self.command_feedback:
++                await self._send(writer, {"type": "policy_action_ack", "run_id": self.active_run_id,
++                                          "seq": seq, "t_ms": int(time.time() * 1000), "result": outcome})
+ 
+     # ---- framing ---------------------------------------------------------
+ 
+diff --git a/hmi/backend/haller_hmi/sim/arm.py b/hmi/backend/haller_hmi/sim/arm.py
+index 454ef17..e37f171 100644
+--- a/hmi/backend/haller_hmi/sim/arm.py
++++ b/hmi/backend/haller_hmi/sim/arm.py
+@@ -14,6 +14,7 @@ HMI goal dict works against either a real or a sim arm.
+ from __future__ import annotations
+ 
+ import logging
++import math
+ import time
+ from dataclasses import dataclass, field
+ from typing import TYPE_CHECKING
+@@ -99,7 +100,9 @@ class SimArmHandle:
+         pass
+ 
+     def send_goal(self, goal_deg: dict[str, float], *,
+-                  speed_cap_deg_s: float | None = None) -> dict[str, float]:
++                  speed_cap_deg_s: float | None = None,
++                  max_interval_s: float | None = None,
++                  rate_limit: bool = True) -> dict[str, float]:
+         self.guard.assert_manual()
+         clamped = clamp_joint_goal(goal_deg, self.joint_limits_deg)
+         now = time.monotonic()
+@@ -123,10 +126,14 @@ class SimArmHandle:
+         # on a fixed per-call cap and reintroduce the over-speed this fixed.
+         dt = (1.0 / self.motion.ramp_hz) if self._last_command_at is None \
+             else (now - self._last_command_at)
++        if max_interval_s is not None:
++            if not math.isfinite(max_interval_s) or max_interval_s <= 0:
++                raise ValueError("max_interval_s must be finite and positive")
++            dt = min(dt, max_interval_s)
+         cap = self.motion.max_speed_deg_s if speed_cap_deg_s is None \
+             else speed_cap_deg_s
+         max_step_deg = step_budget_deg(dt, cap)
+-        capped = limit_step(self._last_commanded, measurable, max_step_deg)
++        capped = limit_step(self._last_commanded, measurable, max_step_deg) if rate_limit else measurable
+         # Translate snake_case → CamelCase + add arm prefix for the world.
+         mjcf_goal = {
+             f"{self._prefix}{LEROBOT_TO_MJCF[j]}": v

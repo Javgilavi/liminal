@@ -1,6 +1,9 @@
 __pycache__/
 *.egg-info/
 .venv/
+.venv-robot/
+build/
+dist/
 .pytest_cache/
 .ruff_cache/
 runs/
@@ -10,3 +13,9 @@ sim_assets/
 *.safetensors
 *.ckpt
 .env
+
+# Local profiles and generated experiment artifacts
+configs/policy/*.local.yaml
+experiments/**/artifacts/
+*.pt
+*.pth

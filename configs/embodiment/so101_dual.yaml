@@ -1,3 +1,5 @@
+# HISTORICAL / SUPERSEDED: original unified embodiment fine-tune, not the current LoRA runtime.
+# Retained for compatibility and mock tests; no validated 12-D checkpoint is supplied.
 # Two SO-101 arms as one 12-D embodiment for option B (bimanual fine-tune).
 # Order must match arm_groups.both in configs/robot/so101_dual.yaml.
 name: so101_dual

@@ -1,0 +1,20 @@
+:root {color-scheme: dark; font: 15px/1.5 system-ui; background: #11151b; color: #e8edf4}
+body {max-width: 1120px; margin: auto; padding: 20px}
+header, footer {display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap}
+h1 {margin: 0; font-size: 28px; letter-spacing: -.05em} h2 {font-size: 18px; margin-top: 0}
+#link, footer, .owner {color: #aebaca} .notice {color: #eed197}
+button, select {font: inherit; padding: 9px 14px; background: #293446; color: inherit; border: 1px solid #4b5d75; border-radius: 7px; cursor: pointer}
+button:hover:enabled {background: #3d526e} button:disabled {opacity: .35; cursor: default}
+button.danger {background: #b22232; border-color: #ef7380; color: white; font-weight: 700; min-height: 54px}
+#arms, #cameras {display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px}
+article, main > section:not(#arms) {padding: 20px; background: #1b222d; border: 1px solid #303d50; border-radius: 10px; margin-bottom: 16px}
+table {width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 14px}
+th {text-align: left; font-weight: 500} td, th {padding: 7px 2px; border-bottom: 1px solid #303d50}
+td.value {font-variant-numeric: tabular-nums} td button {padding: 3px 14px; margin: 0 3px}
+#error {color: #ff9f9f; min-height: 1.5em; white-space: pre-wrap}
+img {width: 100%; border-radius: 7px} pre {white-space: pre-wrap}
+figure {margin: 0; min-width: 0; min-height: 200px}
+figcaption {display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap}
+figcaption span {font-size: 13px; color: #aebaca}
+figcaption [data-state="live"] {color: #92dbb0} figcaption [data-state="error"] {color: #ff9f9f}
+button:focus-visible, select:focus-visible {outline: 3px solid #a3c8ff; outline-offset: 2px}

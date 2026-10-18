@@ -12,6 +12,7 @@ validates it. Grammar (each node is a single-key mapping):
     retry:    {attempts?, do: node, recovery?: node}
     timeout:  {seconds, do: node}
     wait:     {condition, timeout_s?}           # UNTIL a condition
+    inspect:  {predicates, cameras?, definitions?, context?, exclusive_groups?, timeout_s?}
     check:    condition
     set:      {key, value?}
 
@@ -29,6 +30,7 @@ import yaml
 
 from liminal.core.types import Skill
 from liminal.orchestration import bt
+from liminal.perception.types import InspectionRequest
 
 
 class TaskSpecError(ValueError):
@@ -46,6 +48,15 @@ class TaskSpec:
 
 
 _SKILL_FIELDS = {"arm", "name", "prompt", "target", "success", "timeout_s", "verify_timeout_s", "zones", "params"}
+_INSPECT_FIELDS = {
+    "predicates",
+    "cameras",
+    "definitions",
+    "context",
+    "exclusive_groups",
+    "timeout_s",
+    "retry_delay_s",
+}
 
 
 def load_task(path: str | Path, **kw: Any) -> TaskSpec:
@@ -152,6 +163,47 @@ class _Compiler:
             raise TaskSpecError(f"{path}: 'wait' needs condition")
         return bt.WaitFor(b["condition"], timeout_s=b.get("timeout_s", 30.0), name=name)
 
+    def _inspect(self, b: Any, path: str, name: str | None) -> bt.Node:
+        if not isinstance(b, dict):
+            raise TaskSpecError(f"{path}: expected a mapping")
+        unknown = set(b) - _INSPECT_FIELDS
+        if unknown:
+            raise TaskSpecError(f"{path}: unknown fields {sorted(unknown)}")
+        predicates = _strings(b.get("predicates"), f"{path}.predicates")
+        cameras = _strings(b.get("cameras", ["top"]), f"{path}.cameras")
+        context = b.get("context", "")
+        if not isinstance(context, str):
+            raise TaskSpecError(f"{path}.context: expected a string")
+        definitions = b.get("definitions", {})
+        if not isinstance(definitions, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in definitions.items()
+        ):
+            raise TaskSpecError(f"{path}.definitions: expected a string-to-string mapping")
+        raw_groups = b.get("exclusive_groups", [])
+        if not isinstance(raw_groups, list):
+            raise TaskSpecError(f"{path}.exclusive_groups: expected a list")
+        groups = tuple(
+            _strings(group, f"{path}.exclusive_groups[{index}]") for index, group in enumerate(raw_groups)
+        )
+        try:
+            timeout_s = float(b.get("timeout_s", 5.0))
+            request = InspectionRequest(
+                predicates=predicates,
+                cameras=cameras,
+                context=context,
+                definitions=dict(definitions),
+                timeout_s=timeout_s,
+                exclusive_groups=groups,
+            )
+            return bt.Inspect(
+                request,
+                timeout_s=timeout_s,
+                retry_delay_s=float(b.get("retry_delay_s", 0.05)),
+                name=name,
+            )
+        except (TypeError, ValueError) as exc:
+            raise TaskSpecError(f"{path}: {exc}") from exc
+
     def _check(self, b: Any, path: str, name: str | None) -> bt.Node:
         if not isinstance(b, str):
             raise TaskSpecError(f"{path}: 'check' takes a condition string")
@@ -161,3 +213,9 @@ class _Compiler:
         if not isinstance(b, dict) or "key" not in b:
             raise TaskSpecError(f"{path}: 'set' needs key")
         return bt.SetFact(b["key"], b.get("value", True), name=name)
+
+
+def _strings(value: Any, path: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not value or any(not isinstance(item, str) or not item for item in value):
+        raise TaskSpecError(f"{path}: expected a non-empty list of strings")
+    return tuple(value)

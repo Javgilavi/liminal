@@ -1,7 +1,8 @@
 """Embodiment descriptions and action-space mapping (owned by WS4).
 
-The released FLUX checkpoint is single-arm (6-D action). Two ways to drive a
-bimanual robot such as XLeRobot, compared in docs/research/04_xlerobot_sim.md:
+The current runtime uses task LoRA and two independent 6-D per-arm policies.
+The original unified XLeRobot fine-tune is superseded. Historical mapping modes
+remain compatible, as described in docs/research/04_xlerobot_sim.md:
 
   A. "per_arm"  - one policy session per arm, each seeing its own 6-D slice + wrist
      camera; the orchestrator coordinates. No retraining of the action head.

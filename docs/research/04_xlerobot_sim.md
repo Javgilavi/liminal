@@ -1,5 +1,15 @@
 # WS4: Simulation and bimanual XLeRobot embodiment adaptation
 
+**Historical research brief — embodiment fine-tuning superseded.** The initial plan was to fine-tune
+a unified bimanual XLeRobot embodiment (12-D actions). That plan was superseded by task LoRA fine-
+tuning of the existing 6-D SO-101 policy, with two independent FLUX instances, one per arm,
+coordinated by the real skill-runtime harness (behavior tree, checkpoint registry, perception and
+safety).
+
+The original alternatives and proposed milestones below are retained as history,
+not an active training plan. Current simulation work evaluates single-arm LoRAs;
+there is no simulation assembly orchestrator in the runtime. See [PLAN.md](../../PLAN.md).
+
 ## Two separate goals
 
 1. **Sim for orchestration** (needed by H12): same `Arm` API, physics-backed task tests,
@@ -26,7 +36,7 @@
 | `per_arm` | two sessions of the single-arm checkpoint, each its own 6-D slice + wrist cam | single-arm data per arm | works with the released checkpoint; orchestrator coordinates | no learned inter-arm coordination |
 | `bimanual` | fine-tune on concatenated 12-D (+ head/base) actions; skills target the `both` group | bimanual demos | learned coordination (handovers, bimanual carry) | new action head/normalisation; much more data |
 
-Recommendation: ship `per_arm` (option A, matches the hackathon architecture), research
+Original recommendation (superseded): ship `per_arm` (option A, matches the hackathon architecture), research
 `bimanual` (option B). Code path for B: `configs/policy/flux3_dual_bimanual.yaml` +
 `configs/embodiment/so101_dual.yaml` + `configs/tasks/lid_hold_insert_bimanual.yaml`.
 
@@ -37,7 +47,7 @@ Recommendation: ship `per_arm` (option A, matches the hackathon architecture), r
   Useful for wrist-camera visual priors; the action mapping to SO-101 joints is non-trivial.
 - Large cross-embodiment sets (Open X-Embodiment, DROID) for reference on mixing embodiments.
 
-## First embodiment fine-tune (plan)
+## First embodiment fine-tune (original plan, not pursued)
 
 1. Convert chosen datasets to the `xlerobot.yaml` layout with `Embodiment.split/merge`.
 2. Smallest run that produces a curve (few k steps), eval in sim on one bimanual task.

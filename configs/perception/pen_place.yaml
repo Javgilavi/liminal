@@ -1,0 +1,16 @@
+model:
+  provider: qwen
+  checkpoint: Qwen/Qwen3-VL-4B-Instruct
+  revision: ebb281ec70b05090aa6165b016eac8ec08e71b17  # VERIFY with the first local evaluation.
+  device: cuda:0             # VERIFY against the deployment machine's GPU layout
+  dtype: bfloat16
+  quantization: bnb_4bit     # Set to none for an unquantized BF16 baseline.
+  max_new_tokens: 150
+
+inspection:
+  cameras: [top, left_wrist]
+  confirmations: 2
+  timeout_s: 10
+  retry_delay_s: 0.1
+  definitions:
+    red_pen_in_slot: The red pen is visibly seated in its intended cardboard-box slot and released by the gripper.

@@ -1,0 +1,313 @@
+{
+  "run_id": "20261017-162916",
+  "integration": "BFL standalone loader + historical Haller/Liminal runner",
+  "prompt": "Grasp the white cup",
+  "status": "stopped",
+  "stop_reason": "selected arm stopped or torque disabled; refusing to re-engage",
+  "interpretation": "Historical execution behavior; final snapshot follows torque release and passive sag. Not current official-policy settings.",
+  "inference": {
+    "chunk_size": 42,
+    "n_action_steps": 32,
+    "control_hz": 30.0,
+    "num_inference_steps": 4,
+    "sampler": "euler",
+    "guidance_scale": 3.0,
+    "guidance_scale_action": null,
+    "sampler_shift": 6.93,
+    "seed": 42,
+    "n_obs_steps": 8,
+    "history_snapshots": 2
+  },
+  "initial_state": [
+    7.472527472527473,
+    -16.703296703296704,
+    28.571428571428573,
+    78.72527472527473,
+    -10.461538461538462,
+    16.55759162303665
+  ],
+  "chunks": [
+    {
+      "time": 1792247372.947484,
+      "type": "chunk",
+      "plan": 0,
+      "commands": 32,
+      "command_phase_s": 1.091,
+      "command_phase_hz": 29.32,
+      "ack_mean_ms": 3.11,
+      "ack_max_ms": 6.97,
+      "calibrated_clip_counts": {
+        "shoulder_pan": 0,
+        "shoulder_lift": 0,
+        "elbow_flex": 0,
+        "wrist_flex": 0,
+        "wrist_roll": 0,
+        "gripper": 0
+      },
+      "controller_adjustment_counts": {
+        "shoulder_pan": 0,
+        "shoulder_lift": 26,
+        "elbow_flex": 2,
+        "wrist_flex": 0,
+        "wrist_roll": 0,
+        "gripper": 16
+      },
+      "max_controller_adjustment": {
+        "shoulder_pan": 0.0,
+        "shoulder_lift": 1.1789707944408292,
+        "elbow_flex": 0.03137334187825758,
+        "wrist_flex": 0.0,
+        "wrist_roll": 0.0,
+        "gripper": 3.5837632751548227
+      },
+      "measured_delta": {
+        "shoulder_pan": -11.165,
+        "shoulder_lift": 18.725,
+        "elbow_flex": 12.396,
+        "wrist_flex": 5.626,
+        "wrist_roll": 1.055,
+        "gripper": 6.021
+      },
+      "sampled_peak_load_fraction": {
+        "shoulder_pan": 0.052,
+        "shoulder_lift": 0.044,
+        "elbow_flex": 0.048,
+        "wrist_flex": 0.06,
+        "wrist_roll": 0.044,
+        "gripper": 0.104
+      },
+      "snapshot": {
+        "measured": [
+          -3.6923076923076925,
+          2.021978021978022,
+          40.967032967032964,
+          84.35164835164835,
+          -9.406593406593407,
+          22.578534031413614
+        ],
+        "committed": [
+          -4.499837875366211,
+          3.0849242864787785,
+          41.720338999667234,
+          85.6171646118164,
+          -8.811677932739258,
+          24.518529739371544
+        ],
+        "command_seq": 31,
+        "tracking_error": [
+          -0.808,
+          1.063,
+          0.753,
+          1.266,
+          0.595,
+          1.94
+        ],
+        "mode": "manual",
+        "torque": true,
+        "load": {
+          "shoulder_pan": 0.044,
+          "shoulder_lift": -0.032,
+          "elbow_flex": -0.024,
+          "wrist_flex": -0.032,
+          "wrist_roll": -0.024,
+          "gripper": -0.088
+        },
+        "age_ms": {
+          "observation": 27.7,
+          "telemetry": 26.4,
+          "wrist": 14.2
+        }
+      }
+    },
+    {
+      "time": 1792247374.9399016,
+      "type": "chunk",
+      "plan": 1,
+      "commands": 32,
+      "command_phase_s": 1.088,
+      "command_phase_hz": 29.4,
+      "ack_mean_ms": 3.51,
+      "ack_max_ms": 5.98,
+      "calibrated_clip_counts": {
+        "shoulder_pan": 0,
+        "shoulder_lift": 0,
+        "elbow_flex": 0,
+        "wrist_flex": 12,
+        "wrist_roll": 0,
+        "gripper": 0
+      },
+      "controller_adjustment_counts": {
+        "shoulder_pan": 0,
+        "shoulder_lift": 32,
+        "elbow_flex": 9,
+        "wrist_flex": 11,
+        "wrist_roll": 0,
+        "gripper": 6
+      },
+      "max_controller_adjustment": {
+        "shoulder_pan": 0.0,
+        "shoulder_lift": 2.821111043294266,
+        "elbow_flex": 0.14683278401692945,
+        "wrist_flex": 0.19933827718098485,
+        "wrist_roll": 0.0,
+        "gripper": 0.7739048425331312
+      },
+      "measured_delta": {
+        "shoulder_pan": -8.879,
+        "shoulder_lift": 17.846,
+        "elbow_flex": 8.0,
+        "wrist_flex": 10.11,
+        "wrist_roll": 4.835,
+        "gripper": 6.021
+      },
+      "sampled_peak_load_fraction": {
+        "shoulder_pan": 0.064,
+        "shoulder_lift": 0.112,
+        "elbow_flex": 0.348,
+        "wrist_flex": 0.16,
+        "wrist_roll": 0.06,
+        "gripper": 0.1
+      },
+      "snapshot": {
+        "measured": [
+          -13.274725274725276,
+          21.274725274725274,
+          50.02197802197802,
+          95.25274725274726,
+          -4.21978021978022,
+          30.36649214659686
+        ],
+        "committed": [
+          -13.663535118103027,
+          24.33742877322463,
+          56.95176696777341,
+          98.4814453125,
+          -3.224976062774658,
+          31.298824310302734
+        ],
+        "command_seq": 63,
+        "tracking_error": [
+          -0.389,
+          3.063,
+          6.93,
+          3.229,
+          0.995,
+          0.932
+        ],
+        "mode": "manual",
+        "torque": true,
+        "load": {
+          "shoulder_pan": 0.024,
+          "shoulder_lift": -0.112,
+          "elbow_flex": -0.332,
+          "wrist_flex": -0.156,
+          "wrist_roll": -0.056,
+          "gripper": -0.024
+        },
+        "age_ms": {
+          "observation": 34.5,
+          "telemetry": 33.2,
+          "wrist": 1.2
+        }
+      }
+    },
+    {
+      "time": 1792247376.9461503,
+      "type": "chunk",
+      "plan": 2,
+      "commands": 32,
+      "command_phase_s": 1.091,
+      "command_phase_hz": 29.34,
+      "ack_mean_ms": 2.31,
+      "ack_max_ms": 6.1,
+      "calibrated_clip_counts": {
+        "shoulder_pan": 0,
+        "shoulder_lift": 0,
+        "elbow_flex": 0,
+        "wrist_flex": 32,
+        "wrist_roll": 0,
+        "gripper": 0
+      },
+      "controller_adjustment_counts": {
+        "shoulder_pan": 15,
+        "shoulder_lift": 32,
+        "elbow_flex": 6,
+        "wrist_flex": 0,
+        "wrist_roll": 0,
+        "gripper": 10
+      },
+      "max_controller_adjustment": {
+        "shoulder_pan": 0.2626736958821603,
+        "shoulder_lift": 2.2919820149739607,
+        "elbow_flex": 0.1469930013020786,
+        "wrist_flex": 0.0,
+        "wrist_roll": 0.0,
+        "gripper": 3.2180862426757884
+      },
+      "measured_delta": {
+        "shoulder_pan": -13.363,
+        "shoulder_lift": 9.582,
+        "elbow_flex": -0.615,
+        "wrist_flex": -0.176,
+        "wrist_roll": 4.044,
+        "gripper": 2.683
+      },
+      "sampled_peak_load_fraction": {
+        "shoulder_pan": 0.148,
+        "shoulder_lift": 0.596,
+        "elbow_flex": 0.848,
+        "wrist_flex": 0.168,
+        "wrist_roll": 0.112,
+        "gripper": 0.104
+      },
+      "snapshot": {
+        "measured": [
+          -26.98901098901099,
+          31.912087912087912,
+          49.31868131868132,
+          95.07692307692308,
+          -0.17582417582417584,
+          33.83507853403142
+        ],
+        "committed": [
+          -30.474454879760764,
+          45.65632082660156,
+          67.13640213012695,
+          98.4814453125,
+          2.272101879119873,
+          36.128799438476555
+        ],
+        "command_seq": 95,
+        "tracking_error": [
+          -3.485,
+          13.744,
+          17.818,
+          3.405,
+          2.448,
+          2.294
+        ],
+        "mode": "manual",
+        "torque": true,
+        "load": {
+          "shoulder_pan": 0.148,
+          "shoulder_lift": -0.596,
+          "elbow_flex": -0.848,
+          "wrist_flex": -0.164,
+          "wrist_roll": -0.1,
+          "gripper": -0.104
+        },
+        "age_ms": {
+          "observation": 29.0,
+          "telemetry": 45.3,
+          "wrist": 16.2
+        }
+      }
+    }
+  ],
+  "evidence_sha256": {
+    "report.json": "7b4322c6e58cf256c61ac826b0bef82e9143d19aec7996b4f6e48ce4cd8f4d3f",
+    "events.jsonl": "b76d840763b256fdb98f2488cc1ab4910c19725ef282b94a1b216b4429435873",
+    "plans.jsonl": "5c99ef68cab4e5d8b4ee920e3da53e0cbb68ae29f4ba45fe525145ba22918394",
+    "submitted-actions.jsonl": "5ffa3661fb66a18f5ffd7c44bb8b46bd993c59e6a7623de8aa4159d3c7742ba0"
+  }
+}

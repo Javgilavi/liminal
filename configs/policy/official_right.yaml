@@ -1,0 +1,13 @@
+# Official LeRobot Flux3Policy + saved processors on the VM; LeRobot motor driver locally.
+# SSH transports explicit histories/chunks. This is not the stock single-process rollout CLI.
+arm: right
+expected_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B14030445-if00
+calibration_id: haller_right
+prompt: Grasp the white cup.
+scene_device: /dev/v4l/by-path/pci-0000:06:00.3-usb-0:2:1.3-video-index0
+wrist_device: /dev/v4l/by-path/pci-0000:06:00.3-usb-0:1.2:1.0-video-index0
+vm: prd-inf-vm-01
+zone: europe-west1-b
+project: motion-mvp
+python: /liminal/train-env/bin/python
+worker: /liminal/scripts/flux_lerobot_worker.py

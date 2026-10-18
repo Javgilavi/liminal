@@ -13,6 +13,8 @@ Candidate scenes (check licences/quality before adopting; see docs/research/04):
 
 from __future__ import annotations
 
+import atexit
+import math
 import threading
 import time
 from typing import Any
@@ -38,6 +40,9 @@ class MujocoWorld:
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="mujoco", daemon=True)
         self._thread.start()
+        # Nothing else stops the world (arms share it, disconnect is a no-op): without this the daemon
+        # thread can still be in mj_step while the interpreter frees the model, a segfault at exit.
+        atexit.register(self.stop)
 
     def _run(self) -> None:
         dt = 1.0 / self.sim_hz
@@ -66,16 +71,36 @@ class MujocoWorld:
 
 
 class MujocoArm:
-    """Units are whatever the MJCF actuators use (usually radians). Map to the real
-    arm's units (LeRobot degrees / normalized range) in configs, not here."""
+    """Same units as the real SO-101 (`hardware/so101.py`, LeRobot degrees mode), so robot configs, task
+    trees and policies are shared with hardware: arm joints in degrees (the MJCF's zero is the middle of the
+    range, like LeRobot's calibration), gripper 0-100 % across its joint range (100 = open). The MJCF works
+    in radians; the conversion is the one examples/dual_so101_sim/twin/expert.py uses."""
 
     def __init__(self, name: str, world: MujocoWorld, actuator_prefix: str):
         self.name = name
         self.world = world
         self.ids = world.actuator_ids(actuator_prefix)
         self.num_joints = len(self.ids)
+        model = world.model
         # Position actuators: the joint each one drives.
-        self.qpos_adr = [int(world.model.jnt_qposadr[world.model.actuator_trnid[i, 0]]) for i in self.ids]
+        joints = [int(model.actuator_trnid[i, 0]) for i in self.ids]
+        self.qpos_adr = [int(model.jnt_qposadr[j]) for j in joints]
+        # Gripper: joint range (radians) that maps to 0-100 %.
+        self.grip_range = {k: (float(model.jnt_range[j][0]), float(model.jnt_range[j][1]))
+                           for k, (i, j) in enumerate(zip(self.ids, joints, strict=True))
+                           if model.actuator(i).name.removeprefix(actuator_prefix) == "gripper"}
+
+    def _to_robot(self, k: int, rad: float) -> float:
+        if k in self.grip_range:
+            lo, hi = self.grip_range[k]
+            return (rad - lo) / (hi - lo) * 100.0
+        return math.degrees(rad)
+
+    def _to_mujoco(self, k: int, value: float) -> float:
+        if k in self.grip_range:
+            lo, hi = self.grip_range[k]
+            return lo + min(max(value, 0.0), 100.0) / 100.0 * (hi - lo)
+        return math.radians(value)
 
     def connect(self) -> None:
         pass
@@ -85,12 +110,14 @@ class MujocoArm:
 
     def read_state(self) -> JointPositions:
         with self.world.lock:
-            return [float(self.world.data.qpos[a]) for a in self.qpos_adr]
+            return [self._to_robot(k, float(self.world.data.qpos[a])) for k, a in enumerate(self.qpos_adr)]
 
     def send_action(self, positions: JointPositions) -> None:
+        if len(positions) != self.num_joints:
+            raise ValueError(f"{self.name}: expected {self.num_joints} joints, got {len(positions)}")
         with self.world.lock:
-            for i, p in zip(self.ids, positions, strict=True):
-                self.world.data.ctrl[i] = p
+            for k, (i, p) in enumerate(zip(self.ids, positions, strict=True)):
+                self.world.data.ctrl[i] = self._to_mujoco(k, float(p))
 
     def hold(self, positions: JointPositions | None = None) -> None:
         # Position actuators already hold the last ctrl target.

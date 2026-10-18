@@ -1,0 +1,27 @@
+{
+  "validation_id": "single-arm-v1",
+  "date": "2026-10-17",
+  "timezone": "Europe/Rome",
+  "scope": "Single-arm FLUX infrastructure, MuJoCo adaptation and physical inference trials",
+  "lerobot_repository": "https://github.com/huggingface/lerobot",
+  "lerobot_revision": "e624f3f7f8411ec3a02635d06e79373341e5ef35",
+  "base_repository": "black-forest-labs/flux-3-action-so101",
+  "base_revision": "0713a7af6768562e618e81d534372c6795d41b2e",
+  "hf_space_revision": "d7da38e032da0e136d6de21c218dc616982a8cc9",
+  "menagerie_revision": "62ab00f2bc44f6f20c1c9b7a13f3fb1dd41a4e35",
+  "original_simulation_results_sha256": "0d81f1b96927ab7e18b75e34bbfd78e99ff5e8d1644993c62ebcca2e275e8cfc",
+  "committed_artifacts": {
+    "train.json": "d3d06fa7b94d735d8832311c376dcd3f44600026b32dade2f1dc20e93279e35d",
+    "real-robot-results.json": "d8a8f703171ab19d4723622fff5da412aa4fcb16b2d625677c1e1a58a53041a2",
+    "legacy-run-audit.json": "088da143847d4b55c00455906449c678721aeecec547ee5c3d1528e28c372a24",
+    "simulation-results.json": "0d81f1b96927ab7e18b75e34bbfd78e99ff5e8d1644993c62ebcca2e275e8cfc"
+  },
+  "raw_artifact_locations": {
+    "simulation": "GPU VM: /liminal/experiments/sim-task-native-hf-20261017",
+    "source_demonstrations": "GPU VM: /liminal/experiments/sim-task-lora-20261017/raw",
+    "real_robot": "Bench laptop: ~/.local/share/liminal/inference"
+  },
+  "availability": "Raw artifacts are retained on the experiment machines, not uploaded or bundled. Paths require access to those machines.",
+  "excluded_artifacts": "Weights, optimizer states, raw datasets, complete camera histories and full videos are outside Git.",
+  "manipulation_claim": "Simulation partial grasp improvement; zero complete placements. Physical task success unverified."
+}
