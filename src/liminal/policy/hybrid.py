@@ -3,6 +3,10 @@
 The model sees RGB, proprioception, robot-only FK proposals and episode history.
 It selects student / edit / eef / stop. Only deterministic local IK and the existing
 SafetySupervisor may turn a validated decision into a motor command.
+
+Two users: the standalone runners (official_live, live; never alongside the harness on the
+same arm) and the harness's FluxPolicyBackend, one controller per skill target (``hybrid:``
+in a policy config, see HarnessHybrid).
 """
 from __future__ import annotations
 
@@ -352,6 +356,69 @@ class HybridController:
         self.previous_images = [{**image, "label": image["label"].replace("current_", "previous_before_")}
                                 for image in self._images]
         log("hybrid_executed", **entry)
+
+    def reset(self):
+        """Forget the episode at a skill boundary: the next skill's goal is a different prompt."""
+        self.history = []
+        self.previous_images = []
+        self._images = []
+
+
+@dataclass
+class HarnessHybrid:
+    """The harness's ``hybrid:`` policy-config mapping (FluxPolicyBackend), resolved per skill target.
+
+    ``config:`` names a gate YAML (configs/hybrid/*.yaml) whose fields become the defaults, except its
+    ``enabled``: only this mapping, or an ``arms:`` entry, switches the gate on, so it is off unless set.
+    ``arms:`` overrides any field per skill target, because each arm has its own encoder zeroes
+    (joint_signs, joint_offsets_deg, kinematics_verified).
+    """
+
+    shared: dict = field(default_factory=dict)
+    arms: dict[str, dict] = field(default_factory=dict)
+
+    @classmethod
+    def parse(cls, raw) -> HarnessHybrid:
+        if not raw:
+            return cls()
+        if not isinstance(raw, dict):
+            raise ValueError("hybrid configuration must be a mapping")
+        raw = dict(raw)
+        shared = {}
+        path = raw.pop("config", None)
+        if path is not None:
+            loaded = yaml.safe_load(Path(path).read_text())
+            if not isinstance(loaded, dict):
+                raise ValueError(f"{path}: hybrid configuration must be a mapping")
+            shared = {key: value for key, value in loaded.items() if key != "enabled"}
+        arms = raw.pop("arms", None) or {}
+        if not isinstance(arms, dict) or not all(isinstance(v, dict) for v in arms.values()):
+            raise ValueError("hybrid arms must map each skill target to a mapping")
+        settings = cls({**shared, **raw}, {target: dict(values) for target, values in arms.items()})
+        for target in (None, *settings.arms):
+            settings.config(target)  # a bad field fails when the backend is built, not mid-task
+        return settings
+
+    def config(self, target: str | None) -> HybridConfig:
+        try:
+            return HybridConfig(**{**self.shared, **self.arms.get(target, {})})
+        except TypeError as exc:
+            raise ValueError(f"hybrid configuration for {target or 'every arm'}: {exc}") from exc
+
+
+def jpeg_base64(frame) -> str:
+    """An RGB camera frame (HxWx3 uint8, what Camera.read returns) -> the base64 JPEG the reasoner sees."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    array = np.asarray(frame)
+    if array.ndim != 3 or array.shape[2] not in (3, 4) or not array.size:
+        raise ValueError("hybrid camera frame must be an HxWx3 RGB image")
+    buffer = io.BytesIO()
+    Image.fromarray(array.astype(np.uint8)).convert("RGB").save(buffer, format="JPEG", quality=90)
+    return base64.b64encode(buffer.getvalue()).decode()
 
 
 def build_hybrid(cfg: dict, *, execute: bool):

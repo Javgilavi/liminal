@@ -1,6 +1,8 @@
 # Opus 5.5 recovery gate on the Haller, OBSERVATION ONLY: kinematics_verified stays false, so the runner refuses
 # --execute with it (liminal.policy.hybrid.build_hybrid). The FK proposals use the unverified identity joint mapping.
 # Key: ANTHROPIC_API_KEY, else the ws4 key file (liminal.orchestration.planner.anthropic_api_key).
+# In the harness (--backend flux) a policy config references it as `hybrid: {enabled: true, config: <this file>,
+# arms: {...}}` (configs/policy/haller_remote_registry.yaml); `enabled` below only applies to the standalone runners.
 enabled: true
 model: claude-opus-5-5
 model_path: sim/single_arm/so101.xml

@@ -13,6 +13,11 @@ Either way:
   makes per-arm adapter switching safe); idle arms sit on their hold controller
 * actions are executed in chunks at `control_hz`, every one through the safety
   supervisor, and the skill finishes early as soon as its success predicate holds
+* optionally (`hybrid:`, off by default) a Claude gate per skill target looks at each
+  chunk before it runs: continue a prefix, a small Cartesian correction, a brief
+  end-effector take-over, or stop (policy/hybrid.py). It only observes until that arm's
+  joint mapping is `kinematics_verified`; its motion is bounded local IK, still sent
+  through the supervisor
 
 Model loading uses the official LeRobot saved pre/post processors. Checkpoint
 changes are serialized at skill boundaries, together with history resets.
@@ -29,6 +34,7 @@ from numbers import Real
 from typing import TYPE_CHECKING, Any
 
 from liminal.core.types import Observation, Skill, SkillResult, Status
+from liminal.policy.hybrid import HarnessHybrid, HybridConfig, HybridController, Reasoner, Segment, jpeg_base64
 from liminal.safety.supervisor import ArmConflict, EmergencyStop
 
 if TYPE_CHECKING:
@@ -76,6 +82,9 @@ class FluxConfig:
     package: str = ""  # remote without a checkpoint registry: the served package
     token_file: str = ""  # remote: file with the shared token, else the command in $token_cmd_env prints it
     token_cmd_env: str = "WS4_TOKEN_CMD"
+    # Claude gate per skill target (policy/hybrid.py HarnessHybrid): {enabled, config: <gate YAML>, <HybridConfig
+    # fields>, arms: {<arm>: {joint_signs, joint_offsets_deg, kinematics_verified, ...}}}. Empty = off.
+    hybrid: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.engine not in ("lerobot", "remote"):
@@ -121,6 +130,9 @@ class FluxPolicyBackend:
         # model instance so a retry can never overlap that orphaned inference.
         self._unhealthy_reason: str | None = None
         self.latencies_s: list[float] = []
+        self._hybrid_settings = HarnessHybrid.parse(cfg.hybrid)
+        # One gate per skill target: its own episode history, previous frames, kinematic mapping and lock.
+        self._hybrid: dict[str, HybridController] = {}
 
     # -- model -------------------------------------------------------------------------
 
@@ -362,10 +374,94 @@ class FluxPolicyBackend:
             )
         return None
 
+    # -- Claude gate (policy/hybrid.py) -------------------------------------------------
+
+    def hybrid_reasoner(self, target: str, config: HybridConfig) -> Reasoner:
+        """The decision model behind one target's gate (tests substitute a fake)."""
+        from liminal.policy.hybrid import ClaudeReasoner
+
+        return ClaudeReasoner(config)
+
+    def _gate(self, target: str, ctx: ExecutionContext) -> HybridController | None:
+        """This target's gate, or None when the policy config leaves it off (the default)."""
+
+        config = self._hybrid_settings.config(target)
+        if not config.enabled:
+            return None
+        if target not in ctx.arms or ctx.arms[target].num_joints != 6:
+            raise ValueError(f"the hybrid gate drives one 6-joint SO-101 arm, not {target!r} "
+                             f"(hybrid.arms.{target}.enabled: false runs it without the gate)")
+        roles = {role for role, cam in self.cfg.camera_map.get(target, {}).items() if cam in ctx.cameras}
+        if not {"scene", "wrist"} <= roles:
+            raise ValueError(f"the hybrid gate needs scene and wrist cameras for {target!r}")
+        if config.kinematics_verified and target not in ctx.safety.limits:
+            raise ValueError(f"hybrid corrections on {target!r} need calibrated joint limits in the robot config")
+        if target not in self._hybrid:
+            self._hybrid[target] = HybridController(config, reasoner=self.hybrid_reasoner(target, config))
+        return self._hybrid[target]
+
+    def _hybrid_log(self, skill: Skill, ctx: ExecutionContext):
+        def log(kind: str, **values: Any) -> None:
+            if "images" in values:  # base64 frames do not belong in the world log
+                values["images"] = [image["label"] for image in values["images"]]
+            ctx.world.log(kind, skill=skill.label, arm=skill.arm, **values)
+
+        return log
+
+    async def _consult(
+        self,
+        gate: HybridController,
+        skill: Skill,
+        ctx: ExecutionContext,
+        observation: Observation,
+        chunk: list[list[float]],
+        log: Any,
+    ) -> Segment | SkillResult:
+        """Ask the gate about the next chunk with the arm parked; a SkillResult means nothing may be sent.
+
+        The answer arrives seconds after the observation it judged, so it only counts if nothing
+        changed meanwhile: a cancelled skill (WHILE monitor, timeout) raises out of the await, and an
+        e-stop, a broken or expired invariant, or a drifted arm drops the decision here.
+        """
+
+        self._stop(skill.arm, ctx)
+        try:
+            frames = {role: jpeg_base64(observation.images[role]) for role in ("scene", "wrist")}
+            segment = await gate.choose(goal=skill.prompt, actions=chunk,
+                                        observation={"state": list(observation.state), **frames},
+                                        max_steps=self.cfg.execute_steps, log=log)
+        except (ArmConflict, EmergencyStop):
+            raise
+        except Exception as exc:  # model, API or validation failure: fail closed, the tree recovers
+            return SkillResult(Status.FAILURE, skill, f"hybrid gate refused the chunk: {type(exc).__name__}: {exc}")
+        ctx.safety.check()
+        freshness = {"max_age_s": self.cfg.max_invariant_age_s} if ctx.inspector is not None else {}
+        broken = tuple(c for c in ctx.active_invariants if not ctx.world.holds(c, **freshness))
+        if broken:
+            log("hybrid_dropped", reason="invariant", conditions=broken, decision=segment.decision)
+            return SkillResult(Status.FAILURE, skill,
+                               f"active invariant broke or expired during hybrid reasoning: {', '.join(broken)}")
+        try:
+            measured = ctx.arms[skill.arm].read_state()
+            gate.validate_fresh(segment, measured)
+            if gate.config.kinematics_verified:
+                limits = ctx.safety.limits[skill.arm]
+                for i in range(segment.steps):  # refuse before the first command, as official_live
+                    gate.target(segment, i, measured, list(limits.lower), list(limits.upper))
+        except ValueError as exc:
+            log("hybrid_dropped", reason=str(exc), decision=segment.decision)
+            return SkillResult(Status.FAILURE, skill, f"hybrid decision dropped: {exc}")
+        if gate.config.kinematics_verified and segment.stopped:
+            # stop ends this attempt; it never claims the task is done (the tree's perception decides)
+            return SkillResult(Status.FAILURE, skill, f"hybrid gate stopped the skill: {segment.decision['reason']}")
+        return segment
+
     def reset(self, target: str) -> None:
         self._history.pop(target, None)
         self._commands.pop(target, None)
         self._last_command.pop(target, None)
+        if target in self._hybrid:
+            self._hybrid[target].reset()
 
     async def execute(self, skill: Skill, ctx: ExecutionContext) -> SkillResult:
         """Execute a bounded skill and freeze its arm on every exit path."""
@@ -416,7 +512,15 @@ class FluxPolicyBackend:
             return SkillResult(Status.FAILURE, skill,
                                f"{skill.arm!r} has {dof} joints but this policy outputs {self.cfg.action_dim}-D "
                                "actions (6 = one arm, option A; 12 = arm group, option B)")
+        try:
+            gate = self._gate(skill.arm, ctx)
+        except ValueError as exc:
+            return SkillResult(Status.FAILURE, skill, f"hybrid gate: {exc}")
         await self._prepare(skill, ctx)
+        log = self._hybrid_log(skill, ctx)
+        if gate is not None:
+            log("hybrid_session", model=gate.config.model,
+                mode="correct" if gate.config.kinematics_verified else "observe")
         history = self._history.setdefault(skill.arm, deque(maxlen=self.cfg.obs_history))
         commands = self._commands.setdefault(skill.arm, deque(maxlen=self.cfg.obs_history))
         period = 1.0 / self.cfg.control_hz
@@ -446,12 +550,32 @@ class FluxPolicyBackend:
             chunk = await self._predict_chunk(list(history), skill.prompt, skill.arm)
             if time.monotonic() - observed_at > self.cfg.max_observation_age_s:
                 return SkillResult(Status.FAILURE, skill, "observation expired during inference")
-            for action in chunk[: self.cfg.execute_steps]:
+            segment = None
+            if gate is not None:
+                # The reasoning time is not FLUX latency: past this point the arm's drift is the freshness check.
+                consulted = await self._consult(gate, skill, ctx, history[-1], chunk, log)
+                if isinstance(consulted, SkillResult):
+                    return consulted
+                segment = consulted
+            # Unverified kinematics: the decision was logged, the unchanged FLUX chunk runs.
+            correcting = segment is not None and gate.config.kinematics_verified
+            executed: list[list[float]] = []
+            for index, action in enumerate(chunk[: segment.steps if correcting else self.cfg.execute_steps]):
                 ctx.safety.check()
                 freshness = {"max_age_s": self.cfg.max_invariant_age_s} if ctx.inspector is not None else {}
                 if any(not ctx.world.holds(condition, **freshness) for condition in ctx.active_invariants):
                     return SkillResult(Status.FAILURE, skill, "active invariant evidence expired or violated")
+                if correcting:
+                    # Local IK from freshly measured joints every control, never from imagined motion.
+                    limits = ctx.safety.limits[skill.arm]
+                    try:
+                        action = gate.target(segment, index, ctx.arms[skill.arm].read_state(),
+                                             list(limits.lower), list(limits.upper))
+                    except ValueError as exc:
+                        return SkillResult(Status.FAILURE, skill, f"hybrid gate refused step {index}: {exc}",
+                                           time.monotonic() - started_at)
                 self._send(skill.arm, action, ctx)
+                executed.append(list(self._last_command[skill.arm]))
                 await asyncio.sleep(period)
                 violated = tuple(
                     condition for condition in ctx.active_invariants
@@ -472,6 +596,8 @@ class FluxPolicyBackend:
                 if observed_success:
                     self._stop(skill.arm, ctx)
                     return SkillResult(Status.SUCCESS, skill, duration_s=time.monotonic() - started_at)
+            if segment is not None:
+                gate.record(segment, executed, ctx.arms[skill.arm].read_state(), log)
 
             result = await self._inspect_progress(skill, ctx, started_at)
             if result is not None:

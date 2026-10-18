@@ -69,3 +69,13 @@ skill_checkpoints:
   put_red_pen_in_slot: put_red_pen_in_slot
 instances: per_arm
 max_invariant_age_s: 5
+# Claude recovery gate per arm (src/liminal/policy/hybrid.py, FluxPolicyBackend): off unless `enabled: true` here
+# (the referenced file's own `enabled` is ignored). With kinematics_verified false it only observes: at every chunk
+# boundary the arm parks, Opus judges the chunk, the decision is logged and the unchanged chunk runs. Corrections
+# (edit / eef through bounded local IK and the safety supervisor) need that arm's mapping verified and joint limits.
+hybrid:
+  enabled: false
+  config: configs/hybrid/claude_opus_haller.yaml
+  arms:  # q_model_degrees = (q_robot_degrees - joint_offsets_deg) / joint_signs, per arm's own encoder zeroes
+    left: {joint_signs: [1, 1, 1, 1, 1], joint_offsets_deg: [0, 0, 0, 0, 0], kinematics_verified: false}  # VERIFY
+    right: {joint_signs: [1, 1, 1, 1, 1], joint_offsets_deg: [0, 0, 0, 0, 0], kinematics_verified: false}  # VERIFY
