@@ -149,7 +149,6 @@ history, problem, reveal, sim, hero, imag, diagram, end = (
     SHOTS[k] for k in ("history", "problem", "reveal", "sim", "hero", "imagination", "diagram", "end"))
 BOOK = CFG["book"]
 flips = [BOOK["coverOpenAt"] + i * BOOK["flipEvery"] for i in range(len(BOOK["pages"]))]
-countdown_end = BOOK["countdownBeats"] * BEAT
 burn_at = BOOK["burnAt"]
 
 
@@ -183,12 +182,6 @@ def page_flip() -> np.ndarray:
     return noise * shape * 0.16
 
 
-def leader_beep() -> np.ndarray:
-    n = int(0.12 * SR)
-    t = np.arange(n) / SR
-    return np.sin(2 * np.pi * 1000 * t) * np.clip(t / 0.003, 0, 1) * np.clip((0.12 - t) / 0.01, 0, 1) * 0.14
-
-
 def projector(length: float) -> np.ndarray:
     """Film running through a projector: a 24 Hz shutter clatter over a low motor hum."""
     n = int(length * SR)
@@ -205,20 +198,18 @@ def crackle(length: float) -> np.ndarray:
     return highpass(pops, 900) * 0.5 + highpass(RNG.standard_normal(n), 4000) * 0.004
 
 
-# History: leader beeps, the projector and crackle under a music box; colour (and a pulse) arrive with ALOHA.
-for i in range(BOOK["countdownBeats"]):
-    place("fx", i * BEAT, leader_beep())
+# History: the projector and crackle under a music box; a pulse arrives with ALOHA.
 place("fx", 0.0, projector(burn_at + 0.3))
 place("fx", 0.0, crackle(burn_at + 0.6))
 for t in flips:
     place("fx", t, page_flip(), pan=0.15)
 bar_len = 4 * BEAT
 for k, t in enumerate(beats):
-    if section(t) != "history" or t < countdown_end or t >= burn_at:
+    if section(t) != "history" or t >= burn_at:
         continue
     chord = chords[int(t // bar_len) % 4]
     place("arp", t, music_box(chord[[0, 2, 1, 3][k % 4]] + 24), pan=0.3 * np.sin(k))
-    if t >= flips[4]:
+    if t >= flips[3]:
         place("drums", t, kick(0.5))
         place("drums", t + BEAT / 2, hat(gain=0.55), pan=0.2)
 

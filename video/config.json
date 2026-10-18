@@ -68,38 +68,38 @@
   "shots": {
     "history": {
       "start": 0.0,
-      "end": 15.5
+      "end": 7.5
     },
     "problem": {
-      "start": 15.5,
-      "end": 23.5
+      "start": 7.5,
+      "end": 17.5
     },
     "reveal": {
-      "start": 23.5,
-      "end": 27.5
+      "start": 17.5,
+      "end": 22.5
     },
     "sim": {
-      "start": 27.5,
-      "end": 35.5
+      "start": 22.5,
+      "end": 30.5
     },
     "hero": {
-      "start": 35.5,
-      "end": 44.5
+      "start": 30.5,
+      "end": 41.0
     },
     "imagination": {
-      "start": 44.5,
-      "end": 46.5
+      "start": 41.0,
+      "end": 43.0
     },
     "diagram": {
-      "start": 46.5,
-      "end": 51.0
+      "start": 43.0,
+      "end": 49.0
     },
     "tryIt": {
-      "start": 51.0,
-      "end": 54.5
+      "start": 49.0,
+      "end": 53.0
     },
     "end": {
-      "start": 54.5,
+      "start": 53.0,
       "end": 60.0
     }
   },
@@ -112,7 +112,7 @@
         "speed": 4
       },
       {
-        "from": 28.0,
+        "from": 25.0,
         "to": 40.0,
         "speed": 2
       }
@@ -121,7 +121,7 @@
     "trackUntil": 33.3,
     "slotShowFrom": 33.0,
     "releasedAt": 38.0,
-    "statFrom": 41.0,
+    "statFrom": 36.5,
     "slotBox": [
       0.49,
       0.44,
@@ -321,14 +321,12 @@
     }
   },
   "book": {
-    "_note": "History facts are general knowledge; see video/README.md for the list to double-check. mono: 1 = black and white, 0 = colour. photo: a file in public/history (from media/history), else a line-art plate.",
-    "countdownBeats": 3,
-    "coverOpenAt": 3.0,
-    "flipEvery": 1.5,
-    "flipSec": 0.45,
-    "drawSec": 0.8,
-    "burnAt": 14.7,
-    "end": 15.5,
+    "_note": "Black and white throughout. History facts are general knowledge; see video/README.md. photo: a file in public/ (history photos come from media/history with their credits); a page without one is set as a catalogue entry.",
+    "coverOpenAt": 1.0,
+    "flipEvery": 1.0,
+    "flipSec": 0.38,
+    "burnAt": 7.0,
+    "end": 7.5,
     "coverTitle": [
       "Robot",
       "Arms"
@@ -336,73 +334,48 @@
     "coverSub": "A short history",
     "coverYears": "1961 — 2026",
     "runningHead": "A short history of robot arms",
-    "openPageText": "to be continued…",
     "pages": [
       {
         "year": "1961",
         "name": "Unimate",
         "line": "The first industrial robot arm.",
-        "who": "Unimation · General Motors",
-        "art": "unimate",
-        "mono": 1
-      },
-      {
-        "year": "1969",
-        "name": "Stanford Arm",
-        "line": "Electric, and run by a computer.",
-        "who": "Victor Scheinman · Stanford",
-        "art": "stanford",
-        "mono": 1
+        "who": "Unimation · General Motors"
       },
       {
         "year": "1978",
         "name": "PUMA",
         "line": "A programmable arm for assembly.",
-        "who": "Unimation",
-        "art": "puma",
-        "mono": 1
+        "who": "Unimation"
       },
       {
         "year": "2012",
         "name": "Baxter",
         "line": "Two arms, safe beside people.",
-        "who": "Rethink Robotics",
-        "art": "baxter",
-        "mono": 0.6
+        "who": "Rethink Robotics"
       },
       {
         "year": "2023",
         "name": "ALOHA",
         "line": "Low-cost arms learn two-handed skills.",
-        "who": "Stanford",
-        "art": "aloha",
-        "mono": 0.35
-      },
-      {
-        "year": "2023",
-        "name": "RT-2",
-        "line": "Vision and language become actions.",
-        "who": "Google DeepMind",
-        "art": "rt2",
-        "mono": 0.2
+        "who": "Stanford"
       },
       {
         "year": "2024",
         "name": "SO-100 · SO-101",
         "line": "Open-source arms anyone can print.",
         "who": "TheRobotStudio · Hugging Face",
-        "art": "so101",
-        "mono": 0,
         "photo": "history/so101_follower_therobotstudio.jpg",
+        "caption": "SO-101",
         "credit": "Photo: TheRobotStudio / SO-ARM100, Apache-2.0"
       },
       {
         "year": "2026",
         "name": "Two arms, one long task",
         "line": "This page is still being written.",
-        "who": "",
-        "art": "open",
-        "mono": 0
+        "who": "ERH Physical AI Hackathon",
+        "photo": "rig_front.jpg",
+        "caption": "the Haller rig",
+        "coda": "to be continued…"
       }
     ]
   },
@@ -459,7 +432,7 @@
     "taskFile": "configs/tasks/lid_hold_insert.yaml"
   },
   "problem": {
-    "beatSec": 2.0,
+    "beatSec": 2.5,
     "oneArmFrom": 2.0,
     "handBox": [
       0.16,

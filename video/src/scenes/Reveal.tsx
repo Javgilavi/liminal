@@ -17,7 +17,7 @@ export const robotBox = (portrait: boolean, settle: number) => {
   return {x: cx - (w * s) / 2, y: top + (h * (1 - s)) / 2, w: w * s, h: h * s};
 };
 
-const SETTLE_AT = 2.2;
+const SETTLE_AT = 2.8;
 
 /** The real Haller rig, cut out of the team's photo, lit like a product shot. */
 export const RobotStage: React.FC<{settle: number; frame: number; showLight?: boolean}> = ({settle, frame, showLight = true}) => {

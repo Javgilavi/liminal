@@ -34,58 +34,56 @@ Set `"music": ""` to render silent, or drop any 120 BPM track in `public/` and p
 | `scripts/prepare_assets.py` | Builds `public/` from `../media` (crops, 3x Lanczos upscale, cutout, twin render, music) |
 | `scripts/render_twin.py` | The scripted dual-arm shot in the MuJoCo twin, plus per-frame 2D gripper positions for the HUD |
 | `scripts/track_red_pen.py` | Finds the red pen cap per frame in the wrist camera; the HUD box follows it |
-| `scripts/generate_music.py` | Synthesizes the original 120 BPM score: leader beeps, projector, crackle, page flips included |
+| `scripts/generate_music.py` | Synthesizes the original 120 BPM score: projector, crackle and page flips included |
 | `scripts/stills.mjs` | Review stills: `node scripts/stills.mjs Liminal16x9 /tmp/out 7.5 14` |
-| `src/scenes/History.tsx`, `src/components/Film.tsx`, `Art.tsx` | The old-film history book, film effects, line-art plates |
+| `src/scenes/History.tsx`, `src/components/Film.tsx` | The black-and-white history book and the film effects |
 | `src/scenes/Problem.tsx` | The four problem beats |
 | `src/scenes/Reveal.tsx`, `Sim.tsx`, `Hero.tsx`, `Middle.tsx`, `Closing.tsx` | The remaining shots |
 | `src/components/ui.tsx` | Shared cards, tags, chips, HUD brackets, wordmark, transitions, grain |
 
-## Storyboard (v3, 60 s)
+## Storyboard (v4, 60 s)
 
 Beat grid: 120 BPM, one beat = 0.5 s, bar = 2 s. Every cut lands on a beat.
 
 | Time | Shot | Source | Tag |
 |---|---|---|---|
-| 0.0-1.5 | Film leader counting 3-2-1, one number per beat | `Film.tsx` | — |
-| 1.5-3.0 | An old leather book in a projector beam with dust: *Robot Arms, a short history* | `History.tsx` | — |
-| 3.0-15.0 | Cover opens; a page every 1.5 s, each with a push-in. Old-film treatment throughout (grain, dust, scratches, flicker, gate weave), black-and-white until 1978, colour arriving with each era | line art; real SO-101 photo on the 2024 page | illustration / REAL |
-| 13.5-15.5 | Last page: "2026 · Two arms, one long task · This page is still being written", *to be continued…*; film burn to black | — | — |
-| 15.5-17.5 | The problem, 1: "A learned policy drives one arm." | red-pen run layout C, head cam, 3x | REAL |
-| 17.5-19.5 | 2: "Someone still holds the lid." Bracket on the hand holding the box open | `haller_rig_front.jpg` | REAL |
-| 19.5-21.5 | 3: "Nothing checks that it worked." Four frames: executing, executing, waiting, replanned; "Stock FLUX on our arm, before our fix: 0 of 16" | `red_so101_flux_zero_shot_stack_cups_strip.png` | REAL |
-| 21.5-23.5 | 4: "Who moves. When. Did it work?" | — | — |
-| 23.5-27.5 | The real rig, lit like a product shot; callouts; LIMINAL wordmark | `haller_rig_front_cutout.png` | REAL |
-| 27.5-35.5 | Scan into the MuJoCo twin; "Some tasks need two hands."; `lid_hold_insert.yaml` runs with HUD and live task tree | `render_twin.py` | SIM |
-| 35.5-38.5 | Real robot, head + wrist cards, 4x | layout C, 2.0-14.0 s | REAL |
-| 38.5-44.5 | Speed ramp to 2x; slot target; `red_pen_in_slot` ✓ at source 38.0 s; "3 of 5 · team-reported" | layout C, 28.0-40.0 s | REAL |
-| 44.5-46.5 | Imagined vs actual: "Imagine, then act." | `…lora5k_ep101.mp4` 4.6-6.6 s | model / REAL |
-| 46.5-51.0 | Architecture diagram draws on | `config.json` | — |
-| 51.0-54.5 | Terminal: quick start and its real output; "Runs on mock arms. No hardware." | README | — |
-| 54.5-60.0 | End card | — | — |
+| 0.0-1.0 | A projector light comes up on an old leather book in a dust-filled beam | `History.tsx`, `Film.tsx` | — |
+| 1.0-7.0 | Cover opens; a page turns on every bar, one continuous camera move with depth of field and foreground dust; black and white with grain, scratches, flicker and gate weave | photos on the 2024 and 2026 pages; type-set catalogue entries until photos are supplied | REAL |
+| 6.0-7.5 | "2026 · Two arms, one long task · This page is still being written", the Haller rig photo, *to be continued…*; film burn to black | `haller_rig_front.jpg` | REAL |
+| 7.5-10.0 | The problem, 1: "A learned policy drives one arm." | red-pen run layout C, head cam, 3x | REAL |
+| 10.0-12.5 | 2: "Someone still holds the lid." Bracket on the hand holding the box open | `haller_rig_front.jpg` | REAL |
+| 12.5-15.0 | 3: "Nothing checks that it worked." executing, executing, waiting, replanned; "Stock FLUX on our arm, before our fix: 0 of 16" | `red_so101_flux_zero_shot_stack_cups_strip.png` | REAL |
+| 15.0-17.5 | 4: "Who moves. When. Did it work?" | — | — |
+| 17.5-22.5 | The real rig, lit like a product shot; callouts; LIMINAL wordmark | `haller_rig_front_cutout.png` | REAL |
+| 22.5-30.5 | Scan into the MuJoCo twin; "Some tasks need two hands."; `lid_hold_insert.yaml` runs with HUD and live task tree | `render_twin.py` | SIM |
+| 30.5-33.5 | Real robot, head + wrist cards, 4x | layout C, 2.0-14.0 s | REAL |
+| 33.5-41.0 | Speed ramp to 2x; slot target; `red_pen_in_slot` ✓ at source 38.0 s; "3 of 5 · team-reported" | layout C, 25.0-40.0 s | REAL |
+| 41.0-43.0 | Imagined vs actual: "Imagine, then act." | `…lora5k_ep101.mp4` 4.6-6.6 s | model / REAL |
+| 43.0-49.0 | Architecture diagram draws on | `config.json` | — |
+| 49.0-53.0 | Terminal: quick start and its real output; "Runs on mock arms. No hardware." | README | — |
+| 53.0-60.0 | End card | — | — |
 
-Sound: leader beeps, a projector's 24 Hz clatter and vinyl crackle under a music box for the history, a
-page-flip on every turn, a pulse from the 2023 pages; a ticking pulse with a hit on each problem beat;
-impacts at 23.5, 27.5, 35.5, 46.5 and 54.5 s; drums drop for 44.5-46.5 and the end card.
+Sound: a projector's 24 Hz clatter and vinyl crackle under a music box for the book, a page-flip on every
+turn, a pulse from the 2023 page; a ticking pulse with a hit on each problem beat; impacts at 17.5, 22.5,
+30.5, 43.0 and 53.0 s; drums drop for 41.0-43.0 and the end card.
 
 ### History pages: facts to double-check before publishing
 
 These come from general knowledge, not from the repo.
 
-| Year | Robot | Line on the page | Who |
-|---|---|---|---|
-| 1961 | Unimate | The first industrial robot arm. | Unimation, installed at General Motors |
-| 1969 | Stanford Arm | Electric, and run by a computer. | Victor Scheinman, Stanford |
-| 1978 | PUMA | A programmable arm for assembly. | Unimation |
-| 2012 | Baxter | Two arms, safe beside people. | Rethink Robotics |
-| 2023 | ALOHA | Low-cost arms learn two-handed skills. | Stanford |
-| 2023 | RT-2 | Vision and language become actions. | Google DeepMind |
-| 2024 | SO-100 · SO-101 | Open-source arms anyone can print. | TheRobotStudio, Hugging Face (SO-101 followed in 2025) |
+| Year | Robot | Line on the page | Who | Photo |
+|---|---|---|---|---|
+| 1961 | Unimate | The first industrial robot arm. | Unimation, installed at General Motors | needed |
+| 1978 | PUMA | A programmable arm for assembly. | Unimation | needed |
+| 2012 | Baxter | Two arms, safe beside people. | Rethink Robotics | needed |
+| 2023 | ALOHA | Low-cost arms learn two-handed skills. | Stanford | needed |
+| 2024 | SO-100 · SO-101 | Open-source arms anyone can print. | TheRobotStudio, Hugging Face | TheRobotStudio, Apache-2.0 |
+| 2026 | Two arms, one long task | This page is still being written. | ERH Physical AI Hackathon | team photo |
 
-The 1961-2023 plates are line drawings, captioned "after contemporary photographs". Real photos of those
-robots were not reachable from the build environment with a clear licence (Wikimedia, museum and NASA hosts
-are blocked there). To use one, add it to `../media/history/` with its credit and set the page's `photo` in
-`config.json`. The 2024 page uses TheRobotStudio's SO-101 photo (Apache-2.0).
+Pages without a photo are set as catalogue entries. Wikimedia, museum and NASA image hosts are blocked from
+the build environment, so the historical photos have to be supplied: add each to `../media/history/` with
+its credit and licence, then set that page's `photo` (and `credit`) in `config.json`. `prepare_assets.py`
+copies `media/history/*.jpg` into `public/history/`.
 
 ### The twin shot
 
