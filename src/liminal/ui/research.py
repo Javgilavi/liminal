@@ -76,6 +76,7 @@ def create_research_app(
             "job": {k: v for k, v in job.items()},
             "profile_configured": cfg is not None,
             "active_arm": cfg.get("arm") if cfg else None,
+            "checkpoint_label": Path(str(cfg.get("checkpoint", "configured profile"))).name if cfg else None,
             "object_tracking": False,
             "source": "measured_joints",
             "controller": controller,
