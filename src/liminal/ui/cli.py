@@ -284,7 +284,8 @@ def _research(args: argparse.Namespace) -> int:
 
     from liminal.ui.research import create_research_app
 
-    uvicorn.run(create_research_app(args.profile, args.controller, args.site_url), host=args.host, port=args.port)
+    uvicorn.run(create_research_app(args.profile, args.controller, args.site_url, args.orchestrator),
+                host=args.host, port=args.port)
     return 0
 
 
@@ -350,6 +351,9 @@ def main(argv: list[str] | None = None) -> int:
     research.add_argument("--profile", default=None, help="existing verified official FLUX rig profile")
     research.add_argument("--controller", default="http://127.0.0.1:8000")
     research.add_argument("--site-url", default=None, help="trusted HTTPS GitHub Pages site for browser pairing")
+    research.add_argument("--orchestrator", default=None,
+                          help="bridge the live lab to the ws4 orchestrator HMI (e.g. http://127.0.0.1:8080): "
+                               "its joints, cameras and plan-and-run replace Haller and the profile runner")
     research.add_argument("--host", default="127.0.0.1")
     research.add_argument("--port", type=int, default=18003)
     research.set_defaults(fn=_research)

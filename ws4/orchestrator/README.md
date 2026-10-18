@@ -5,6 +5,27 @@ vocabulary; a human approves it in a localhost HMI; a DAG executor runs it on bo
 allows, verifies every step with a vision check, retries or replans, and logs the attempt for the graded evaluation.
 Design, plan format, measurements and open items: [`../research/orchestrator.md`](../research/orchestrator.md).
 
+## Digital twin and the public live lab (branch ws4-orchestrator-twin)
+
+- **Twin in the HMI.** The side column shows a "Digital twin" panel: main's MuJoCo scene
+  (`examples/dual_so101_sim/research_replay/scene.xml`) posed every 50 ms at both arms' measured joints
+  (`GET /api/twin/state`; `orchestrator/twin.py`, `mj_forward` only). It is drawn with the live lab's own viewer
+  (`site/viewer.js`, served under `/twin/`). The scene names its arms in Haller's operator frame, so the robot's LEFT
+  (pen) arm drives the scene's `right_` arm. Only the arms are mirrored; the table, box and objects are the scene's
+  estimate. The header line shows each arm's mode (policy, ramp, holding, idle).
+- **"Run trial" on the live lab runs the orchestrator.** Start the HMI as usual (the unguarded launch command), then
+  the companion in bridge mode, from the repository root:
+
+  ```bash
+  PYTHONPATH=src python -m liminal research --orchestrator http://127.0.0.1:8080 --site-url https://javgilavi.github.io/liminal/
+  ```
+
+  Open http://127.0.0.1:18003/pair and follow the link to the paired full-screen lab. Its twin follows the
+  orchestrator's measured joints (about 30 Hz), its cameras are the orchestrator's head and wrist frames, and **Run
+  trial** sends the instruction to the orchestrator: Claude plans it and, with "Execute on the real robot" and the
+  acknowledgement checked, the companion approves the plan, so the chain runs exactly as from the HMI. Without
+  execution the plan only appears in the HMI. **Stop this trial** latches the orchestrator's e-stop (both arms hold).
+
 ## FINAL demo: the 4-skill chain on the Haller, both arms (2026-10-18, run this)
 
 Oscar's plan: the robot RIGHT arm opens the closed box by pulling its handle, then the robot LEFT arm puts the green
