@@ -11,6 +11,88 @@ The motor-free SSH worker also imports `LeRobotEngine`. The older standalone liv
 commands remain reproduction tools for earlier experiments; they are not the
 showcase coordinator. Do not run a live runner alongside the behavior tree.
 
+## Runtime and checkpoint boundary
+
+The [architecture overview](architecture.md#layers) shows ownership, motor commands
+and perception feedback. This sequence shows what happens when a skill selects a
+different checkpoint; the same bundle still resets state at a new skill boundary.
+
+```mermaid
+sequenceDiagram
+    participant BT as SkillNode
+    participant S as SafetySupervisor
+    participant F as FluxPolicyBackend
+    participant R as Checkpoint registry
+    participant E as LeRobotEngine
+    participant A as Arm driver
+    participant I as SceneInspector / WorldState
+    BT->>S: Claim target arms and workspace zones
+    BT->>F: Execute bounded skill
+    F->>F: Acquire execution lock; check quarantine
+    F->>A: Freeze target; preserve gripper goal
+    F->>R: Resolve skill; validate driver contract, provenance and hash
+    alt Bundle cannot be loaded or validated
+        F-->>BT: Failure; no policy motion
+    else Compatible bundle loaded
+        F->>E: Load saved weights and processors; reset
+        F->>I: Inspect success and active invariants
+        loop Until verified success or bounded failure
+            A-->>F: Fresh measured and committed-command history
+            Note over F,E: Camera frames join the per-target history window
+            F->>E: Predict action chunk
+            E-->>F: Absolute position targets
+            F->>F: Reject stale observation or expired invariant evidence
+            F->>S: Send each bounded action
+            S->>A: Validated, limited position command
+            F->>A: Freeze before inspection
+            F->>I: Inspect outcome and invariants
+            I-->>F: Fresh true, false or unknown evidence
+        end
+        F-->>BT: Skill result
+        BT->>I: Independently verify fresh success evidence
+    end
+    BT->>A: Stop while ownership remains held
+    BT->>S: Release ownership and zones
+```
+
+During a `While` body, an independent perception task refreshes the support
+invariant even while weights load or inference runs. A separate expiry monitor
+cancels the body if evidence expires or the invariant fails. Cancellation during
+loading or inference quarantines the backend; another skill cannot reuse it.
+
+## Showcase task flow
+
+```mermaid
+flowchart TD
+    START[Inspect lid] --> LID{Lid open?}
+    LID -->|no| OPEN[Left: open_lid and verify]
+    LID -->|yes| ACCESS[Inspect access and completed subgoals]
+    OPEN --> ACCESS
+    ACCESS --> ROUTE{Access state known?}
+    ROUTE -->|unknown| STOP[Fail safely]
+    ROUTE -->|clear| MAIN[Right: remove_to_red_cup, then green_cup_to_slot]
+    ROUTE -->|blocked| CABLE[Left: clear_cable_to_hold and verify]
+    CABLE --> HOLD[Left holds; monitor cable_secured_clear]
+    HOLD --> MAIN
+    MAIN -->|verified| HOME[Right home; inspect and require main_arm_home]
+    MAIN -->|failed attempt| RECOVER[Home recovery; inspect and positively verify]
+    RECOVER -->|verified and retry available| MAIN
+    RECOVER -->|failed or attempts exhausted| STOP
+    HOME -->|not verified| STOP
+    HOME -->|verified| RESTORE{Cable was held?}
+    RESTORE -->|yes| PUTBACK[Left: restore_cable; verify restored and released]
+    RESTORE -->|no| GOAL[Verify replacement_in_slot]
+    PUTBACK --> GOAL
+    HOLD -.->|invariant fails or expires| CANCEL[Cancel main work; bounded outer recovery]
+    CANCEL -->|recovery verified and retry available| CABLE
+    CANCEL -->|otherwise| STOP
+```
+
+This diagram summarizes the task YAML: already verified removal or installation
+subgoals can be skipped. Opening, cable clearing and restoration also have bounded
+retries with verified home recovery. The helper retains its local hold through
+main-arm work and home verification.
+
 ## Atomic skills
 
 | Skill | Target | Verified outcome |
