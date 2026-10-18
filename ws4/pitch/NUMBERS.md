@@ -467,8 +467,9 @@ https://javgilavi.github.io/liminal/, models and datasets under https://huggingf
 `gdrive:liminal/05_video/` and `~/liminal_video/out/`), live-demo layout = box at P3 with the objects per the overview
 image (runbook). Chain footage is in the video; the imagination clips are the replays (no live clip).
 
+Team (Oscar, 18 Oct): **Liminal**, Oscar Devos, Javier Gil, Tomas Leggaet, Simone Utili, Stanislaw Sufin.
+
 Still open (find with `grep -rn "\[\[" ws4/pitch`):
 
 | Placeholder | What | Owner |
 |---|---|---|
-| `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to `[[TEAM:WS5]]`, `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]`, `[[TEAM:CREDITS]]` | team-member facts | Oscar / team |

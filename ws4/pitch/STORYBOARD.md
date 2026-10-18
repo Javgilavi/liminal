@@ -43,7 +43,7 @@ becomes one HMI clip per skill. After that, cut the video from what exists.
 | 7 | 1:19 | 14 s | **Imagined vs actual**, then 3 s on the B84 vs 5k comparison sheet (`60s`, 10 s) | "FLUX imagines the next 1.4 s; its actions stay bit-identical. Fine-tuning made it imagine better." | `ws4/imagine/outputs/lora5000_ep101/imagination/imagined_vs_actual.mp4`, `ws4/imagine/outputs/b84_vs_lora5000_ep101_chunk1.png`; live shot P4 if filmed | HAVE |
 | 8 | 1:33 | 10 s | **The knife edge**: recording vs now vs blend of the wrist view | "One pixel of wrist view flipped hold and reach. We align the station and augment." | `ws4/single_arm/runs/station_check/station_vs_pen84.jpg` (people in frame: check) | HAVE |
 | 9 | 1:43 | 8 s | **Safety**: keep-out freeze on a run, then the e-stop (shot P5) | "Per-skill workspaces, a start gate, a slow zone: nothing collided" | `ws4/single_arm/runs/20261017_210715/attempt01/video.mp4` (keep-out holds a wrong-sign run) + P5 | HAVE + RECORD |
-| 10 | 1:51 | 9 s | End card: team, repo, Hub links (`60s`, 3 s) | `[[TEAM:NAME]]`, github.com/Javgilavi/liminal, huggingface.co/Oskrt | deck slide "close" | MAKE |
+| 10 | 1:51 | 9 s | End card: team, repo, Hub links (`60s`, 3 s) | Team Liminal, github.com/Javgilavi/liminal, huggingface.co/Oskrt | deck slide "close" | MAKE |
 
 60 s cut = shots 2 (4 s), 4 (4 s), 5 (12 s), 6 (20 s), 7 (10 s), 10 (3 s) plus 7 s of transitions.
 

@@ -21,18 +21,18 @@ in service of those three, in time order. Tick each line; the owner is who does 
 
 ## A. Repository README on main
 
-- [ ] **ws4/ is on main**: merge PR #3 (https://github.com/Javgilavi/liminal/pull/3), which brings everything into
-      main; otherwise every README link breaks.
+- [ ] **Everything on main**: PR #3 and #4 (https://github.com/Javgilavi/liminal/pull/3, /pull/4); otherwise README
+      links break.
 - [ ] Copy `ws4/pitch/README_submission.md` to the repo root as `README.md` (it is written for the root), merging in
-      the team's existing README sections for WS1, WS2, WS3 and WS5 (`[[TEAM:WORKSTREAMS]]`). Delete the HTML comment
+      the team's existing README sections (harness, twin lab, project page). Delete the HTML comment
       at its top.
 - [ ] Every link opens on GitHub (ws4 paths, Hub datasets, the LoRA, `ws4/LORA_HOWTO.md`).
 - [ ] The results table is the fresh `trial_log.py summary --markdown`.
-- [ ] Team name and members filled.
+- [x] Team name and members filled: Liminal, Oscar Devos, Javier Gil, Tomas Leggaet, Simone Utili, Stanislaw Sufin.
 
 ## B. Slides
 
-- [ ] Hosted deck: https://claude.ai/artifact/FsptG2MfRYqkmaAqL4EDQm (19 slides). It is **private until shared**: share
+- [ ] Hosted deck: https://claude.ai/artifact/FsptG2MfRYqkmaAqL4EDQm (21 slides, 13 shown). It is **private until shared**: share
       it from the page's Share menu. PDF: `~/liminal_video/out/liminal_slides.pdf`, also in `gdrive:liminal/05_video/`
       (rendered locally from the deck source; PPTX from the page's Share > Export).
 - [ ] Every `[[...]]` on the slides replaced or the element deleted (results, orchestrator chain pill, team, cover and
@@ -41,9 +41,8 @@ in service of those three, in time order. Tick each line; the owner is who does 
 - [ ] Cutter count reconciled (trial log 1/6 vs the orchestrator's 0/5 inserts at 09:00) before it is quoted.
 - [ ] Chain stated with its caveats: unguarded demo mode, red pen placed by the green-pen LoRA.
 - [ ] Video v3 from video-cut (Drive `liminal/05_video`, about 12:50) checked against NUMBERS.md 0.1b captions.
-- [ ] 3-minute order: cover, zeroshot, contract (optional), diagnosis, architecture, orchestrator, teach (optional),
-      heldout, results, knifeedge, imagination, imaginebetter (optional), realworld, close. Skip safety, memory, sim,
-      team and next in the 3-minute pitch (their notes say FINAL ONLY).
+- [ ] 5-minute pitch: 13 main slides (cover, zeroshot, diagnosis, the chain, data, held-out, results, knife edge,
+      imagination, harness, twin, team, close); 8 backup slides are hidden for Q&A.
 - [ ] People visible in two images (knife-edge wrist view, the imagination clip): fine with them, or swap the image.
 
 ## C. Demo video
@@ -68,7 +67,7 @@ in service of those three, in time order. Tick each line; the owner is who does 
 - [ ] Station aligned (`ALIGN=1`: wrist offset < 15 px, scale 0.95 to 1.05, brightness 0.85 to 1.2), box at P3,
       objects per the overview image, both arms folded, one process per arm.
 - [ ] Fallback video on the laptop, ready to play if the arm misbehaves.
-- [ ] Presenter has OUTLINE.md (3-minute script and Q&A) open.
+- [ ] Presenter has OUTLINE.md (5-minute script and Q&A) open.
 
 ## Placeholders still open (owner and expected time)
 
@@ -76,4 +75,3 @@ Mirror of NUMBERS.md section 14; grep for the exact tokens.
 
 | Placeholder | What | Owner | Expected |
 |---|---|---|---|
-| `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, `[[TEAM:WORKSTREAMS]]`, `[[TEAM:WS1]]` to `[[TEAM:WS5]]`, `[[TEAM:WS1_WHO]]` to `[[TEAM:WS5_WHO]]`, `[[TEAM:CREDITS]]` | team facts | Oscar / team | as early as possible |

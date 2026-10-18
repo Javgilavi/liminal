@@ -9,7 +9,7 @@ ws4/pitch/NUMBERS.md (section 0 first). Delete this comment.
 # liminal: a robot that imagines, then acts
 
 **ERH Physical AI Hackathon 2026, track "Imagine, Then Act" (Black Forest Labs FLUX 3 Action).**
-Team `[[TEAM:NAME]]`: `[[TEAM:MEMBERS]]`.
+Team **Liminal**: Oscar Devos, Javier Gil, Tomas Leggaet, Simone Utili, Stanislaw Sufin.
 
 Repository: [github.com/Javgilavi/liminal](https://github.com/Javgilavi/liminal) · Project page:
 [javgilavi.github.io/liminal](https://javgilavi.github.io/liminal/) · Demo video:
@@ -243,7 +243,8 @@ Operator HMI ──goal──> Claude Opus planner         v
 | [ws4/eval/trial_log.py](ws4/eval/trial_log.py) | One JSONL line per graded attempt, markdown summary |
 | [ws4/ttt/](ws4/ttt/), [ws4/sim/](ws4/sim/README.md), [ws4/kinematics/](ws4/kinematics/) | Research: memory, simulation, kinematics |
 | [ws4/data/](ws4/data/), [ws4/teleop/](ws4/teleop/) | Dataset conversion, VR teleop launcher |
-| `[[TEAM:WORKSTREAMS]]` | WS1, WS2, WS3, WS5 parts (`src/liminal/`, `configs/`, `scripts/`); the team's behaviour-tree harness drives the Haller through this stack on branch `claude/harness-bridge-11f8b6` |
+| `src/liminal/`, `configs/`, `scripts/` | The behaviour-tree harness (Stanislaw Sufin, Simone Utili): task YAML to tree, VLM perception, per-skill checkpoint registry, coherent skill runtime; it drove the real Haller through this stack (open the box by replay, the green pen placed live) |
+| `site/`, `docs/research-ui.md` | The project page, the full-screen live lab and the Haller HMI companion with the MuJoCo digital twin (Javier Gil) |
 
 ## Reproduce
 
@@ -272,4 +273,4 @@ On the robot: [orchestrator/README.md](ws4/orchestrator/README.md) (chain) and
 
 FLUX 3 Action by Black Forest Labs (weights under their licence, see the model cards). LeRobot by Hugging Face.
 XLeRobot by Vector-Wangel. Claude by Anthropic. Median SO-101 statistics from multimodalart's
-`flux-3-action-so101-sim` Space. The Haller VR HMI (haller_ws) by Oscar Devos. `[[TEAM:CREDITS]]`
+`flux-3-action-so101-sim` Space. The Haller VR HMI (haller_ws) by Oscar Devos. The project page, live lab, HMI companion with the MuJoCo twin and media curation by Javier Gil; the behaviour-tree harness by Stanislaw Sufin and Simone Utili; the FLUX LoRA pipeline, data collection, safety runner and Claude chain by Oscar Devos. All on main via PR #3 and #4.

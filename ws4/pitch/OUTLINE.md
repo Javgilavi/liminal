@@ -1,4 +1,4 @@
-# Pitch outline: 3-minute track pitch and 5-minute final
+# Pitch outline: the 5-minute pitch
 
 Re-centred on the 4-skill chain, Sun 18 Oct about 07:45 CEST. Numbers come from [NUMBERS.md](NUMBERS.md) only
 (section 0 is the final demo); every `[[NUM:...]]`, `[[TEAM:...]]` and `[[CLIP:...]]` is a placeholder with an owner
@@ -26,38 +26,28 @@ and checked by Claude under one safety layer, while FLUX shows what it imagines 
 The brief grades zero-shot vs post-training with successes, attempts, completed steps, failure points and
 interventions: R1 shows all five.
 
-## 3-minute track pitch (180 s, then the live demo and Q&A)
+## The pitch: 5 minutes, 13 slides (Oscar, 18 Oct: the presentation is 5 minutes)
 
-Run order: if the server is READY and the chain rehearsed, start it in the HMI during H1 and talk over it (the plan
-takes about 6 s). Otherwise present first, then demo. Hard fallback at 12:30 (runbook): skills one by one.
+The hosted deck shows these 13 slides in order; 8 backup slides (contract, architecture, imagine better, safety,
+memory, sim, real-world use, next) are hidden in the presentation and kept at the end for Q&A.
 
-| t (s) | Beat | Slide | Say (draft) | Show |
-|---|---|---|---|---|
-| 0-15 | **H1 Hook** | Cover | "This is Haller. One arm opens a box and holds the lid; the other puts away a green pen, a yellow cutter and a red pen with FLUX 3 Action. Claude plans the chain and checks every step." | Robot, HMI, chain starts |
-| 15-45 | **D1 Problem and diagnosis** | 0/16, then the contract | "Zero-shot, the released checkpoint failed all 16 of our graded attempts: the shoulder ran to its limit whatever the prompt. The model was fine, the contract was not: its normalization assumes an old degree convention, so our arm looked impossible. Re-normalized offline, with no training, the lift error fell from 20 to 3 degrees." | 0/16, A to E table |
-| 45-75 | **A1 Approach** | Architecture, data | "So we taught it. 337 VR takes over four skills, most of them recorded overnight in FLUX's exact contract, all public on the Hub. One FLUX base, one 0.45 GB LoRA per skill, about two hours each on one GPU. Claude Opus plans the chain, Claude Haiku checks each step from the camera, and nothing an LLM writes reaches a motor. The box step is a recorded demo replayed under the same safety layer, and the screen says so: our FLUX box skill would not start from rest." | Architecture, the chain table |
-| 75-110 | **R1 Results** | Held-out, then the arm | "On takes it never trained on, the red-pen LoRA cut arm error from 5.5 to 3.2 degrees and predicts the right direction 88 % of the time, ahead of an ACT policy on the same data. On the arm: the first full red-pen inserts, 3 of 5, where ACT grasped but never inserted; this morning FLUX also inserted the green pen and the cutter, and Claude confirmed a red-pen insert in 33 seconds. And the full chain: two of three runs finished all four steps with no human touch." Say the caveats: small n, the chain ran in an unguarded demo mode, and in both completed runs the green-pen policy also slotted the red pen. | heldout, results |
-| 110-140 | **K1 The knife edge** | Knife edge | "The hardest bug: after the robot moved, FLUX just held still. A field-by-field diff of live versus recorded requests found one difference, the wrist camera's view of the room. One pixel of shift flipped hold to reach. So we built a station-alignment tool and train with image augmentation." | Knife-edge slide |
-| 140-165 | **I1 Imagine, then act** | Imagination | "FLUX also predicts a video of the next 1.4 seconds, and every stack throws it away. We decode it, with its actions bit-identical. Left is what happened, right what FLUX imagined. And fine-tuning made it act better and imagine better." | Clip, comparison |
-| 165-180 | **W1 Close** | Close | "Anyone putting a released VLA on their own arm hits this. Our kit: diagnose offline, teach by VR in a night, bound the policy, and it is all public. `[[TEAM:NAME]]`, thank you." | Repo, Hub links, team |
+| t (s) | Slide | Say (draft) |
+|---|---|---|
+| 0-15 | Cover | "This is Haller. One arm opens a box and holds the lid; the other puts away a green pen, a yellow cutter and a red pen with FLUX 3 Action. Claude plans the chain and checks every step." |
+| 15-35 | 0/16 | "Zero-shot, the released checkpoint failed all 16 of our graded attempts: the shoulder ran to its limit whatever the prompt." |
+| 35-65 | Diagnosis | "The model was fine, the contract was not: its normalization assumes an old degree convention, so our arm looked impossible. Re-normalized offline, with no training, the lift error fell from 20 to 3 degrees." |
+| 65-95 | The chain | "So we taught it: one FLUX base, one LoRA per skill. Claude Opus plans, Claude Haiku checks each step from the camera. The box is a recorded demo replayed under the same safety layer, and the screen says so." |
+| 95-110 | Data | "337 VR takes over four skills, most of them overnight, all public on the Hub with the adapters." |
+| 110-130 | Held-out | "On takes it never trained on, the red-pen LoRA cut arm error from 5.5 to 3.2 degrees and predicts the right direction 88 % of the time, ahead of ACT on the same data." |
+| 130-160 | Results | "On the arm: the first full red-pen inserts, 3 of 5, where ACT never inserted; the green pen and the cutter too. The full chain finished 4 of 4 in two of three runs with no human touch, in a demo mode without keep-out stops; in both, the green-pen policy also slotted the red pen." |
+| 160-185 | Knife edge | "After the robot moved, FLUX held still. A field-by-field diff found one difference: the wrist camera's view of the room. One pixel flipped hold to reach. We align the station and augment." |
+| 185-210 | Imagination | "FLUX also predicts the next 1.4 seconds of video; we decode it with its actions bit-identical, and fine-tuning made it imagine better too." |
+| 210-235 | Harness | "Stanislaw and Simone's behaviour tree drives the same robot through our bridge: it opened the box by replay and placed the green pen live." |
+| 235-260 | Twin | "Javier's live lab pairs with the Haller: a MuJoCo twin mirrors the real arms in the browser, on our public page." |
+| 260-280 | Team | One line each, said by the person if possible. |
+| 280-300 | Close | "Anyone putting a released VLA on their own arm hits this contract. Diagnose offline, teach by VR in a night, bound the policy: all public. Team Liminal, thank you." |
 
-Cut list if over time: drop the issue-2 and ACT clauses, shorten K1 to its first two sentences.
-
-## 5-minute final (300 s, with the demo video)
-
-| t (s) | Beat | Slide | Content |
-|---|---|---|---|
-| 0-10 | H1 Hook | Cover | As above, short |
-| 10-70 | V1 Video | Video | The 60 s cut ([STORYBOARD.md](STORYBOARD.md)) |
-| 70-100 | D1 | 0/16, contract, diagnosis | As above |
-| 100-125 | A1 | Architecture, teach | As above, plus "each skill's workspace is built from its own demos" |
-| 125-160 | R1 | heldout, results | As above, plus green 3.95 deg / 89 %, box 5.11 deg (the hardest skill, for ACT too), RAW beat EMA every time, guidance 1/1 as good as 3/3 at half the compute |
-| 160-185 | K1 | Knife edge | As above |
-| 185-210 | **S1 Safety** | Safety | "One honest note first: the final chain ran in an unguarded demo mode. The demonstrated-envelope zones caused 17 of 20 keep-out stops this morning, so for the demo the policies ran without keep-out and stall stops; joint limits, one degree per tick, the torque cap and the e-stop stayed on. In the single-skill runs: two arms share one box. The cutter has a slow zone next to the lid-holding arm, every pen step passes a start gate with the box arm's live pose, and every command goes through soft limits, one degree per tick, a keep-out built from the demos, a stall and load freeze and a torque cap. This morning the keep-out stepped in on 15 of 33 attempts and stopped 7; nothing broke. It exists because on Saturday, under zero-shot FLUX, our first arm's elbow pushed until its servo broke." |
-| 210-235 | I1 | Imagination, imagine better | As above |
-| 235-255 | T1 Team | Team | `[[TEAM:WORKSTREAMS]]`, one line each, no number without its owner. The teammates' behaviour-tree harness drove the real Haller through this stack (branch `claude/harness-bridge-11f8b6`) and placed the green pen in its best run |
-| 255-285 | N1 Next | What's next | A FLUX box skill that starts from rest (every box LoRA failed the from-rest gate: 4.9 to 5.5 deg of first-chunk motion against the 20 required), LoRA hot-swap on one loaded base, robustness to the room, both arms at once; and the honest sim result: 0/20 |
-| 285-300 | W1 Close | Close | As above |
+Cut list if over time: shorten the data and team slides to one sentence each.
 
 ## Demo moments (live, in order of value)
 
@@ -102,6 +92,5 @@ lid at every handover; box at P3, objects per the overview image; fallback video
 
 ## Open team facts (ask, do not guess)
 
-- `[[TEAM:NAME]]`, `[[TEAM:MEMBERS]]`, who presents, who drives the robot.
-- `[[TEAM:WORKSTREAMS]]`: what WS1, WS2, WS3 and WS5 each finished, with their own numbers.
+- Team Liminal: Oscar Devos, Javier Gil, Tomas Leggaet, Simone Utili, Stanislaw Sufin. Still to decide: who presents and who drives the robot.
 - Live demo: the full chain (2 of 3 runs 4/4 this morning), box at P3 with the objects per the overview image.

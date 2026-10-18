@@ -1,4 +1,4 @@
-<section id="contract" data-transition="fade" style="background:#fbf8f4;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<section id="contract" hidden data-transition="fade" style="background:#fbf8f4;color:#1c1830;font-family:'Plus Jakarta Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
 <p style="font-size:24px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#5b3fe0">Why zero-shot failed</p>
 <h2 style="font-size:64px;font-weight:700;line-height:1.1;letter-spacing:-1px;color:#1c1830">FLUX saw an impossible robot</h2>
 <div style="position:relative;width:1664px;height:240px">
@@ -28,6 +28,5 @@
 <p style="font-size:28px;line-height:1.35;color:#4a4560">The shoulder runs to its limit whatever the prompt: 191 deg of commanded lift per attempt.</p>
 </div>
 </div>
-<p style="position:absolute;left:128px;bottom:64px;width:1664px;font-size:24px;color:#625d78">Sources: ws4/flux/checkpoint_facts.md:35-47 (VoicAndrei/so100_kitchen quantiles) · ws4/single_arm/README.md (A0 attempts)</p>
-<aside>D1 DIAGNOSIS, part 1. "The model was fine. The contract was not. The released package normalizes joints with one community dataset in the old SO-100 degree convention: lift 85 to 184 degrees. Today's LeRobot calibration puts our folded arm at minus 100. FLUX saw an impossible robot." Exact package values: state q01 84.8 / q99 184.2 for shoulder lift, elbow 61.4 to 178.9 (checkpoint_facts.md). Both prompts gave nearly the same trajectory (6 to 20 deg mean per-joint difference). For the 3-minute pitch you can skip this slide and say it over the next one.</aside>
+<aside>Sources (moved from the slide footer): Sources: ws4/flux/checkpoint_facts.md:35-47 (VoicAndrei/so100_kitchen quantiles) · ws4/single_arm/README.md (A0 attempts). D1 DIAGNOSIS, part 1. "The model was fine. The contract was not. The released package normalizes joints with one community dataset in the old SO-100 degree convention: lift 85 to 184 degrees. Today's LeRobot calibration puts our folded arm at minus 100. FLUX saw an impossible robot." Exact package values: state q01 84.8 / q99 184.2 for shoulder lift, elbow 61.4 to 178.9 (checkpoint_facts.md). Both prompts gave nearly the same trajectory (6 to 20 deg mean per-joint difference). For the 3-minute pitch you can skip this slide and say it over the next one.</aside>
 </section>
