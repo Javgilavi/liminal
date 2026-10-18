@@ -20,11 +20,14 @@ Full learned dual-arm hardware performance remains unverified.*
 The figure shows the main learned-skill path. Local hold/release primitives bypass
 VLA inference; optional task-planning models and the disabled standalone hybrid
 controller are omitted. Each policy receives its arm's joint state and camera
-observations; joint states come from the arm drivers. The robot artwork is schematic.
+observations; joint states come from the arm drivers. The embodiment panel uses
+the supplied photograph of our green XLeRobot rig, with its room background removed
+and the composition adapted for the figure. It illustrates the hardware, not a
+recorded successful rollout.
 See [the architecture](docs/architecture.md) for the complete contracts.
 
-Original artwork generated with the built-in image-generation tool;
-[reproducible art brief](docs/assets/architecture-prompt.txt).
+Figure generated and refined with the built-in image-generation tool using our
+robot photograph; [generation and refinement prompts](docs/assets/architecture-refined-prompt.txt).
 Visual references: [OpenVLA](https://openvla.github.io/) and its
 [GitHub repo](https://github.com/openvla/openvla),
 [Diffusion Policy](https://diffusion-policy.cs.columbia.edu/) and its
