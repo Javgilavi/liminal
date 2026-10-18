@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import importlib.metadata
 import json
 import os
 import shutil
@@ -14,7 +15,7 @@ import time
 import traceback
 from pathlib import Path
 
-from fitting import decide, digest, freeze_windows, training_config
+from fitting import checkpoint_inputs, decide, digest, freeze_windows, training_config
 
 
 def write_json(path, value):
@@ -68,13 +69,16 @@ def main(args):
         inputs = [root / "dataset-manifest.json", root / "hf-sim-normalization.json", root / "scene.xml",
                   output / "config.json", windows, *code.glob("*.py"), *baseline.glob("*.json"),
                   *baseline.glob("*.safetensors"),
+                  *checkpoint_inputs(baseline),
                   *(Path(r["source"]) for r in frozen["windows"])]
         state["input_sha256"] = {str(p): digest(p) for p in sorted(set(inputs))}
         state["runtime"] = {"python": sys.version, "executable": sys.executable,
+                            "packages": {name: importlib.metadata.version(name)
+                                         for name in ["torch", "peft", "accelerate", "natten", "transformers"]},
                             "lerobot_revision": subprocess.check_output(
                                 ["git", "-C", str(args.lerobot), "rev-parse", "HEAD"], text=True).strip()}
         state["known_departures"] = ["20 Hz versus BFL 30 Hz recipe; all current streams agree at 20 Hz",
-                                     "Official public LeRobot revision differs from BFL private fork pin"]
+                                     "Official public LeRobot revision differs from BFL documented fork pin"]
 
         def stage(name, command, timeout=600):
             state["stage"] = name

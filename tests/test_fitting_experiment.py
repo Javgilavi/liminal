@@ -148,6 +148,8 @@ def test_pipeline_stops_after_failed_contract_and_keeps_failure_evidence(tmp_pat
     (tmp_path / "dataset-manifest.json").write_text(json.dumps(data))
     (tmp_path / "hf-sim-normalization.json").write_text("{}")
     (tmp_path / "scene.xml").write_text("<mujoco/>")
+    monkeypatch.setattr(module, "checkpoint_inputs", lambda _: [])
+    monkeypatch.setattr(module.importlib.metadata, "version", lambda _: "fixture-version")
     (tmp_path / "train-config.json").write_text(json.dumps({
         "dataset": {}, "policy": {}, "accelerator": {"gradient_accumulation": {"steps": 4}}
     }))
@@ -168,3 +170,19 @@ def test_pipeline_stops_after_failed_contract_and_keeps_failure_evidence(tmp_pat
     assert saved["completed"] is False and saved["failed_stage"] == "contract-audit"
     assert len(commands) == 1 and "--audit-only" in commands[0]
     assert not (output / "training").exists()
+
+
+def test_checkpoint_provenance_includes_base_and_both_encoders(tmp_path):
+    adapter, base, text = [tmp_path / name for name in ["adapter", "base", "text"]]
+    for directory in [adapter, base, text]:
+        directory.mkdir()
+    (adapter / "adapter_config.json").write_text(json.dumps({"base_model_name_or_path": str(base)}))
+    vae = tmp_path / "vae.safetensors"
+    vae.write_bytes(b"vae")
+    (base / "model.safetensors").write_bytes(b"base")
+    (text / "model.safetensors").write_bytes(b"text")
+    (adapter / "config.json").write_text(json.dumps({"video_vae_id": str(vae), "text_encoder_id": str(text)}))
+    assert set(fit.checkpoint_inputs(adapter)) == {vae, base / "model.safetensors", text / "model.safetensors"}
+    vae.unlink()
+    with pytest.raises(ValueError, match="FIT_ENCODER"):
+        fit.checkpoint_inputs(adapter)

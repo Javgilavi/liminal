@@ -16,6 +16,27 @@ def digest(path):
     return result.hexdigest()
 
 
+def checkpoint_inputs(checkpoint):
+    """Include the weights and encoders referenced by a task adapter, not just the adapter."""
+    checkpoint = Path(checkpoint)
+    adapter = json.loads((checkpoint / "adapter_config.json").read_text())
+    base = Path(adapter["base_model_name_or_path"])
+    config = json.loads((checkpoint / "config.json").read_text())
+    if not base.is_dir() or not list(base.glob("*.safetensors")):
+        raise ValueError("FIT_BASE: expected a local immutable base checkpoint with safetensors")
+    files = set(base.glob("*.safetensors")) | set(base.glob("*.json"))
+    for key in ["video_vae_id", "text_encoder_id"]:
+        path = Path(config[key])
+        if path.is_file():
+            files.add(path)
+        elif path.is_dir() and list(path.rglob("*.safetensors")):
+            files.update(path.rglob("*.safetensors"))
+            files.update(path.glob("*.json"))
+        else:
+            raise ValueError(f"FIT_ENCODER: {key} must resolve to local pinned weights: {path}")
+    return sorted(files)
+
+
 def freeze_windows(manifest, history=8, chunk=42, count=8):
     if count < 2 or history < 1 or chunk < 1:
         raise ValueError("FIT_WINDOWS: require count >= 2 and positive history/chunk")
