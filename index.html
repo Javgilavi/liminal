@@ -32,6 +32,12 @@
         >liminal<span class="wordmark-dot">.</span></a
       >
       <nav aria-label="Project sections">
+        <a
+          href="https://github.com/Javgilavi/liminal"
+          target="_blank"
+          rel="noopener"
+          >GitHub ↗</a
+        >
         <a href="#overview">Overview</a><a href="#method">Method</a
         ><a href="#experiments">Experiments</a><a href="#evidence">Evidence</a>
       </nav>
@@ -44,17 +50,22 @@
         <p class="project-dateline">
           ERH Physical AI Hackathon · 17–18 October 2026
         </p>
-        <h1>Two arms.<br />Explicit dependencies.</h1>
+        <h1>Dual-arm manipulation<br />with FLUX 3 Action.</h1>
         <p class="subtitle">
-          Language-conditioned manipulation,<br />coordinated by what must stay
-          true.
+          Task LoRAs control each arm. A behavior tree coordinates the task.
         </p>
         <p class="intro-copy">
-          Liminal connects task planning, per-arm FLUX skills and independent
-          perception.<br class="desktop" />
-          Haller is the hardware. Liminal is the system that coordinates it.
+          Liminal runs on Haller, a dual SO-101 rig, with camera feedback and a
+          MuJoCo joint mirror.
         </p>
         <div class="intro-actions">
+          <a
+            class="button light"
+            href="https://github.com/Javgilavi/liminal"
+            target="_blank"
+            rel="noopener"
+            >GitHub code ↗</a
+          >
           <a class="button primary" href="#physical">Watch the real robot ↓</a
           ><a
             class="button light"
@@ -99,10 +110,7 @@
             </button>
           </div>
           <div class="viewer-bottom">
-            <span
-              >One workspace.<br /><strong
-                >Explore it from any angle.</strong
-              ></span
+            <span><strong>Haller in MuJoCo</strong></span
             ><span class="orbit-hint">Drag to orbit · Scroll to zoom</span>
           </div>
         </div>
@@ -123,26 +131,21 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">The idea</p>
-            <h2>One arm makes<br />the other possible.</h2>
+            <h2>One arm holds.<br />The other inserts.</h2>
           </div>
           <p>
-            A useful dual-arm task is more than two independent pick-and-place
-            commands. One arm can change or maintain a condition that the other
-            needs.
+            The placement arm needs the lid to stay open. Losing support must
+            stop the insertion.
           </p>
         </div>
         <div class="overview-prose">
           <p>
-            Consider a box with a lid. Opening it is only the beginning: the lid
-            must stay open while the other arm places an object inside. If
-            support is lost, continuing the placement is no longer the same
-            task.
+            One arm opens and holds the lid while the other places an object
+            inside.
           </p>
           <p>
-            Liminal represents those dependencies explicitly. A deterministic
-            behavior tree chooses when a bounded manipulation skill may run,
-            maintains shared conditions, and checks independently whether the
-            intended change actually happened.
+            The behavior tree schedules skills, monitors support and waits for
+            camera-based verification before advancing.
           </p>
         </div>
         <div class="dependency-words">
@@ -160,21 +163,19 @@
           </div>
         </div>
         <p class="annotation">
-          This describes the implemented coordination model. A complete learned
-          dual-arm hardware task remains unverified.
+          Full learned dual-arm execution is still unverified.
         </p>
       </section>
 
       <section class="section" id="physical">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Real robot / new highlights</p>
-            <h2>A real pen.<br />A learned insertion.</h2>
+            <p class="eyebrow">Real robot</p>
+            <h2>Red-pen insertion<br />on Haller.</h2>
           </div>
           <p>
-            The newest archive contains FLUX red-pen LoRA runs on Haller, with
-            the actual head and wrist observations side by side. Watch the
-            approach, grasp, carry and release.
+            Five recorded FLUX LoRA runs. Head and wrist cameras are shown side
+            by side.
           </p>
         </div>
         <div class="physical-feature">
@@ -199,13 +200,11 @@
             </p>
           </div>
           <aside>
-            <span class="physical-type"
-              >Physical hardware / selected successful runs</span
-            >
+            <span class="physical-type">Selected successful runs</span>
             <h3>“Put the red pen in its slot in the cardboard box.”</h3>
             <p>
-              FLUX 3 Action + red-pen task LoRA, RAW 5k; 16 actions per request.
-              One arm manipulates in an already accessible workspace.
+              RAW-5k red-pen LoRA. 16 actions per request. Single-arm insertion
+              with the box accessible.
             </p>
             <div class="physical-counts">
               <div>
@@ -216,10 +215,8 @@
               </div>
             </div>
             <p class="annotation">
-              Small session blocks reported in the media index. The selected
-              videos show successful inserts; they are not a randomized or
-              independently labeled benchmark. Full learned dual-arm
-              coordination remains unverified.
+              Team-reported session counts; clips show selected successes, not a
+              controlled benchmark.
             </p>
           </aside>
         </div>
@@ -234,10 +231,8 @@
             alt="Recorded wrist-camera comparison between the training station and an offset runtime station"
           />
           <p>
-            The archive records the same robot and table with a small station
-            offset. Camera-conditioned behavior depends on the observed scene;
-            this comparison illustrates a setup mismatch, not a controlled
-            estimate of its effect on success.
+            Training and runtime wrist views after a small station offset. This
+            records a setup mismatch; its effect on success was not measured.
           </p>
         </details>
       </section>
@@ -245,13 +240,11 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">The architecture</p>
-            <h2>
-              Learning handles motion.<br />The runtime handles dependencies.
-            </h2>
+            <h2>How the system works.</h2>
           </div>
           <p>
-            The current main branch uses two independent six-channel SO-101 FLUX
-            instances, with separate observation histories and checkpoint state.
+            Each arm has its own six-channel FLUX instance, observation history
+            and task checkpoint. Select a component below.
           </p>
         </div>
         <div class="architecture" aria-label="Interactive system architecture">
@@ -289,9 +282,8 @@
           <div class="arch-detail" aria-live="polite">
             <span id="arch-detail-label">Behavior-tree harness</span>
             <p id="arch-detail-text">
-              A planner proposes task YAML. The compiler validates it. The tree
-              enforces sequencing, support invariants, arm ownership and
-              verified completion; a policy cannot mark its own task successful.
+              The tree schedules skills, checks support conditions and waits for
+              independent verification.
             </p>
           </div>
         </div>
@@ -306,9 +298,8 @@
               alt="Liminal architecture: behavior tree, skill registry, independent per-arm FLUX, safety, Haller hardware, Qwen perception and world-state feedback"
           /></a>
           <p>
-            Architecture illustration from the current project README. The
-            hardware panel is adapted from a real photograph; this figure is
-            explanatory, not a recorded successful rollout.
+            System diagram from the README; the hardware panel is an adapted
+            photograph.
           </p>
         </details>
       </section>
@@ -316,12 +307,11 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Task dependencies</p>
-            <h2>Move through the task.<br />See what must stay true.</h2>
+            <h2>Open. Hold. Insert.</h2>
           </div>
           <p>
-            Scrub the illustration to inspect a support-and-insert task. Then
-            remove lid support to see why a flat list of actions is
-            insufficient.
+            Move the slider through the task. Toggle loss of support to see
+            placement cancel.
           </p>
         </div>
         <div class="task-explorer">
@@ -370,9 +360,8 @@
             verified open-lid condition.
           </p>
           <p class="annotation">
-            Interactive illustration of runtime semantics, not a measured
-            physical trial. The current showcase extends placement to green pen,
-            red pen and cutter, with six possible object orderings.
+            Runtime illustration, not a physical trial. The showcase sequences a
+            green pen, red pen and cutter.
           </p>
         </div>
       </section>
@@ -380,12 +369,11 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Demonstrations</p>
-            <h2>Inspect the behavior,<br />not only the headline.</h2>
+            <h2>Simulation and diagnostics.</h2>
           </div>
           <p>
-            Scripted teachers, model rollouts, predicted futures and perception
-            sessions show different parts of the system. Every clip keeps its
-            evidence label.
+            Inspect a scripted teacher, compare policy checkpoints and view
+            predicted camera frames.
           </p>
         </div>
         <div class="demo-grid">
@@ -441,12 +429,10 @@
           </div>
         </div>
         <p class="evidence-note">
-          The teacher is scripted, the left arm is parked, and the lid uses an
-          open fixture. This is training-data generation, not learned or
-          real-robot task success.
+          Scripted training demonstration: left arm parked, lid fixed open.
         </p>
         <div class="comparison-heading">
-          <h3>Same held-out scene. Different checkpoints.</h3>
+          <h3>Zero-shot vs. task LoRA.</h3>
           <p>
             Red marker, seed 901001. These videos belong to the separate
             tabletop-twin experiment.
@@ -489,12 +475,11 @@
           /><span>Scrub the same relative point</span>
         </div>
         <p class="annotation">
-          Approach improved in this example, but neither clip completes
-          placement. The twin evaluations report 0/20 completed placements per
-          checkpoint; distance to an object is not grasp success.
+          Both checkpoints completed 0/20 placements. The shorter distance in
+          this scene does not establish a successful grasp.
         </p>
         <div class="gallery-heading">
-          <h3>Look inside another part of the loop.</h3>
+          <h3>Prediction and perception.</h3>
           <div class="gallery-buttons">
             <button data-slide="0" class="active">Real-camera prediction</button
             ><button data-slide="1">FLUX in simulation</button
@@ -535,13 +520,9 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">Results</p>
-            <h2>Different experiments.<br />Different measures of progress.</h2>
+            <h2>Simulation and hardware results.</h2>
           </div>
-          <p>
-            Explore the corrected simulation comparison, new physical insertion
-            highlights and older integration trials separately. These are
-            retained experiments, not new runs performed for this website.
-          </p>
+          <p>Recorded results, separated by task and experiment.</p>
         </div>
         <div class="results-tabs" role="tablist" aria-label="Result domain">
           <button role="tab" aria-selected="true" data-result="simulation">
@@ -578,19 +559,15 @@
             ><span><strong>250</strong> optimizer updates</span>
           </div>
           <p class="annotation">
-            Raw LoRA lifts in 2/5 scenes; zero-shot and EMA lift in 0/5. All
-            three complete 0/5 placements. This small matched test does not
-            establish physical transfer or broad task reliability.
+            Raw LoRA: 2/5 lifts. Zero-shot and EMA: 0/5. All models: 0/5
+            placements.
           </p>
         </div>
         <div id="results-hardware" class="results-panel" hidden>
-          <h3>New red-pen highlights: successful physical insertions.</h3>
+          <h3>Red-pen insertion sessions</h3>
           <p>
-            The current media index reports 3/5 successful attempts in the first
-            RAW-5k block and 2/3 in a later morning block. The selected
-            head/wrist videos are shown <a href="#physical">above ↗</a>. These
-            small team-reported sessions are separate from the older engineering
-            index below and do not establish full dual-arm task reliability.
+            The media index reports 3/5 and 2/3 successful attempts in two
+            RAW-5k sessions. <a href="#physical">Watch the selected runs ↗</a>
           </p>
           <h3 class="older-index">Earlier official-policy engineering index</h3>
           <div class="hardware-counts">
@@ -602,23 +579,16 @@
             </div>
           </div>
           <p>
-            Two trials reached their requested duration. Other runs stopped on
-            disabled torque, calibrated travel bounds or non-tracking under
-            load. These are engineering outcomes; finishing a process does not
-            establish a successful grasp.
+            Two trials reached their duration. Others stopped on torque,
+            travel-limit or tracking checks.
           </p>
           <p class="annotation">
-            All 16 manipulation-success fields are unrecorded in the committed
-            trial index. No task success rate can be inferred from that older
-            index. The new red-pen session counts above come from a separate
-            media record.
+            These older trials have no task-success labels. They are separate
+            from the red-pen sessions above.
           </p>
         </div>
         <div id="results-twin" class="results-panel" hidden>
-          <h3>
-            Scripted experts supply demonstrations; learned policies are
-            evaluated separately.
-          </h3>
+          <h3>Tabletop-twin dataset</h3>
           <div class="hardware-counts">
             <div><strong>576</strong><span>Generated candidates</span></div>
             <div><strong>243</strong><span>Accepted demonstrations</span></div>
@@ -629,13 +599,11 @@
             </div>
           </div>
           <p>
-            The teacher covers object positions and yaw, box variation,
-            lighting, camera jitter and occasional recovery. Accepted teacher
-            behavior is not a learned-policy score.
+            Scripted demonstrations vary object pose, box layout, lighting and
+            cameras.
           </p>
           <p class="annotation">
-            Counts come from the current media index. This is a different
-            dataset and evaluation from the five-seed red-block comparison.
+            Separate dataset from the five-seed red-block experiment.
           </p>
         </div>
         <p class="result-source">
@@ -649,12 +617,11 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">The digital twin</p>
-            <h2>Compare the workspace.<br />Keep the uncertainty visible.</h2>
+            <h2>Real workspace and MuJoCo.</h2>
           </div>
           <p>
-            Drag the divider between a real setup capture and an estimated
-            rendered scene. These are independently captured views, not
-            pixel-registered images.
+            Drag to compare the real setup with the estimated scene. The views
+            are not registered.
           </p>
         </div>
         <div class="image-comparison" id="scene-comparison">
@@ -681,17 +648,15 @@
           <article>
             <h3>Measured-joint mirroring</h3>
             <p>
-              The local companion applies native measured joints directly to
-              MuJoCo forward kinematics. The public lab can display those poses
-              after you explicitly pair it with the robot-side bridge.
+              Pair the lab with the local companion to mirror measured joints in
+              MuJoCo.
             </p>
           </article>
           <article>
             <h3>Estimated physical correspondence</h3>
             <p>
-              Camera registration, arm spacing, object sizes and compliant
-              fin-ray fingers still need calibration. Live object motion and
-              contact forces are not automatically tracked.
+              Scene dimensions and camera registration need calibration. Live
+              objects and contact forces are not tracked.
             </p>
           </article>
         </div>
@@ -704,23 +669,16 @@
             alt="Real compliant fingers next to rigid simulated jaws"
             loading="lazy"
           />
-          <p>
-            The physical Haller rig uses compliant fingers. The current
-            simulated jaw model is rigid; a successful simulated grip is not a
-            guarantee of real contact behavior.
-          </p>
+          <p>Haller uses compliant fingers; the simulated jaws are rigid.</p>
         </details>
       </section>
       <section class="section evidence-section" id="evidence">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Evidence & limits</p>
-            <h2>What is implemented.<br />What is still unverified.</h2>
+            <h2>Current status.</h2>
           </div>
-          <p>
-            The interface brings several development threads together. A clear
-            boundary between them matters more than a single aggregate score.
-          </p>
+          <p>Code, recordings and remaining validation.</p>
         </div>
         <div class="evidence-rows">
           <details open>
@@ -729,11 +687,9 @@
               <span>Implemented / software checked</span>
             </summary>
             <p>
-              The tree compiler, per-arm policy instances, checkpoint registry,
-              ownership rules and independent world-state predicates are
-              implemented. Six object-order permutations passed symbolic
-              ordering checks. Those checks use synthetic checkpoint files and
-              deterministic feedback, rather than learned physical manipulation.
+              The runtime is implemented. Six object-order permutations pass
+              symbolic checks using synthetic checkpoints and deterministic
+              feedback.
             </p>
           </details>
           <details>
@@ -742,12 +698,9 @@
               <span>Configured / deployment needs evaluation</span>
             </summary>
             <p>
-              Scene and wrist observations feed schema-validated Qwen
-              inspection. Timestamped predicates can expire, unknown
-              observations are retained, and task progression is verified
-              independently of a skill's own claim. A labeled scene evaluation
-              is still required before trusting transitions on the physical
-              bench.
+              Qwen inspects camera views and updates timestamped scene
+              predicates. Physical task transitions still need a labeled
+              perception evaluation.
             </p>
           </details>
           <details>
@@ -756,13 +709,9 @@
               <span>RAW-5k inserts / 10k loading check</span>
             </summary>
             <p>
-              The current raw-step-10,000 red-pen adapter has a recorded GPU
-              smoke check producing a finite 42×6 chunk. That check used blank
-              images and issued no motor commands. It validates loading and
-              output shape. Separately, the newly archived RAW-5k red-pen videos
-              show real successful inserts with team-reported session counts.
-              These are different checkpoint records. Other showcase skill
-              bundles remain unstaged.
+              RAW-5k has recorded real inserts. A separate 10k adapter passed a
+              blank-image loading check with a finite 42×6 output. Other
+              showcase skill bundles remain unstaged.
             </p>
           </details>
           <details>
@@ -770,24 +719,17 @@
               Simulation-to-real transfer <span>Research in progress</span>
             </summary>
             <p>
-              The simulated LoRA results show partial grasp improvement, with no
-              completed placement in the reported matched tests. New real
-              red-pen LoRA highlights show successful single-arm insertions.
-              Full learned dual-arm hardware performance and a physically
-              calibrated object/contact twin remain unverified.
+              Single-arm red-pen inserts are recorded. Full learned dual-arm
+              execution and a calibrated object/contact twin remain unverified.
             </p>
           </details>
         </div>
         <div class="next-step">
           <div>
-            <h3>
-              Use the public lab to explore.<br />Pair your local bridge to
-              observe hardware.
-            </h3>
+            <h3>Open the lab.</h3>
             <p>
-              Replay and 3D exploration run entirely in the browser. Live
-              cameras, prompts and measured-joint mirroring use the existing
-              robot-side service; GitHub Pages does not host a robot controller.
+              Replay runs in your browser. Pair the local companion for real
+              cameras, joint mirroring and prompt-driven trials.
             </p>
           </div>
           <a
@@ -837,8 +779,14 @@
     <footer>
       <a class="wordmark" href="./"
         >liminal<span class="wordmark-dot">.</span></a
-      ><span>Two arms. Explicit dependencies. Verified progress.</span>
+      ><span>FLUX skills · dual SO-101 · MuJoCo</span>
       <div>
+        <a
+          href="https://github.com/Javgilavi/liminal"
+          target="_blank"
+          rel="noopener"
+          >GitHub code ↗</a
+        >
         <a
           href="https://github.com/oscardvs/haller_ws"
           target="_blank"
