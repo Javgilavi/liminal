@@ -210,7 +210,7 @@ the Liminal source import path configured:
 ```bash
 python scripts/sim_flux_assembly/run_fitting.py \
   --root "$ASSEMBLY_ROOT" --output "$ASSEMBLY_ROOT/unique-fixed-window-run" \
-  --lerobot "$LEROBOT_CHECKOUT" --steps 1000
+  --lerobot "$LEROBOT_CHECKOUT" --evaluator "$ASSEMBLY_EVALUATOR" --steps 1000
 ```
 
 `--audit-only` runs the boundary checks without loading policy weights or fitting.
