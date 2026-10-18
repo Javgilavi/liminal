@@ -18,6 +18,21 @@ from pathlib import Path
 from fitting import checkpoint_inputs, decide, digest, freeze_windows, training_config
 
 
+def resolve_cached_encoder(reference):
+    repo, separator, artifact = reference.partition(":")
+    subpath, pin_separator, revision = artifact.rpartition("@")
+    if (not separator or not pin_separator or not subpath or Path(subpath).is_absolute()
+            or ".." in Path(subpath).parts or len(revision) != 40
+            or any(c not in "0123456789abcdef" for c in revision)):
+        raise ValueError(f"FIT_ENCODER_PIN: require a local path or repo:artifact@commit reference: {reference}")
+    from huggingface_hub import snapshot_download
+
+    # Only these encoder artifacts were downloaded. Requiring the whole repository
+    # would incorrectly demand the unrelated full action-base checkpoint as well.
+    return Path(snapshot_download(repo_id=repo, revision=revision, local_files_only=True,
+                                  allow_patterns=[subpath, f"{subpath}/**"])) / subpath
+
+
 def write_json(path, value):
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
@@ -69,7 +84,7 @@ def main(args):
         inputs = [root / "dataset-manifest.json", root / "hf-sim-normalization.json", root / "scene.xml",
                   output / "config.json", windows, *code.glob("*.py"), *baseline.glob("*.json"),
                   *baseline.glob("*.safetensors"),
-                  *checkpoint_inputs(baseline),
+                  *checkpoint_inputs(baseline, resolve_reference=resolve_cached_encoder),
                   *(Path(r["source"]) for r in frozen["windows"])]
         state["input_sha256"] = {str(p): digest(p) for p in sorted(set(inputs))}
         state["runtime"] = {"python": sys.version, "executable": sys.executable,

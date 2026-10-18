@@ -16,7 +16,7 @@ def digest(path):
     return result.hexdigest()
 
 
-def checkpoint_inputs(checkpoint):
+def checkpoint_inputs(checkpoint, resolve_reference=None):
     """Include the weights and encoders referenced by a task adapter, not just the adapter."""
     checkpoint = Path(checkpoint)
     adapter = json.loads((checkpoint / "adapter_config.json").read_text())
@@ -27,6 +27,8 @@ def checkpoint_inputs(checkpoint):
     files = set(base.glob("*.safetensors")) | set(base.glob("*.json"))
     for key in ["video_vae_id", "text_encoder_id"]:
         path = Path(config[key])
+        if not path.exists() and resolve_reference is not None:
+            path = Path(resolve_reference(config[key]))
         if path.is_file():
             files.add(path)
         elif path.is_dir() and list(path.rglob("*.safetensors")):

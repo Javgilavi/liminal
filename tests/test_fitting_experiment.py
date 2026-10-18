@@ -148,7 +148,7 @@ def test_pipeline_stops_after_failed_contract_and_keeps_failure_evidence(tmp_pat
     (tmp_path / "dataset-manifest.json").write_text(json.dumps(data))
     (tmp_path / "hf-sim-normalization.json").write_text("{}")
     (tmp_path / "scene.xml").write_text("<mujoco/>")
-    monkeypatch.setattr(module, "checkpoint_inputs", lambda _: [])
+    monkeypatch.setattr(module, "checkpoint_inputs", lambda *a, **kw: [])
     monkeypatch.setattr(module.importlib.metadata, "version", lambda _: "fixture-version")
     (tmp_path / "train-config.json").write_text(json.dumps({
         "dataset": {}, "policy": {}, "accelerator": {"gradient_accumulation": {"steps": 4}}
@@ -186,3 +186,21 @@ def test_checkpoint_provenance_includes_base_and_both_encoders(tmp_path):
     vae.unlink()
     with pytest.raises(ValueError, match="FIT_ENCODER"):
         fit.checkpoint_inputs(adapter)
+
+
+def test_pinned_hub_encoder_references_resolve_only_from_offline_cache(tmp_path, monkeypatch):
+    module = load_script("run_fitting")
+    calls = []
+
+    def snapshot(**kw):
+        calls.append(kw)
+        return str(tmp_path)
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=snapshot))
+    revision = "a" * 40
+    path = module.resolve_cached_encoder(f"org/model:text_encoder@{revision}")
+    assert path == tmp_path / "text_encoder", "[BUG-2 REGRESSION] saved checkpoints use pinned Hub references"
+    assert calls == [{"repo_id": "org/model", "revision": revision, "local_files_only": True,
+                      "allow_patterns": ["text_encoder", "text_encoder/**"]}]
+    with pytest.raises(ValueError, match="FIT_ENCODER_PIN"):
+        module.resolve_cached_encoder("org/model:text_encoder@main")
