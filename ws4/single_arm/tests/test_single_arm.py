@@ -4,6 +4,7 @@ import json
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -440,3 +441,34 @@ def test_align_at_home_runs_until_enter_or_q(monkeypatch):
     args = types.SimpleNamespace(placement_port=0)
     assert rsa.align_at_home(args, robot, ScriptedKeys("\n", 3), ref, ref, "ref", period_s=0.0)
     assert not rsa.align_at_home(args, robot, ScriptedKeys("q", 2), ref, ref, "ref", period_s=0.0)
+
+
+# ---------------------------------------------------------------------------------------------- --backend replay
+def test_fake_arm_replays_a_recorded_take_through_the_guard(tmp_path, monkeypatch):
+    """The box fallback (replay.py): a tiny synthetic take on the robot-right arm (left_* columns), run by the
+    fake arm through the guard at 1 deg/tick; each attempt replays it from its start and ends holding where it ends.
+    A scored replay is logged with condition "scripted", variant scripted-replay-ep<N>, never as a policy row."""
+    from test_replay import TAKE, write_dataset
+
+    root = write_dataset(tmp_path / "box", {5: TAKE})
+    monkeypatch.setenv("WS4_TRIAL_LOG", str(tmp_path / "trials.jsonl"))
+    metas = _run(tmp_path / "runs", monkeypatch, "--backend", "replay", "--replay-root", str(root),
+                 "--replay-episode", "5", "--task-side", "right", "--max-step", "1.0", "--seconds", "60",
+                 "--attempts", "2", "--no-keepout", "--trial-task", "open_box")  # fmt: skip
+    assert len(metas) == 2
+    for meta in metas:
+        assert meta["end_reason"] == "replay finished: scripted replay of recorded demo 5, holding where the take ends"
+        assert meta["checkpoint"].startswith("scripted replay of recorded demo 5 (")
+        assert meta["replay"]["label"] == "scripted replay of recorded demo 5"
+        assert not meta["replay"]["handed_over_to_flux"]
+    trace = np.load(next((tmp_path / "runs").glob("*/attempt02/trace.npz")))
+    assert np.abs(np.diff(trace["command"][:, :5], axis=0)).max() <= 1.0 + 1e-9  # the 1 deg/tick guard holds
+    assert np.allclose(trace["command"][-1], TAKE[-1], atol=1e-6)  # it ends on the take's last pose
+    args = SimpleNamespace(trial_task="open_box", condition="post_training", variant="A0", backend="replay",
+                           prime_ticks=None, layout="P3", note="", guidance_note="-", max_step=1.0,
+                           max_relative_target=20.0, torque_limit=60.0, operator="test")  # fmt: skip
+    rsa.log_trial(args, "open the box by pulling its handle", metas[0], {"steps_done": 3, "interventions": 0},
+                  tmp_path / "runs")  # fmt: skip
+    (row,) = [json.loads(line) for line in (tmp_path / "trials.jsonl").read_text().splitlines()]
+    assert (row["condition"], row["variant"]) == ("scripted", "scripted-replay-ep5") and row["success"]
+    assert "scripted replay of recorded demo 5" in row["notes"]

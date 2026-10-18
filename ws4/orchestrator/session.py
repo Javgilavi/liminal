@@ -91,6 +91,9 @@ class SessionConfig:
     left_package: str | None = None
     right_package: str | None = None
     skill_packages: dict[str, str] = field(default_factory=dict)  # skill -> policy server package (one LoRA per skill)
+    # skill -> "flux" | "replay" (a recorded take as a scripted policy, ws4/single_arm/replay.py: the box fallback)
+    skill_backends: dict[str, str] = field(default_factory=dict)
+    replay_episode: int | None = None  # override the take of every replay skill
     imagine: str = ""  # "lazy": the server keeps FLUX's imagined frames per chunk; the HMI shows them
     async_inference: bool | None = None  # default: True for remote
     # Sim
@@ -209,6 +212,20 @@ class Session:
             raise ValueError(f"--skill-package names unknown skills {unknown}; have {self.vocab.names()}")
         for name, pkg in cfg.skill_packages.items():  # one LoRA per skill on the policy server
             self.vocab.skills[name] = dataclasses.replace(self.vocab.skills[name], package=pkg)
+        for name, backend in cfg.skill_backends.items():
+            skill = self.vocab.skills.get(name)
+            if skill is None or backend not in ("flux", "replay") or (backend == "replay" and not skill.replay):
+                raise ValueError(f"--skill-backend {name}={backend}: needs a skill of {self.vocab.names()} with a "
+                                 "replay entry in the vocabulary, and flux or replay")
+            self.vocab.skills[name] = dataclasses.replace(skill, backend=backend)
+        if cfg.replay_episode is not None:
+            for name, skill in self.vocab.skills.items():
+                if skill.replay:
+                    replay = {**skill.replay, "episode": int(cfg.replay_episode)}
+                    self.vocab.skills[name] = dataclasses.replace(skill, replay=replay)
+        replaying = [s for s in self.vocab.skills.values() if s.backend == "replay"]
+        if replaying and cfg.env != "haller":
+            raise ValueError("a replay skill drives a Haller arm: env=haller only")
         self.rig = None  # HallerRig on env=haller
         haller = cfg.env == "haller"
         if cfg.action_steps is None:
@@ -324,8 +341,8 @@ class Session:
                 self.target_backend[f"{arm}:sim"] = be
         elif cfg.policy in ("fake", "remote"):
             # one target per (arm, package) a FLUX skill can use on that arm
-            uses = {(a, s.package or cfg.package_for(a)) for s in self.vocab.skills.values() if s.is_flux
-                    for a in s.arms if a in arms}
+            uses = {(a, s.package or cfg.package_for(a)) for s in self.vocab.skills.values()
+                    if s.is_flux and s.backend == "flux" for a in s.arms if a in arms}
             for pkg in sorted({p for _, p in uses}):
                 self.backends[pkg] = self._policy_backend(pkg)
                 if cfg.action_steps:
@@ -338,6 +355,31 @@ class Session:
                 self.target_backend[t] = self.backends[pkg]
         else:
             raise ValueError(f"unknown policy {cfg.policy!r}")
+        for skill in self.vocab.skills.values():  # recorded takes as scripted policies: no package, never FLUX
+            if skill.backend != "replay" or not skill.is_flux:
+                continue
+            from replay import SLOW_MARGIN, ReplayBackend, load_take, reference_frame  # ws4/single_arm (haller.build)
+
+            if cfg.prefetch_ticks:  # WS4_PREFETCH_TICKS may be set: prefetching would skip recorded steps
+                self.events.add("warn", f"chunk prefetch off (was {cfg.prefetch_ticks}): {skill.name} is a replay, "
+                                "which counts whole chunks")
+                cfg.prefetch_ticks = 0
+            name = f"replay_{skill.name}"
+            r = skill.replay
+            be = ReplayBackend(*load_take(r["root"], r["episode"], r["columns"]), max_step=cfg.max_step,
+                               max_gripper_step=cfg.max_gripper_step)
+            if cfg.action_steps:
+                be.contract = dataclasses.replace(be.contract, n_action_steps=int(cfg.action_steps))
+            if skill.runner.get("slow_zone"):  # the cutter: warp at the slow step near the box arm's LIVE pose
+                be.step_at = self._slow_step_at(skill, SLOW_MARGIN)
+            self.backends[name] = be
+            for arm in skill.arms:
+                targets.append(dataclasses.replace(per_arm_target(arm, name), name=f"{arm}:{name}"))
+                self.target_backend[f"{arm}:{name}"] = be
+            ref = reference_frame(Path(skill.kit).parent / "layouts", r["episode"]) if skill.kit else None
+            self.events.add("warn", f"{skill.name}: {skill.driver}, not FLUX; place the objects as at the take's start"
+                            + (f": {ref} (its first head frame)" if ref else " (no reference frame of that take in "
+                               "its kit)"))
 
         # One moving arm on the Haller: the other is parked and not connected, so an inter-arm check against the
         # phantom slot would be meaningless; the FK keep-out (midline zone included) guards that side instead.
@@ -363,7 +405,8 @@ class Session:
             from .imagination_panel import ImaginationPanel
 
             self.imagination = ImaginationPanel(self.runner, {t: be for t, be in self.target_backend.items()
-                                                              if not t.endswith(":prim")}, cfg.fps)
+                                                              if not t.endswith(":prim") and ":replay_" not in t},
+                                                cfg.fps)
         self.verifier = self._make_verifier()
         self.planner = self._make_planner()
         if self.rig is not None and cfg.policy == "remote":
@@ -461,6 +504,8 @@ class Session:
             return f"{step.arm}:prim"
         if self.cfg.policy == "scripted":
             return f"{step.arm}:sim"
+        if skill.backend == "replay":
+            return f"{step.arm}:replay_{skill.name}"
         return f"{step.arm}:{skill.package or self.cfg.package_for(step.arm)}"
 
     # ------------------------------------------------------------------ frames
@@ -805,6 +850,24 @@ class Session:
         self._start_note[(run.step.id, run.attempt)] = note
         self.events.add("info", f"{run.step.id}: {msg}", step=run.step.id)
 
+    def _slow_step_at(self, skill: Skill, margin: float) -> Any:
+        """q -> deg per tick for the replay's time warp: the kit's slow step within its slow zone (plus ``margin``)
+        of the other arm's live pose, else the guard's max step; on a private copy of the skill's keep-out, since the
+        warp runs on the policy worker thread."""
+        import copy
+
+        arm = skill.arms[0]
+        other = "right" if arm == "left" else "left"
+        probe = copy.copy(self.rig.skill_keepout(arm, skill))
+        zone, slow, fast = skill.runner["slow_zone"] + margin, skill.runner["slow_step"], self.cfg.max_step
+
+        def step_at(q: Any) -> float:
+            live = self.rig.arms[other].robot.last_q if other in self.rig.arms else None
+            probe.other_q = None if live is None else tuple(float(v) for v in live)
+            return slow if float(probe.other_arm_gap(np.asarray(q, float))) < zone else fast
+
+        return step_at
+
     def _ramp_refused(self, arm: str, zone: str) -> bool:
         ex = self.executor
         return ex is not None and ex.ramp_fallback(arm, zone)
@@ -817,12 +880,19 @@ class Session:
                f"{cfg.max_step} deg/tick", f"torque limit {cfg.torque_limit:.0f}%"]
         if self.rig is not None and self.rig.hold_arms:
             out.append(f"held from launch: {', '.join(self.rig.hold_arms)}")
+        out += [f"{s.name}: {s.driver} (not FLUX)" for s in self.vocab.skills.values() if s.driver]
         return ", ".join(out)
 
     def _log_attempt(self, run: Any, ok: bool, reason: str) -> None:
-        """One trial_log line per FLUX attempt (task = the skill), so each skill's success rate is graded too."""
+        """One trial_log line per FLUX attempt (task = the skill), so each skill's success rate is graded too. A
+        scripted replay is no policy: its rows have condition "scripted" and variant "scripted-replay-ep<N>", as
+        run_single_arm logs them, so they never mix with the FLUX rows."""
         cfg = self.cfg
         tl = load_trial_log()
+        condition, variant, checkpoint = cfg.condition, self._variant(), self._checkpoint()
+        if run.skill.driver:
+            condition, variant = "scripted", f"scripted-replay-ep{run.skill.replay['episode']}"
+            checkpoint = f"{run.skill.driver} ({run.skill.replay['root']}, {run.skill.replay['columns']}_* columns)"
         verdict = run.verdicts[-1] if run.verdicts else None
         other = self._other_arm.get((run.step.id, run.attempt), "n/a")
         notes = (f"step {run.step.id} attempt {run.attempt}/{run.step.max_attempts} of run "
@@ -838,7 +908,7 @@ class Session:
                  + (f"; last check {verdict.source} {verdict.done} ({verdict.confidence:.2f}): {verdict.observation}"
                     if verdict else ""))
         trial = tl.Trial(
-            task=run.skill.name, condition=cfg.condition, variant=self._variant(), checkpoint=self._checkpoint(),
+            task=run.skill.name, condition=condition, variant=variant, checkpoint=checkpoint,
             steps_total=1, steps_done=1 if ok else 0, success=ok and run.attempt_interventions == 0,
             interventions=run.attempt_interventions, layout=self.layout_name(), failure="" if ok else reason[:120],
             notes=notes[:900], operator=cfg.operator,
@@ -855,6 +925,11 @@ class Session:
         notes = (f"orchestrator {'SIMULATION, ' if sim else ''}policy={cfg.policy} planner={cfg.planner} "
                  f"verifier={self.verifier.name} replans={result.replans} "
                  f"claude_usd={self.meter.total_usd:.4f} t={result.duration_s:.1f}s run={self.run_dir.name}")
+        scripted = sorted({f"{s.skill}: {self.vocab[s.skill].driver}" for s in plan.steps
+                           if self.vocab[s.skill].driver})
+        if scripted:  # never mistaken for FLUX
+            notes += "; NOT FLUX: " + "; ".join(scripted)
+            checkpoint += " (" + "; ".join(scripted) + ", not FLUX)"
         trial = tl.Trial(
             task=cfg.task, condition=cfg.condition, variant=variant, checkpoint=checkpoint,
             steps_total=max(result.steps_total, 1), steps_done=min(result.steps_done, max(result.steps_total, 1)),
@@ -888,7 +963,8 @@ class Session:
             "gate": self.gate.stats.as_dict() if self.gate else None,
             "events": self.events.recent(n_events),
             "last_result": self.last_result,
-            "vocabulary": [{"name": s.name, "kind": s.kind, "arms": list(s.arms), "prompt": s.prompt}
+            "vocabulary": [{"name": s.name, "kind": s.kind, "arms": list(s.arms), "prompt": s.prompt,
+                            "driver": s.driver}
                            for s in self.vocab.skills.values()],
             "arms": list(self.vocab.station.arms_available) if self.rig is not None else list(ARMS),
             "imagination": self.imagination.state() if self.imagination is not None else {"enabled": False},

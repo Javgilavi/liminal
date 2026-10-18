@@ -14,7 +14,8 @@ Safety layers, outermost last:
 
 Modes: ``--robot fake`` (no hardware), ``--observe`` (real arm, torque never enabled, commands are computed and
 logged but not sent) and the default real run. ``--backend fake`` needs no GPU; ``--backend remote`` calls the
-policy server through the SSH tunnel.
+policy server through the SSH tunnel; ``--backend replay`` feeds one recorded take through the same safety stack
+(``replay.py``: a scripted replay, never FLUX; the box skill's fallback).
 
     python ws4/single_arm/run_single_arm.py --robot fake --backend fake --seconds 5 --yes
     python ws4/single_arm/run_single_arm.py --observe --backend fake --seconds 10
@@ -63,6 +64,7 @@ from flux.history import HistoryBuffer  # noqa: E402
 from flux.safety import DEFAULT_MAX_STEP, SafetyConfig, SafetyGuard, limits_from_lerobot_calibration  # noqa: E402
 from keepout import ZONES, KeepOut, read_arm_joints  # noqa: E402
 from placement import PlacementView, composite, load_refs, read_rgb, ref_shift  # noqa: E402
+from replay import DEFAULT_TAKES, SLOW_MARGIN, ReplayBackend, load_take, reference_frame, take_source  # noqa: E402
 
 CHECKPOINT = "black-forest-labs/flux-3-action-so101@0713a7a"  # weights identical to c9e13b2 (flux/checkpoint_facts.md)
 POLICY_BACKENDS = ("remote", "act")  # learned policies: warmed up, graded and logged
@@ -563,7 +565,22 @@ def read_token(args: argparse.Namespace) -> str | None:
     return os.environ.get("FLUX_TOKEN")
 
 
+def replay_take(args: argparse.Namespace) -> tuple[np.ndarray, dict]:
+    """The recorded take for --backend replay / --prime-ticks: --replay-skill's dataset and default take unless
+    --replay-root / --replay-episode say otherwise, and the task arm's columns (haller naming, mirrored: the robot-right
+    box arm is ``left_*``), which must be the skill's arm."""
+    root, episode, columns = take_source(args.replay_skill)
+    side_columns = "left" if args.task_side == "right" else "right"
+    if side_columns != columns:
+        raise SystemExit(f"--replay-skill {args.replay_skill} replays the {columns}_* columns: its task arm is not "
+                         f"--task-side {args.task_side}")
+    return load_take(args.replay_root or root, episode if args.replay_episode is None else args.replay_episode,
+                     columns)  # fmt: skip
+
+
 def build_backend(args: argparse.Namespace) -> Any:
+    if args.backend == "replay":
+        return ReplayBackend(*replay_take(args), max_step=args.max_step, max_gripper_step=args.max_gripper_step)
     if args.backend == "fake":
         # Scripted stand-in: a constant per-tick drift on each joint and an optional absolute gripper target.
         gripper = None if args.fake_gripper < 0 else args.fake_gripper
@@ -580,9 +597,14 @@ def build_backend(args: argparse.Namespace) -> Any:
     from flux.remote import RemoteBackend
 
     if getattr(args, "imagine", None):  # opt-in: the server also keeps FLUX's imagined frames (ws4/imagine/README.md)
-        return RemoteBackend(args.server, args.package, token=read_token(args), timeout_s=args.timeout,
+        flux = RemoteBackend(args.server, args.package, token=read_token(args), timeout_s=args.timeout,
                              imagine=args.imagine)  # fmt: skip
-    return RemoteBackend(args.server, args.package, token=read_token(args), timeout_s=args.timeout)
+    else:
+        flux = RemoteBackend(args.server, args.package, token=read_token(args), timeout_s=args.timeout)
+    if getattr(args, "prime_ticks", None):  # the first ticks from a recorded take, then FLUX (replay.py)
+        return ReplayBackend(*replay_take(args), max_step=args.max_step, max_gripper_step=args.max_gripper_step,
+                             prime=flux, prime_ticks=args.prime_ticks)  # fmt: skip
+    return flux
 
 
 def warm_up(backend: Any, robot: SingleArmRobot, target: Any, tasks: list[str]) -> None:
@@ -793,6 +815,10 @@ def run_attempt(
     start_q = robot.joints()
     runner.guard.release()
     runner._command = None  # noqa: SLF001 - start every attempt from the measured pose
+    policy = runner.backends.get("policy")
+    replaying = isinstance(policy, ReplayBackend)
+    if replaying:
+        policy.reset()  # the take starts again from this attempt's start pose
     runner.start(target, task)
     t0 = time.monotonic()
     end_reason, period, next_tick = "timeout", 1 / SO101_CONTRACT.fps, time.monotonic()
@@ -838,6 +864,9 @@ def run_attempt(
         guard_ticks += report.guard_intervened
         q = np.array([float(robot.last_raw[f"{j}.pos"]) for j in ARM_JOINTS])
         zone = getattr(runner.guard, "last_zone", "")
+        if replaying and policy.done:  # every replayed command was executed: the arm holds the take's last pose
+            end_reason = f"replay finished: {policy.label}, holding where the take ends"
+            break
         if keep_stop.update(zone, report.status.get(target, "")):
             runner.guard.estop()
             end_reason = keep_stop.reason()
@@ -906,6 +935,11 @@ def run_attempt(
         "checkpoint": (f"{args.act_checkpoint} (LeRobot ACT)" if args.backend == "act" else args.checkpoint)
         if args.backend in POLICY_BACKENDS else f"{args.backend} backend",
     }  # fmt: skip
+    if replaying:  # never mistaken for FLUX: the label, the take and how far it got
+        meta["replay"] = {**policy.info, "label": policy.label, "ticks_sent": policy.cursor,
+                          "handed_over_to_flux": policy.handed_over}  # fmt: skip
+        if args.backend == "replay":
+            meta["checkpoint"] = f"{policy.label} ({policy.info['root']}, {policy.info['columns']}_* columns)"
     rec.close(meta)
     if irec is not None:  # after meta.json, before scoring; bounded by --imagine-timeout and never raises
         try:
@@ -923,7 +957,12 @@ def finish_attempt(args: argparse.Namespace, robot: SingleArmRobot, keys: Keys, 
     """Bring the arm back slowly to the start pose (or the rest pose), or on request after a stop."""
     if args.observe or args.robot == "fake":
         return
-    if meta["end_reason"].startswith("stop"):
+    if meta["end_reason"].startswith("replay finished"):  # the box take ends holding the lid: no return by default
+        key = keys.wait("rx", "REPLAY FINISHED, arm holds where the take ends (the lid). r = return slowly to the "
+                        "start pose (support the lid first), x = keep holding and quit", auto="x")  # fmt: skip
+        if key != "r":
+            raise KeyboardInterrupt
+    elif meta["end_reason"].startswith("stop"):
         key = keys.wait("rx", "STOPPED, arm holds. r = return slowly to rest, x = keep holding and quit")
         if key != "r":
             raise KeyboardInterrupt
@@ -981,12 +1020,19 @@ def log_trial(args: argparse.Namespace, task: str, meta: dict[str, Any], result:
     import trial_log
 
     failure = "" if result["steps_done"] == len(STEPS) else f"stopped before: {STEPS[result['steps_done']]}"
+    replay = meta.get("replay")  # never mixed in with the policy rows
+    condition, variant = args.condition, args.variant
+    if getattr(args, "backend", "") == "replay":  # a recorded take, no policy: its own condition and variant
+        condition, variant = "scripted", f"scripted-replay-ep{replay['episode']}"
+    elif replay:  # --prime-ticks: a FLUX attempt that started from a recorded take
+        variant = f"{args.variant}+primed-ep{replay['episode']}-{args.prime_ticks}"
     trial = trial_log.Trial(
-        task=args.trial_task, condition=args.condition, variant=args.variant, checkpoint=meta["checkpoint"],
+        task=args.trial_task, condition=condition, variant=variant, checkpoint=meta["checkpoint"],
         steps_total=len(STEPS), steps_done=result["steps_done"],
         success=result["steps_done"] == len(STEPS) and result["interventions"] == 0,
         interventions=result["interventions"], layout=meta.get("layout") or args.layout, failure=failure,
         notes=f"{args.note + '; ' if args.note else ''}prompt={task!r}; guidance {args.guidance_note}; "
+        f"{replay['label'] + ' (' + replay['root'] + '); ' if replay else ''}"
         f"{f'action horizon {args.action_steps} per chunk; ' if getattr(args, 'action_steps', None) else ''}"
         f"{f'lift stall {args.lift_stall_deg} deg; ' if getattr(args, 'lift_stall_deg', None) else ''}"
         f"{f'chunk prefetch at {args.prefetch_ticks} commands left; ' if getattr(args, 'prefetch_ticks', None) else ''}"
@@ -1183,8 +1229,18 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--keepout-config", default=None, help="workspace JSON (keepout.py); default red_follower's")
     p.add_argument("--wrist-rotate", type=int, choices=(0, 90, 180, 270), default=0)
     p.add_argument("--slot", choices=("left", "right"), default="left", help="runner slot; no effect on the model")
-    p.add_argument("--backend", choices=("fake", *POLICY_BACKENDS), default="fake",
-                   help="remote = FLUX (or act/serve.py) server; act = LeRobot ACT checkpoint in this process")
+    p.add_argument("--backend", choices=("fake", *POLICY_BACKENDS, "replay"), default="fake",
+                   help="remote = FLUX (or act/serve.py) server; act = LeRobot ACT checkpoint in this process; "
+                        "replay = one recorded take as a scripted policy (replay.py), not FLUX; logged with condition "
+                        "scripted, variant scripted-replay-ep<N>")
+    p.add_argument("--replay-skill", default="box", choices=sorted(DEFAULT_TAKES),
+                   help="--backend replay / --prime-ticks: whose takes (skills.py: dataset, arm, default take)")
+    p.add_argument("--replay-episode", type=int, default=None,
+                   help=f"the take (default per skill: {DEFAULT_TAKES}, see replay.py)")
+    p.add_argument("--replay-root", default=None, help="the take's LeRobot dataset (default: the skill's, cached)")
+    p.add_argument("--prime-ticks", type=int, default=None,
+                   help="--backend remote: replay the first K ticks of --replay-episode (rounded up to the action "
+                        "horizon), then FLUX takes over; logged with variant <variant>+primed-ep<N>-<K>")
     p.add_argument("--act-checkpoint", default=None, help="--backend act: the checkpoint's pretrained_model folder")
     p.add_argument("--act-device", default="auto", help="--backend act: cuda, cpu or auto")
     p.add_argument("--act-steps", type=int, default=None,
@@ -1276,7 +1332,7 @@ def main(argv: list[str] | None = None) -> None:
     import logging
 
     logging.getLogger().setLevel(logging.ERROR)  # LeRobot logs every capped goal at WARNING, 30 times a second
-    if args.scene_cam == "blank" and args.backend in POLICY_BACKENDS and not args.no_log:
+    if args.scene_cam == "blank" and args.backend in (*POLICY_BACKENDS, "replay") and not args.no_log:
         raise SystemExit("a blank scene camera is out of distribution: such attempts must not be logged (--no-log)")
 
     holder = None
@@ -1311,8 +1367,30 @@ def main(argv: list[str] | None = None) -> None:
                                  offset=np.array(args.offset) if args.offset else np.zeros(ARM_DIM))  # fmt: skip
     target = per_arm_target(args.slot, "policy", scene=CameraView(IMG_HEAD), calibration=calibration)
     backend = build_backend(args)
-    if args.action_steps is not None and args.backend in ("remote", "fake"):
-        # The runner reads the horizon from the backend's contract (DualArmRunner._accept keeps n_action_steps).
+    if args.backend == "replay" or args.prime_ticks:
+        if args.scale or args.offset:
+            raise SystemExit("a replay sends the recorded robot-unit commands: no --scale / --offset")
+        if args.prefetch_ticks:  # WS4_PREFETCH_TICKS may be set for FLUX rows; prefetching would skip recorded steps
+            print(f"chunk prefetch off for the replay (was {args.prefetch_ticks}): it counts whole chunks", flush=True)
+            args.prefetch_ticks = 0
+        if args.prime_ticks and args.backend != "remote":
+            raise SystemExit("--prime-ticks hands over to FLUX: it needs --backend remote")
+        info = backend.info
+        print(f"backend: {backend.label} ({info['root']}, {info['columns']}_* columns, {info['frames']} frames), "
+              f"time-warped to {args.max_step:g} deg/tick: {'NOT FLUX' if args.backend == 'replay' else 'then FLUX'}",
+              flush=True)  # fmt: skip
+    if args.backend == "replay":
+        # The take's own first frames, when the kit has them: the placement overlay and the home check use them.
+        # --backend replay only: FLUX runs (also --prime-ticks) keep the last held-out take, so home checks and --align
+        # stay comparable across rows (so101-zeroshot).
+        own = {d: reference_frame(d, backend.info["episode"]) for d in {args.layout_ref, args.home_check} if d}
+        for path in sorted({str(v) for v in own.values() if v}):
+            print(f"placement reference: {path} (the replayed take's first head frame)", flush=True)
+        if args.home_check and own.get(args.home_check) and args.home_check_take is None:
+            args.home_check_take = backend.info["episode"]
+    if args.action_steps is not None and args.backend in ("remote", "fake", "replay"):
+        # The runner reads the horizon from the backend's contract (DualArmRunner._accept keeps n_action_steps). For a
+        # replay it only sets how often the take is asked for: the commands sent are the same.
         backend.contract = replace(backend.contract, n_action_steps=args.action_steps)
         print(f"action horizon: {args.action_steps} of {backend.contract.chunk_size} commands per chunk", flush=True)
     if args.no_keepout and args.robot == "so101" and not args.observe:
@@ -1324,6 +1402,9 @@ def main(argv: list[str] | None = None) -> None:
         guard_cfg, keepout, args.slot, lambda: robot.last_q)
     if args.slow_zone is not None and isinstance(guard, KeepOutGuard):
         guard.slow_zone, guard.slow_step = args.slow_zone, args.slow_step
+        if isinstance(backend, ReplayBackend):  # warp at the slow step there, so the guard never clips the path
+            zone, slow, fast = args.slow_zone + SLOW_MARGIN, args.slow_step, args.max_step
+            backend.step_at = lambda q: slow if float(keepout.other_arm_gap(q)) < zone else fast
     runner = DualArmRunner(robot, [target], {"policy": backend}, guard, async_inference=True,
                            prefetch_ticks=args.prefetch_ticks or 0)  # fmt: skip
     if args.prefetch_ticks:
@@ -1363,6 +1444,8 @@ def main(argv: list[str] | None = None) -> None:
                     continue
                 task = tasks[i % len(tasks)]
                 ref = refs[layout][k % len(refs[layout])] if layout in refs else None
+                if args.backend == "replay" and args.layout_ref:  # place the objects as at the take's start
+                    ref = reference_frame(args.layout_ref, backend.info["episode"]) or ref
                 ref_img = read_rgb(ref) if ref is not None else None
                 label = f"attempt {i + 1}/{len(layouts)}: layout {layout}" + (f", reference {ref.stem}" if ref else "")
                 if not args.yes:
@@ -1380,7 +1463,8 @@ def main(argv: list[str] | None = None) -> None:
                 meta.update(layout=layout, layout_ref=ref.stem if ref else "", **start)
                 (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))
                 # Score the attempt while the arm still holds where it ended, so a quit ("x") never loses it.
-                result = None if args.no_log or args.backend not in POLICY_BACKENDS else ask_result(keys, meta)
+                scored = args.backend in (*POLICY_BACKENDS, "replay")  # a replay: condition "scripted" (log_trial)
+                result = None if args.no_log or not scored else ask_result(keys, meta)
                 if result is not None:
                     meta["result"] = result
                     (out / "meta.json").write_text(json.dumps(meta, indent=2, default=float))

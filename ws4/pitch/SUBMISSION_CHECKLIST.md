@@ -35,8 +35,10 @@ in service of those three, in time order. Tick each line; the owner is who does 
 
 - [ ] Hosted deck: https://claude.ai/artifact/FsptG2MfRYqkmaAqL4EDQm (19 slides). It is **private until shared**: share
       it from the page's Share menu, or export PDF / PPTX from the page and attach that.
-- [ ] Every `[[...]]` on the slides replaced or the element deleted (results, orchestrator, heldout cutter row,
-      knife edge augmented numbers, team, cover and close pills).
+- [ ] Every `[[...]]` on the slides replaced or the element deleted (results, orchestrator chain pill, team, cover and
+      close pills).
+- [ ] The box step is called a scripted replay everywhere (slides, README, video captions), never FLUX.
+- [ ] Cutter count reconciled (trial log 1/6 vs the orchestrator's 0/5 inserts at 09:00) before it is quoted.
 - [ ] 3-minute order: cover, zeroshot, contract (optional), diagnosis, architecture, orchestrator, teach (optional),
       heldout, results, knifeedge, imagination, imaginebetter (optional), realworld, close. Skip safety, memory, sim,
       team and next in the 3-minute pitch (their notes say FINAL ONLY).
@@ -73,9 +75,7 @@ Mirror of NUMBERS.md section 14; grep for the exact tokens.
 | Placeholder | What | Owner | Expected |
 |---|---|---|---|
 | `[[NUM:CHAIN_SUCCESS]]`, `[[NUM:CHAIN_STEPS]]` | full chain: successes / runs, steps | demo-rehearsal | 10:00 to 12:30 |
-| `[[NUM:REH_BOX]]`, `[[NUM:REH_GREEN]]`, `[[NUM:REH_CUTTER]]`, `[[NUM:REH_PENLID]]` | per-skill rehearsal results | demo-rehearsal | 08:30 to 10:30 |
-| `[[NUM:AUG_BOX]]`, `[[NUM:AUG_CUTTER]]`, `[[NUM:AUG_GREEN]]` | augmented LoRAs, offline gates | ws4-datasets | 08:00 / 08:25 |
-| `[[NUM:CUTTER_OFFLINE]]` | cutter LoRA offline arm MAE / direction | ws4-datasets | about 08:00 |
+| `[[NUM:REH_PENLID]]` | red pen with the lid held, one check attempt | demo-rehearsal | 09:00 to 11:30 |
 | `[[NUM:B84_PEN_SUCCESS]]`, `[[NUM:MEDIAN_PEN_SUCCESS]]` | zero-shot B84 / median on the arm, only if run | orchestrator | 12:30, else delete |
 | `[[CLIP:HMI_CHAIN]]`, `[[CLIP:IMAGINED_VS_ACTUAL]]` | chain screen recording; optional live imagination clip | demo-rehearsal | with the chain |
 | `[[NUM:GPU_SPEND]]`, `[[NUM:CLAUDE_SPEND]]`, `[[NUM:RECORD_HOURS]]`, `[[NUM:TRAIN_HOURS]]` | cost and time split (optional) | Oscar | 13:00 |

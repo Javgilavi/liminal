@@ -11,21 +11,23 @@ ws4/pitch/NUMBERS.md (section 0 first). Delete this comment.
 **ERH Physical AI Hackathon 2026, track "Imagine, Then Act" (Black Forest Labs FLUX 3 Action).**
 Team `[[TEAM:NAME]]`: `[[TEAM:MEMBERS]]`.
 
-Demo video: `[[TEAM:VIDEO_URL]]` · Slides: `[[TEAM:SLIDES_URL]]` · LoRA:
-[Oskrt/flux-3-action-so101-haller-pen-lora](https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora) ·
+Demo video: `[[TEAM:VIDEO_URL]]` · Slides: `[[TEAM:SLIDES_URL]]` · Adapters and data: [huggingface.co/Oskrt](https://huggingface.co/Oskrt) ·
 How to train your own: [ws4/LORA_HOWTO.md](ws4/LORA_HOWTO.md)
 
 Our green XLeRobot "Haller" (two SO-101-style arms on a torso, a RealSense D455 head camera, a wrist camera per arm,
-soft fin-ray fingers) runs a **4-skill chain with FLUX 3 Action in the control loop**. Claude Opus plans it, Claude
-Haiku checks each step from the head camera, and every motion is FLUX:
+soft fin-ray fingers) runs a **4-skill chain with FLUX 3 Action in the control loop**. Claude Opus plans it and
+Claude Haiku checks each step from the head camera:
 
-1. robot right arm: "open the box by pulling its handle", then keep holding the lid;
-2. robot left arm: "put the green pen in the green slot";
-3. "put the yellow cutter in the yellow slot";
-4. "put the red pen in its slot in the cardboard box".
+1. robot right arm: "open the box by pulling its handle", then keep holding the lid. **This step is a scripted replay
+   of recorded demo 59, not FLUX** (our FLUX box LoRA would not start from rest; see Results), run through the same
+   safety stack and labelled as such in the HMI and the logs;
+2. robot left arm, FLUX: "put the green pen in the green slot";
+3. FLUX: "put the yellow cutter in the yellow slot";
+4. FLUX: "put the red pen in its slot in the cardboard box".
 
-One FLUX base, one LoRA adapter per skill (about 0.45 GB each), a safety stack per skill, and an imagination panel
-that shows the future video FLUX predicts next to what actually happens.
+The planner mixes learned skills and scripted primitives under one safety layer. One FLUX base, one LoRA adapter per
+skill (about 0.45 GB each, all public), a safety stack per skill, and an imagination panel that shows the future video
+FLUX predicts next to what actually happens.
 
 ## Results
 
@@ -33,6 +35,8 @@ that shows the future video FLUX predicts next to what actually happens.
 |---|---|---|
 | Red pen on the arm | 0/3 (and 0/16 over all Saturday attempts) | **3/5 full inserts** (RAW 5k, action horizon 16); 5/8 including the next three attempts |
 | Red pen, 12 held-out takes, offline arm error / direction | 5.5 deg / 66.5 % (our quantiles), hold still 5.6 deg | **3.24 deg / 87.5 %** (RAW 5k); RAW 10k 3.15 deg / 88.6 % |
+| Green pen / yellow cutter on the arm | - | 1/2 / 1 insert (trial log 1/6) |
+| Open the box | - | FLUX 0 (0/3 runner, 0/1 HMI): replaced by a scripted replay |
 | Full chain on the arm | - | `[[NUM:CHAIN_SUCCESS]]` |
 | Sim, "put the block in the cup", 20 held-out layouts | 0/20 | 0/20 (grasped and lifted in 2) |
 
@@ -55,8 +59,16 @@ successes ended with the operator's stop key after the insert; lighting fell dur
 stall freeze ended 9 of 15 attempts: the shoulder lift trails its command at about two thirds of the 60 % torque cap.
 At horizon 16 FLUX replans every 16 commands (about 0.5 s) instead of 32.
 
-Per-skill rehearsals and the chain: `[[NUM:REH_BOX]]`, `[[NUM:REH_GREEN]]`, `[[NUM:REH_CUTTER]]`,
-`[[NUM:REH_PENLID]]`, chain `[[NUM:CHAIN_SUCCESS]]` (paste the trial table here).
+This morning, per skill (trial log, about 09:20; paste the final `trial_log.py summary --markdown` here):
+
+| Skill | Model | Result |
+|---|---|---|
+| red pen | FLUX RAW 5k, horizon 16 | 2/3 graded; in the HMI, one insert in 33 s confirmed by Claude Haiku; 9/23 over all RAW 5k attempts |
+| green pen | FLUX RAW 5k | 1/2 (one full insert) |
+| yellow cutter | FLUX augmented RAW 5k | 1 full insert (1/6 in the trial log; the orchestrator reports it reached 5/5 and grasped 4/5 in the first five) |
+| open the box | FLUX RAW 5k, every variant | 0 (0/3 in the runner, 0/1 in the HMI): its first chunk from rest moves 4.9 to 5.5 deg on held-out takes, demos move 39 to 150, so the demo replays recorded take 59 |
+| red pen with the lid held | FLUX RAW 5k | `[[NUM:REH_PENLID]]` |
+| full chain | box replay + three FLUX skills | `[[NUM:CHAIN_SUCCESS]]` |
 
 ### Offline, on held-out takes (same protocol for every row)
 
@@ -72,7 +84,7 @@ Per-skill rehearsals and the chain: `[[NUM:REH_BOX]]`, `[[NUM:REH_GREEN]]`, `[[N
 | red pen, FLUX LoRA RAW 10k (public) | 3.15 | 88.6 % |
 | box, FLUX LoRA RAW 5k / ACT 20k | 5.11 / 5.6 | 73 % / 80 % (arm) |
 | green pen, FLUX LoRA RAW 5k | 3.95 | 89.1 % |
-| yellow cutter | `[[NUM:CUTTER_OFFLINE]]` | |
+| yellow cutter, FLUX LoRA augmented RAW 5k | 5.26 | not reported |
 
 RAW adapters beat EMA every time (pen 5k: 3.24 vs 3.62 deg); classifier-free guidance 3/3 or 4/1 gave nothing over
 1/1 at twice the compute per chunk.
@@ -106,8 +118,10 @@ image keys and order, shapes, dtypes, units and history: only the wrist image di
 state gave a reach; live images with recorded state gave a hold. The live wrist frame flips hold and reach on a
 **1 px shift or a 1 deg tilt**; recorded frames reach under the same shifts; no seed or averaging rescued the live
 view. Fixes: [align_station.py](ws4/single_arm/align_station.py) aligns the station to a recording's home view
-(wrist offset, scale, brightness) before every run, and the newest LoRAs train with crop and colour augmentation
-(`[[NUM:AUG_BOX]]`, `[[NUM:AUG_CUTTER]]`, `[[NUM:AUG_GREEN]]`).
+(wrist offset, scale, brightness) before every run, and the newest LoRAs train with crop and colour augmentation,
+checked before robot time by a gate: from rest, the first chunk must move at least 20 deg on every held-out take, also
+under 2 px shifts and half brightness. The cutter passes (44.2 deg) and green (73.3); every box variant fails (4.9 to
+5.5), which is why the box step is replayed ([skills.md](ws4/research/skills.md)).
 
 ### 3. FLUX imagines, and fine-tuning makes it imagine better
 
@@ -156,8 +170,13 @@ All recorded by VR teleoperation (Meta Quest Pro through the haller_ws HMI), LeR
 | take the red pen out | [Oskrt/haller_take_the_red_pen_out_of_its_slot](https://huggingface.co/datasets/Oskrt/haller_take_the_red_pen_out_of_its_slot) | 11 |
 
 Held out: the last 3 good takes of each layout, never trained on. LoRA recipe: LeRobot `examples/flux3/lora.json`
-(rank/alpha 32, lr 1e-4, effective batch 8), 5,000 microsteps, about two hours per skill on one RTX PRO 6000. The
-red-pen adapter is on the Hub; [ws4/LORA_HOWTO.md](ws4/LORA_HOWTO.md) is the short version for anyone with an SO-101.
+(rank/alpha 32, lr 1e-4, effective batch 8), 5,000 microsteps, about two hours per skill on one RTX PRO 6000.
+Adapters, all public (root = the served adapter, `checkpoints/<run>/<step>/{raw,ema}` for every checkpoint):
+[pen](https://huggingface.co/Oskrt/flux-3-action-so101-haller-pen-lora),
+[open box](https://huggingface.co/Oskrt/flux-3-action-so101-haller-open-box-lora),
+[green pen](https://huggingface.co/Oskrt/flux-3-action-so101-haller-green-pen-lora),
+[yellow cutter](https://huggingface.co/Oskrt/flux-3-action-so101-haller-yellow-cutter-lora).
+[ws4/LORA_HOWTO.md](ws4/LORA_HOWTO.md) is the short version for anyone with an SO-101.
 
 ## Research (simulation and offline)
 
@@ -199,7 +218,7 @@ Operator HMI ──goal──> Claude Opus planner         v
 | [ws4/eval/trial_log.py](ws4/eval/trial_log.py) | One JSONL line per graded attempt, markdown summary |
 | [ws4/ttt/](ws4/ttt/), [ws4/sim/](ws4/sim/README.md), [ws4/kinematics/](ws4/kinematics/) | Research: memory, simulation, kinematics |
 | [ws4/data/](ws4/data/), [ws4/teleop/](ws4/teleop/) | Dataset conversion, VR teleop launcher |
-| `[[TEAM:WORKSTREAMS]]` | WS1, WS2, WS3, WS5 parts (`src/liminal/`, `configs/`, `scripts/`) |
+| `[[TEAM:WORKSTREAMS]]` | WS1, WS2, WS3, WS5 parts (`src/liminal/`, `configs/`, `scripts/`); the team's behaviour-tree harness runs on this stack on branch `claude/harness-bridge-11f8b6` (fake arms only so far) |
 
 ## Reproduce
 
@@ -217,7 +236,8 @@ On the robot: [orchestrator/README.md](ws4/orchestrator/README.md) (chain) and
 ## What is not verified
 
 - The chain's success rate beyond `[[NUM:CHAIN_SUCCESS]]`; the real-arm numbers are small blocks.
-- Whether the augmented LoRAs remove the wrist-view knife edge (offline gates `[[NUM:AUG_BOX]]` and others).
+- A FLUX box skill: every box LoRA failed the from-rest gate; the demo replays a recorded take.
+- The behaviour-tree harness on real hardware (verified on fake arms only).
 - Claude's checks on live frames (measured on recorded held-out frames).
 - Both arms moving at the same time (the chain moves one arm at a time).
 
